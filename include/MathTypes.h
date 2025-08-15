@@ -1,19 +1,26 @@
 #pragma once 
-
 #include <Eigen/Core>
 #include <cstdint>
-// #include <Eigen/Dense>
 #include <vector>
 #include <initializer_list>
 #include <algorithm> 
 #include <iostream>
 #include <string>
-// #include <stdexcept>
+#include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <concepts> 
+#include <numbers>
 
+// Constant representing positive infinity for float type
+static constexpr float FxInfinityf = std::numeric_limits<float>::infinity();
+
+// Constant representing pi for float type
+static constexpr float FxPif = std::numbers::pi_v<float>;
+
+// concept to capture float, double, long double, int etc..
 template<typename T>
-concept Numeric = std::integral<T> || std::floating_point<T>; // float, double, long double, int etc..
+concept Numeric = std::integral<T> || std::floating_point<T>; 
 
 // Custom 2D float vector with .x() getter and .set_x() setter.
 class FxVec2f : public Eigen::Vector2f {
@@ -33,8 +40,8 @@ public:
     void set_x(float val) { (*this)(0) = val; }
     void set_y(float val) { (*this)(1) = val; }
 
-    // — in-place rotation by θ radians
-    FxVec2f& rotate_inplace(float theta)  noexcept {
+    //Radian‐based rotate (suffix "_rad")
+    FxVec2f& rotate_inplace_rad(float theta) noexcept {
         const float c = std::cos(theta), s = std::sin(theta);
         float xi = x(), yi = y();
         set_x(xi * c - yi * s);
@@ -42,9 +49,32 @@ public:
         return *this;
     }
 
+    // Degree‐based rotate (default "rotate_inplace" uses degrees)
+    FxVec2f& rotate_inplace(float degrees) noexcept {
+        constexpr float FX_DEG2RAD = 3.14159265f / 180.0f;
+        return rotate_inplace_rad(degrees * FX_DEG2RAD);
+    }
+
     // — non-mutating rotation: returns a rotated copy
     FxVec2f rotate(float theta) const  noexcept {
         return FxVec2f(*this).rotate_inplace(theta);
+    }
+    FxVec2f rotate_rad(float theta) const  noexcept {
+        return FxVec2f(*this).rotate_inplace_rad(theta);
+    }
+
+    // Cross product with another 2D vector (returns scalar)
+    float cross(const FxVec2f& other) const {
+        return x() * other.y() - y() * other.x();
+    }
+
+    // Perpendicular vectors
+    FxVec2f perp() const {
+        return FxVec2f(-y(), x()); // CCW perpendicular
+    }
+    
+    FxVec2f perpCW() const {
+        return FxVec2f(y(), -x()); // CW perpendicular
     }
 };
 
@@ -476,6 +506,21 @@ class FxArray {
         throw std::invalid_argument(std::string("FxArray::operator") + what + " size mismatch");
     } 
 
+    // single scan to find (index, value) of best element
+    template<typename Compare>
+    std::pair<std::size_t, T>  best_pair(Compare cmp, const char* name) const {
+        throw_if_empty(name);
+        std::size_t bestIdx = 0;
+        T bestVal = m_arr[0];
+        for (std::size_t i = 1; i < m_size; ++i) {
+            if (cmp(m_arr[i], bestVal)) {
+                bestVal = m_arr[i];
+                bestIdx = i;
+            }
+        }
+        return {bestIdx, bestVal};
+    }
+
   public:
     // 1) default (empty)
     FxArray() = default;
@@ -577,33 +622,38 @@ class FxArray {
 
     template<typename Compare>
     T min(Compare cmp) const {
-        throw_if_empty("min");
-        T best = m_arr[0];
-        for (std::size_t i = 1; i < m_size; ++i)
-        if (cmp(m_arr[i], best))
-            best = m_arr[i];
-        return best;
+        return best_pair(cmp, "min").second;
     }
 
     template<typename Compare>
     T max(Compare cmp) const {
-        throw_if_empty("max");
-        T best = m_arr[0];
-        for (std::size_t i = 1; i < m_size; ++i)
-        if (cmp(best, m_arr[i]))
-            best = m_arr[i];
-        return best;
+        return best_pair([&](const T& a, const T& b){ return cmp(b,a); }, "max").second;
     }
 
-    // overloads that use operator< by default
+    // default operator< versions
     T min() const { return min(std::less<T>{}); }
     T max() const { return max(std::less<T>{}); }
+
+    // ---------- index-only -> reuse best_pair ----------
+    template<typename Compare>
+    std::pair<std::size_t, T> argmin(Compare cmp) const {
+        return best_pair(cmp, "argmin");
+    }
+
+    template<typename Compare>
+    std::pair<std::size_t, T> argmax(Compare cmp) const {
+        return best_pair([&](const T& a, const T& b){ return cmp(b,a); }, "argmax");
+    }
+
+    // default operator< versions
+    std::pair<std::size_t, T> argmin() const { return argmin(std::less<T>{}); }
+    std::pair<std::size_t, T> argmax() const { return argmax(std::less<T>{}); }
 
     // --- mean: requires T() + T+= U + T /= scalar ---
     T mean() const {
         throw_if_empty("mean");
-        T sum{};                              // assumes T{} zero‐initializes
-        for (std::size_t i = 0; i < m_size; ++i)
+        T sum = m_arr[0];                     // initialize with first element
+        for (std::size_t i = 1; i < m_size; ++i)
             sum += m_arr[i];
         return sum / m_size;
     }
@@ -712,21 +762,35 @@ class FxArray {
         return out;
     }
 
-    // in-place rotation by θ (radians)
-    FxArray& rotate_inplace(float theta) requires std::same_as<T, FxVec2f>{
-        float c = std::cos(theta), s = std::sin(theta);
+    // 1) In-place rotate by radians
+    FxArray& rotate_inplace_rad(float theta_rad) noexcept requires std::same_as<T, FxVec2f> {
+        const float c = std::cos(theta_rad);
+        const float s = std::sin(theta_rad);
         for (auto& e : *this) {
-            float x = e.x(), y = e.y();
-            e.x() = x * c - y * s;
-            e.y() = x * s + y * c;
+            float xi = e.x(), yi = e.y();
+            e.x() = xi * c - yi * s;
+            e.y() = xi * s + yi * c;
         }
         return *this;
     }
 
-    // non-mutating rotate → new array
-    FxArray rotate(float theta) const requires std::same_as<T, FxVec2f>{
+    // 2) In-place rotate by degrees
+    FxArray& rotate_inplace(float degrees) noexcept requires std::same_as<T, FxVec2f> {
+        constexpr float FX_DEG2RAD = 3.14159265358979323846f / 180.0f;
+        return rotate_inplace_rad(degrees * FX_DEG2RAD);
+    }
+
+    // 3) Non-mutating rotate by radians → new array
+    FxArray rotate_rad(float theta_rad) const requires std::same_as<T, FxVec2f> {
         FxArray tmp = *this;
-        tmp.rotate_inplace(theta);
+        tmp.rotate_inplace_rad(theta_rad);
+        return tmp;
+    }
+
+    // 4) Non-mutating rotate by degrees → new array
+    FxArray rotate(float degrees) const requires std::same_as<T, FxVec2f> {
+        FxArray tmp = *this;
+        tmp.rotate_inplace(degrees);
         return tmp;
     }
 
@@ -829,18 +893,38 @@ inline std::ostream& operator<<(std::ostream& os, FxVec2fArray const& a) {
     return os;
 }
 
+inline std::ostream& operator<<(std::ostream& os, FxVec2f const& a) {
+    os << "FxVec2f { ";
+    os <<a.x()<<" "<<a.y();
+    os <<" }";
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, FxVec3f const& a) {
+    os << "FxVec3f { ";
+    os <<a.x()<<" "<<a.y()<<" "<<a.z();
+    os <<" }";
+    return os;
+}
+
 //---------------------------------------------
 // Shape Definition
 //---------------------------------------------
+enum class FxShapeType {
+    Circle,
+    Polygon
+};
+
 struct FxShape {
-  private:
-    std::string    m_shape_type;                     // "Circle" or "Polygon"
+  protected:
+    FxShapeType    m_shape_type;                     // "Circle" or "Polygon"
     float          m_radius;                         // bounding radius 
     FxVec2fArray   m_vertices;                       // only used for polygons relative to centroid
-    FxVec3f        m_offset_pose {0.0f, 0.0f, 0.0f};          // initial offset pose in world coordinatesates
-    FxVec2fArray m_
-    
-  protected:
+    FxVec3f        m_offset_pose {0.0f, 0.0f, 0.0f}; // initial offset pose in world coordinates
+    FxVec3f        m_world_pose {0.0f, 0.0f, 0.0f};  // current pose in the world
+    FxVec2f        m_centroid {0.0f, 0.0f};          // 
+    FxVec2fArray   m_world_vertices;
+
     // 1) Compute the bounding radius from (0,0)
     static float calc_radius(const FxVec2fArray& verts) {
         float maxSq = 0.0f;
@@ -851,24 +935,22 @@ struct FxShape {
         }
         return std::sqrt(maxSq);
     }
-    // 2) Shoelace‐formula area must exceed 2e–6f
-    static bool is_valid_area(const FxVec2fArray& verts) {
-        const float minArea = 1e-6f;
-        size_t n = verts.size();
-        if (n < 3) return false;
-        float sum = 0.0f;
+
+    // 2) Shoelace‐formula signed area (returns signed area, caller checks validity)
+    static float polygon_area(const FxVec2fArray& verts) {
+        double sum = 0.0;
+        const size_t n = verts.size();
         for (size_t i = 0; i < n; ++i) {
-            const FxVec2f& P = verts[i];
-            const FxVec2f& Q = verts[(i+1) % n];
-            sum += P.x()*Q.y() - Q.x()*P.y();
+            const FxVec2f& a = verts[i];
+            const FxVec2f& b = verts[(i + 1) % n];
+            sum += double(a.x()) * b.y() - double(b.x()) * a.y();
         }
-        float area = 0.5f * sum;
-        return std::fabs(area) > minArea;
+        return float(0.5 * sum); // >0 ⇒ CCW, <0 ⇒ CW
     }
+
     // 3) Convexity: all cross‐products have same sign
     static bool is_convex(const FxVec2fArray& verts) {
         size_t n = verts.size();
-        if (n < 3) return false;
         bool gotPos = false, gotNeg = false;
         for (size_t i = 0; i < n; ++i) {
             const FxVec2f& A = verts[i];
@@ -886,26 +968,35 @@ struct FxShape {
 
   public:
     // default ctor
-    FxShape() : m_shape_type("Circle"), m_radius(0.5f) {}
+    FxShape() : m_shape_type(FxShapeType::Circle), m_radius(0.5f) {}
 
     //–– Circle ctor
     FxShape(float radius) {
         if (radius <= 1e-6f)
             throw std::invalid_argument("FxShape: radius must be > 0");
-        m_shape_type = "Circle";
+        m_shape_type = FxShapeType::Circle;
         m_radius     = radius;
     }
 
     //–– Polygon from arbitrary vertices
     FxShape(const FxVec2fArray& vertices) {
-        if (!is_valid_area(m_vertices))
+        constexpr float minArea = 1e-6f;
+        if (vertices.size() < 3)
+            throw std::invalid_argument("FxShape: less than 3 vertices");
+        float area = polygon_area(vertices);
+        if (std::fabs(area) <= minArea)
             throw std::invalid_argument("FxShape: area ≤ 2e-6");
-        if (!is_convex(m_vertices))
+        if (!is_convex(vertices))
             throw std::invalid_argument("FxShape: not convex");
-        m_shape_type = "Polygon";
+        m_shape_type = FxShapeType::Polygon;
         // centroid will be pushed to {0.0f, 0.0f}
-        m_vertices   = vertices - vertices.mean();
+        FxVec2fArray verts = vertices;
+        if (area > 0.0f) { // saved in CCW order only
+            std::reverse(verts.begin(), verts.end());
+        }
+        m_vertices   = verts - verts.mean();
         m_radius     = calc_radius(m_vertices);
+        m_world_vertices = m_vertices;
     }
 
     //–– Rectangle centered at origin, width=size.x(), height=size.y()
@@ -918,18 +1009,144 @@ struct FxShape {
         if (hx*hy <= 1e-6f)
             throw std::runtime_error("FxShape: degenerate rectangle");
          // build CCW rectangle around (0, 0)
-        m_vertices = { { -hx, -hy }, {  hx, -hy }, {  hx,  hy }, { -hx,  hy }};
-        m_shape_type = "Polygon";
+        m_vertices = { { -hx, -hy }, {  -hx, hy }, {  hx,  hy }, { hx,  -hy }};
+        m_shape_type = FxShapeType::Polygon;
         m_radius     = std::sqrt(hx*hx + hy*hy);
+        m_world_vertices = m_vertices;
     }
 
     // getters for shape properties
-    std::string shape_type() const { return m_shape_type; }
+    FxShapeType shape_type() const { return m_shape_type; }
     float radius() const { return m_radius; }
-    FxVec2fArray vertices() const { return m_vertices; }
+    FxVec2fArray vertices() const { return m_world_vertices; }
+    FxVec2fArray __vertices() const { return m_vertices; } // native coordinates of vertices with centroid as (0,0)
+    FxVec2f centroid() const {  return m_centroid;}
+
+    // methods to check shape type
+    bool is_circle() const {
+        return m_shape_type == FxShapeType::Circle;
+    }
+
+    bool is_polygon() const {
+        return m_shape_type == FxShapeType::Polygon;
+    }
+
+    // Get area of the shape (handles both circle and polygon)
+    float area() const {
+        if (is_circle()) {
+            return FxPif * m_radius * m_radius;
+        } else {
+            return std::abs(polygon_area(m_world_vertices));
+        }
+    }
+
+    // Calculate moment of inertia for given mass
+    float calc_inertia(float mass) const {
+        if (is_circle()) {
+            return 0.5f * mass * m_radius * m_radius;
+        } else {
+            const std::size_t n = m_vertices.size();
+            float signed_twice_area = 0.0f;
+            float accum = 0.0f;
+            for (std::size_t i = 0; i < n; ++i) {
+                const FxVec2f& a = m_vertices[i];
+                const FxVec2f& b = m_vertices[(i + 1) % n];
+                const float cross = a.x() * b.y() - b.x() * a.y();
+                signed_twice_area += cross;
+                const float x2 = a.x() * a.x() + a.x() * b.x() + b.x() * b.x();
+                const float y2 = a.y() * a.y() + a.y() * b.y() + b.y() * b.y();
+                accum += cross * (x2 + y2);
+            }
+
+            float area = std::abs(signed_twice_area * 0.5f);
+            if (area < 1e-6f) return 0.0f;
+
+            float density = mass / area;
+            return (density / 12.0f) * std::abs(accum);
+        }
+    }
 
     // offset pose setter and getter 
     void set_offset_pose(const FxVec3f& o_pose){ m_offset_pose = o_pose; }
     FxVec3f offset_pose() const { return m_offset_pose; }
+
+    // Returns current axis aligned bounding box of the shape and sets world pose
+    FxArray<float> set_world_pose(const FxVec3f& world_pose){
+        m_world_pose = world_pose;
+        m_centroid = world_pose.xy() + m_offset_pose.xy();
+        if (is_circle()) {
+            float pX = m_centroid.x();
+            float pY = m_centroid.y();
+            return {pX - m_radius, pY - m_radius, pX + m_radius, pY + m_radius}; // AABB for circle
+        } else {
+            // rotate vertices by offset and world pose theta
+            m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta()); 
+            m_world_vertices += m_centroid;
+            return m_world_vertices.bounds();
+        }
+    }
+
+    // Getter for the current world pose of the shape
+    FxVec3f world_pose() const { return m_world_pose; }
+
+    // Set the position (xy) of the shape in world coordinates (preserving rotation)
+    void set_position(const FxVec2f& pos) {
+        m_world_pose.set_xy(pos);
+        set_world_pose(m_world_pose);
+    }
+
+    // Set the rotation (theta) of the shape in world coordinates (preserving position)
+    void set_rotation(float theta) {
+        m_world_pose.set_theta(theta);
+        set_world_pose(m_world_pose);
+    }
+
+    // Move the shape by a delta in world coordinates
+    void move(const FxVec2f& delta) {
+        m_world_pose.set_xy(m_world_pose.xy() + delta);
+        set_world_pose(m_world_pose);
+    }
+
+    // Rotate the shape by a delta angle (in radians)
+    void rotate(float delta_theta) {
+        m_world_pose.set_theta(m_world_pose.theta() + delta_theta);
+        set_world_pose(m_world_pose);
+    }
+
+    // project the shape onto an axis
+    FxArray<float> project_onto(const FxVec2f& axis) const {
+        if (is_circle()) {
+            float p = m_centroid.dot(axis);
+            return {p - m_radius, p + m_radius};
+        } else {
+            return (m_world_vertices).dot(axis);
+        }
+    }
+
+    // project the shape onto a line segment
+    FxArray<float> project_onto(const FxVec2f& axis, const FxVec2f& origin) const {
+        if (is_circle()) {
+            float p = (m_centroid  - origin).dot(axis);
+            return {p - m_radius, p + m_radius};
+        } else {
+            return (m_world_vertices - origin).dot(axis);
+        }
+    }
+
+    //get the closest vertex of the shape from a point
+    FxVec2f get_closest_vertex(const FxVec2f& point) const {
+        if (is_circle()) {
+            FxVec2f v = point - m_centroid;     // vector from center to query point
+            FxVec2f dir;
+            if (v.dot(v) < 1e-6f) dir = FxVec2f(1.0f, 0.0f);      // arbitrary unit vector
+            else dir = v.normalized();                         // safe to normalize
+            return m_centroid + dir * m_radius;
+        } else {
+            auto shifted = (m_world_vertices - point);
+            auto dist = (shifted).dot(shifted);
+            auto [min_ind, min_value] = dist.argmin();
+            return m_world_vertices[min_ind];
+        }
+    } 
 
 };

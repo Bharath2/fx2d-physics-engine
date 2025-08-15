@@ -4,6 +4,7 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <array>
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
 
@@ -31,6 +32,7 @@ namespace FxYAML {
     FxScene buildScene(const YAML::Node& config);
     FxShape buildShape(const YAML::Node& config);
     FxVisualShape buildVisualShape(const YAML::Node& config);
+    FxCollisionShape buildCollisionShape(const YAML::Node& config);
     std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML::Node& config);
 
     inline FxScene buildScene(const std::string& textOrPath){
@@ -48,5 +50,10 @@ namespace FxYAML {
     inline FxVisualShape buildVisualShape(const std::string& textOrPath) {
         YAML::Node config = LoadSmart(textOrPath);
         return buildVisualShape(config);
+    }
+
+    inline FxVisualShape buildCollisionShape(const std::string& textOrPath) {
+        YAML::Node config = LoadSmart(textOrPath);
+        return buildCollisionShape(config);
     }
 } 

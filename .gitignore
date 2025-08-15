@@ -2,6 +2,9 @@ build
 assets
 bin
 lib/imgui/*
-lib/imgui-sfml/*
+lib/rlImGui/*
 imgui.ini
 *.exe
+.vscode
+.vscode/*
+Makefile

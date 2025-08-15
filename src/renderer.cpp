@@ -1,207 +1,273 @@
-#include "Core.h"
 #include "Renderer.h"
-#include <cstdio>
-#include <string>
+#include "MathTypes.h"
 
-#include <iostream>
-#include <execution>
-
-
-Renderer::Renderer(FxScene &scene): scene(scene), m_scale(100) { init(); }
-Renderer::Renderer(FxScene &scene, unsigned int scale): scene(scene), m_scale(scale) { init(); }
- 
-void Renderer::init(){
-    m_display_w = m_scale*scene.size.x();
-    m_display_h = m_scale*scene.size.y();
-
-    // Create an SFML window exactly as in your sample.
-    m_window = std::make_unique<sf::RenderWindow>(sf::VideoMode(m_display_w, m_display_h), "Fx2D");
-    m_window->setFramerateLimit(120);
-
-    // Initialize ImGui-SFML with the window.
-    if (!ImGui::SFML::Init(*m_window)) {
-        throw std::runtime_error("Failed to initialize ImGui-SFML");
-    }
+// Simple helpers to convert between our colors and raylib
+static inline Color to_rl_color(const FxVec4ui8& c) {
+	return Color{ c[0], c[1], c[2], c[3] };
 }
 
+Renderer::Renderer(FxScene &scene, int fps, unsigned int scale)
+	: scene(scene), m_scale(scale), m_display_w(0), m_display_h(0) {
+	init(fps);
+}
 
-Renderer::~Renderer() { ImGui::SFML::Shutdown(); }
+Renderer::~Renderer() {
+	// unload textures
+	for (auto &entry : m_textureCache) {
+		if (entry.second.id != 0) UnloadTexture(entry.second);
+	}
+	if (m_hasBackgroundTexture && m_backgroundTexture.id != 0) {
+		UnloadTexture(m_backgroundTexture);
+	}
+	rlImGuiShutdown();
+	CloseWindow();
+}
+
+void Renderer::init(int fps) {
+	// Calculate FIXED_DT from the provided FPS
+	m_fixed_dt = 1.0f / static_cast<float>(fps);
+	
+	m_display_w = static_cast<unsigned int>(m_scale * scene.size.x());
+	m_display_h = static_cast<unsigned int>(m_scale * scene.size.y());
+
+	SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+	InitWindow(m_display_w, m_display_h, "Fx2D");
+	SetTargetFPS(fps);
+	rlImGuiSetup(true);
+
+	// Background
+	if (!scene.fillTexturePath.empty()) {
+		set_background(scene.fillTexturePath);
+	} else {
+		set_background(scene.fillColor);
+	}
+}
 
 void Renderer::run() {
-    sf::Clock deltaClock;
+	float curr_rt_factor = 0.0f;
+	
+	while (!WindowShouldClose()) {
+		float frame_dt = GetFrameTime();
+		// Prevent spiral-of-death after pauses:
+		if (frame_dt > 0.2f) frame_dt = 0.2f;
+		
+		// Apply real-time factor to frame delta time
+		float scaled_frame_dt = frame_dt * m_real_time_factor;
+		// Clamp the scaled frame time
+		float clamped_frame_dt = std::clamp(scaled_frame_dt, m_min_time_step, m_max_time_step);
+		
+		m_dt_accumulator += clamped_frame_dt;
+		
+		// Calculate actual real-time factor for UI display
+		curr_rt_factor = (frame_dt > 0.0f) ? (clamped_frame_dt / frame_dt) : 1.0f;
+		
+		// Step the simulation in fixed increments
+		while (m_dt_accumulator >= m_fixed_dt) {
+			if (m_play) {
+				scene.step(m_fixed_dt);
+			}
+			m_dt_accumulator -= m_fixed_dt;
+		}
+		BeginDrawing();
+		if (m_hasBackgroundTexture) {
+			DrawTexturePro(
+				m_backgroundTexture,
+				{0, 0, static_cast<float>(m_backgroundTexture.width), static_cast<float>(m_backgroundTexture.height)},
+				{0, 0, static_cast<float>(m_display_w), static_cast<float>(m_display_h)}, {0, 0}, 0.0f, WHITE
+			);
+		} else { ClearBackground(m_backgroundColor); }
 
-    // Main loop.
-    while (m_window->isOpen()) {
-        sf::Event event;
-        while (m_window->pollEvent(event)) {
-            ImGui::SFML::ProcessEvent(*m_window, event);
-            if (event.type == sf::Event::Closed) {
-                m_window->close();
-            }
-        }
-        float deltaTime = deltaClock.restart().asSeconds();
-        // Update the physics of scene.
-        float curr_rt_factor = 0.0f;
-        if(m_play) curr_rt_factor = scene.step(deltaTime);
-        // Update the ImGui frame.
-        ImGui::SFML::Update(*m_window, sf::seconds(deltaTime));
-        m_window->clear(m_backgroundColor);
-        if(m_backgroundSprite != nullptr){
-            m_window->draw(*m_backgroundSprite);
-        }
-        // Draw the simulation scene.
-        draw_scene();
-        draw_ui(curr_rt_factor);
-        // Render ImGui draw data.
-        ImGui::SFML::Render(*m_window);
-        // Display the frame.
-        m_window->display();
-    }
+		draw_scene();
+		rlImGuiBegin();
+		draw_ui(curr_rt_factor);
+		rlImGuiEnd();
+		EndDrawing();
+	}
 }
 
-void Renderer::set_background(const ImVec4 &color){
-    // set color and delete the background texture
-    m_backgroundColor = sf::Color(color);
-    m_backgroundSprite.reset();
-    m_backgroundTexture.reset();
+void Renderer::set_real_time_factor(const float& rt_factor) {
+	if (rt_factor < 0.001f) {
+		std::cerr << "RayLibRenderer: real time factor must be greater than 0.001" << std::endl;
+		m_real_time_factor = 0.001f;
+	} else {
+		m_real_time_factor = rt_factor;
+	}
+}
+
+void Renderer::set_background(const FxVec4ui8 &color) {
+	m_backgroundColor = to_rl_color(color);
+	m_hasBackgroundTexture = false;
 }
 
 void Renderer::set_background(const std::string &filepath) {
-    // Make sure your pointers are allocated.
-    if (!m_backgroundSprite)
-        m_backgroundSprite = std::make_unique<sf::Sprite>();
-    if (!m_backgroundTexture)
-        m_backgroundTexture = std::make_unique<sf::Texture>();
-    // Get the window size for scaling 
-    sf::Vector2u windowSize = m_window->getSize();
-    // Attempt to load the texture from file.
-    if (!m_backgroundTexture->loadFromFile(filepath)) {
-        std::cerr << "Failed to load background texture from file: " << filepath << std::endl;
-        // Fallback: create an image filled with a default color (dark gray: (50,50,50))
-        sf::Image defaultImage;
-        defaultImage.create(windowSize.x, windowSize.y, sf::Color(50, 50, 50));
-        m_backgroundTexture->loadFromImage(defaultImage);
-    } 
-    else {
-        // If loaded successfully, set the sprite scale so that it fills the window.
-        sf::Vector2u textureSize = m_backgroundTexture->getSize();
-        m_backgroundSprite->setScale(
-            static_cast<float>(windowSize.x) / textureSize.x,
-            static_cast<float>(windowSize.y) / textureSize.y
-        );
-    }
-    m_backgroundSprite->setTexture(*m_backgroundTexture, true);
+	Image img = LoadImage(filepath.c_str());
+	if (img.data == nullptr) {
+		// fallback to color
+		m_hasBackgroundTexture = false;
+		m_backgroundColor = to_rl_color(scene.fillColor);
+		return;
+	}
+	if (m_backgroundTexture.id != 0) UnloadTexture(m_backgroundTexture);
+	m_backgroundTexture = LoadTextureFromImage(img);
+	UnloadImage(img);
+	m_hasBackgroundTexture = (m_backgroundTexture.id != 0);
+}
+
+Texture2D Renderer::get_or_load_texture(const std::string& path) {
+	auto it = m_textureCache.find(path);
+	if (it != m_textureCache.end()) return it->second;
+	Image img = LoadImage(path.c_str());
+	if (img.data == nullptr) return Texture2D{}; // invalid texture
+	Texture2D tex = LoadTextureFromImage(img);
+	UnloadImage(img);
+	m_textureCache[path] = tex;
+	return tex;
 }
 
 void Renderer::draw_scene() {
-    // First create shapes from the entities
-    std::vector<std::unique_ptr<sf::Shape>> shapes;
-    scene.transform_entities(std::execution::par, [&](auto entity) -> std::unique_ptr<sf::Shape> {
-        //edit with shpae
-        auto visual = entity->visual_geometry();
-        if (!visual) { return nullptr; } // skip if no visual geometry
+	// Draw all entities
+	scene.for_each_entity(std::execution::seq, [&](FxEntity* e){ 
+		const auto& visual = e->visual_geometry();
+		if (!visual) return;
+		const FxVec3f pose = visual->world_pose();
 
-        FxVec3f offset_pose = visual->offset_pose();
-        FxVec3f current_pose = entity->pose + offset_pose; // current pose in world coordinates
-        // convert FxVisualShape to sf::Shape 
-        std::unique_ptr<sf::Shape> shape; 
-        const std::string& shape_type = visual->shape_type();
-        if (shape_type == "Circle") {
-            const float& radius = m_scale * visual->radius();
-            shape = std::make_unique<sf::CircleShape>(radius);
-            shape->setOrigin(radius, radius);
-        } else {
-            const FxVec2fArray& vertices = visual->vertices();
-            auto polygon = std::make_unique<sf::ConvexShape>(vertices.size());
-            // To compute the centroid (average of transformed vertices)
-            sf::Vector2f centroid(0.f, 0.f);
-            for (size_t i = 0; i < vertices.size(); ++i) {
-                float transformed_x = m_scale * vertices[i].x();
-                float transformed_y = m_display_h - m_scale * vertices[i].y(); 
-                polygon->setPoint(i, sf::Vector2f(transformed_x, transformed_y));
-                centroid.x += transformed_x;
-                centroid.y += transformed_y;
-            }
-            // Average the accumulated sum.
-            centroid.x /= vertices.size();
-            centroid.y /= vertices.size();
-            polygon->setOrigin(centroid);
-            shape = std::move(polygon);
-        } 
-        // move to object position and set rotation, color, texture.
-        auto fillTexture = visual->fillTexture();
-        if(fillTexture){
-            shape->setTexture(fillTexture.get(), false);
-        } else {
-            shape->setFillColor(visual->fillColor());
-        }
-        shape->setOutlineThickness(visual->outlineThickness());
-        shape->setOutlineColor(visual->outlineColor());
-        shape->setPosition(m_scale*current_pose.x(), (m_display_h - m_scale*current_pose.y()));
-        shape->setRotation(current_pose.theta());
-        return shape;
-    }, shapes);
+		// screen mapping helpers
+		auto sx = [&](float wx) { return m_scale * wx; };
+		auto sy = [&](float wy) { return static_cast<float>(m_display_h) - m_scale * wy; };
+		const float x = sx(pose.x());
+		const float y = sy(pose.y());
 
-    // Draw these shapes on the window
-    for (const auto& shape : shapes) {
-        m_window->draw(*shape);
-    }
+		if (visual->is_circle()) {
+			const float r = m_scale * visual->radius();
+			bool drewTexture = false;
+			if (!visual->fillTexture().empty()) {
+				Texture2D tex = get_or_load_texture(visual->fillTexture());
+				if (tex.id != 0) {
+					// Center the rotation at the circle center
+					Rectangle src{0, 0, (float)tex.width, (float)tex.height};
+					Rectangle dst{x, y, 2.0f * r, 2.0f * r};
+
+					// rotate about the center of the circle (origin at dst center)
+					Vector2 origin{r, r};
+
+					// raylib rotates CCW in screen space (+y down), your pose.theta() is CCW in world.
+					// The earlier sign looked right; keep if it matches your convention.
+					const float deg = -pose.theta() * 180.0f / FxPif;
+
+					DrawTexturePro(tex, src, dst, origin, deg, WHITE);
+					drewTexture = true;
+				}
+			}
+
+			if (!drewTexture) {
+				DrawCircleV(Vector2{x, y}, r, to_rl_color(visual->fillColor()));
+			}
+			// outline on top (whether textured or not)
+			DrawCircleLinesV(Vector2{x, y}, r, to_rl_color(visual->outlineColor()));
+		} else {
+			const FxVec2fArray& verts = visual->vertices();
+			const size_t n = verts.size();
+			// screen-space vertices
+			std::vector<Vector2> pts;
+			pts.reserve(n);
+			for (size_t i = 0; i < n; ++i) {
+				pts.push_back(Vector2{ sx(verts[i].x()), sy(verts[i].y()) });
+			}
+
+			bool drewTexture = false;
+			if (!visual->fillTexture().empty()) {
+				auto bounds = (visual->__vertices()).bounds();
+				float minx = bounds[0], miny = bounds[1], maxx = bounds[2], maxy = bounds[3];
+				Texture2D tex = get_or_load_texture(visual->fillTexture());
+				if (tex.id != 0) {
+					// Use DrawTexturePro for the polygon with default values
+					Rectangle src{0, 0, (float)tex.width, (float)tex.height};
+					Rectangle dst{x, y, m_scale * (maxx - minx), m_scale * (maxy - miny)};
+					Vector2 origin{m_scale * (maxx - minx)/2, m_scale * (maxy - miny)/2};
+					const float deg = -pose.theta() * 180.0f / FxPif;
+					DrawTexturePro(tex, src, dst, origin, deg, WHITE);
+					drewTexture = true;
+				}
+			}
+
+			if (!drewTexture) {
+				// Solid fill via fan
+				for (size_t i = 1; i + 1 < n; ++i) {
+					DrawTriangle(pts[0], pts[i], pts[i + 1], to_rl_color(visual->fillColor()));
+				}
+			}
+
+			// Outline on top
+			for (size_t i = 0; i < n; ++i) {
+				const Vector2& a = pts[i];
+				const Vector2& b = pts[(i + 1) % n];
+				DrawLineV(a, b, to_rl_color(visual->outlineColor()));
+			}
+		}
+	});
 }
 
 void Renderer::draw_ui(float curr_rt_factor) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 8));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
-    ImGui::Begin("Simulation Controls");
-    ImGui::SetWindowFocus("Simulation Controls");
-    char buf[32];
-    // grab the current gravity so we can edit it locally
-    static float gravity_x = scene.gravity.x();
-    static float gravity_y = scene.gravity.y();
-    // ---- GRAVITY X ----
-    ImGui::Text("Gravity X:");
-    ImGui::SetNextItemWidth(100.0f);
-    if (ImGui::InputFloat("##GravityX", &gravity_x, 0.0f, 0.0f, "%.1f")) {
-        // clamp into range
-        gravity_x = std::clamp(gravity_x, -20.0f, 20.0f);
-        scene.gravity.set_x(gravity_x);
-    }
-    // ---- GRAVITY Y ----
-    ImGui::Text("Gravity Y:");
-    ImGui::SetNextItemWidth(100.0f);
-    if (ImGui::InputFloat("##GravityY", &gravity_y, 0.0f, 0.0f, "%.1f")) {
-        gravity_y = std::clamp(gravity_y, -20.0f, 20.0f);
-        scene.gravity.set_y(gravity_y);
-    }
-    ImGui::Dummy(ImVec2(0, 5));
-    ImGui::Separator();
+	// ImGui::SetNextWindowSize(ImVec2(300, 180), ImGuiCond_Once);
+	// ImGui::Begin("Simulation Controls (raylib)");
+// void Renderer::draw_ui(float curr_rt_factor) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 8));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
+	ImGui::Begin("Simulation Controls");
+	ImGui::SetWindowFocus("Simulation Controls");
+	char buf[32];
+	// grab the current gravity so we can edit it locally
+	static float gravity_x = scene.gravity.x();
+	static float gravity_y = scene.gravity.y();
+	// ---- GRAVITY X ----
+	ImGui::Text("Gravity X:");
+	ImGui::SetNextItemWidth(100.0f);
+	if (ImGui::InputFloat("##GravityX", &gravity_x, 0.0f, 0.0f, "%.1f")) {
+		// clamp into range
+		gravity_x = std::clamp(gravity_x, -20.0f, 20.0f);
+		scene.gravity.set_x(gravity_x);
+	}
+	// ---- GRAVITY Y ----
+	ImGui::Text("Gravity Y:");
+	ImGui::SetNextItemWidth(100.0f);
+	if (ImGui::InputFloat("##GravityY", &gravity_y, 0.0f, 0.0f, "%.1f")) {
+		gravity_y = std::clamp(gravity_y, -20.0f, 20.0f);
+		scene.gravity.set_y(gravity_y);
+	}
+	ImGui::Dummy(ImVec2(0, 5));
+	ImGui::Separator();
 
-    ImGui::Text("Real Time Factor:");
-    static float rt_factor = 1.0f;
-    std::snprintf(buf, sizeof(buf), " : %.3f", curr_rt_factor);
-    ImGui::SetNextItemWidth(100.0f);   
-    if (ImGui::InputFloat(buf, &rt_factor, 0.0f, 0.0f, "%.3f")) {
-        // Clamp the rt_factor so it never goes below 0.001.
-        if (rt_factor < 0.001f)
-            rt_factor = 0.001f;
-        scene.set_real_time_factor(rt_factor);
-    }
-    ImGui::Dummy(ImVec2(0, 5));
-    ImGui::Separator();
-    // ←–– Pause / Play toggle button
-    const char* label = m_play ? "Pause" : "Play";
-    if (ImGui::Button(label, ImVec2(150,0))) {
-        m_play = !m_play;
-    }
-    if (ImGui::Button("Reset Simulation", ImVec2(150, 0))) {
-        scene.reset();
-    }
-    ImGui::Dummy(ImVec2(0, 1));
-    ImGui::Separator();
+	ImGui::Text("Real Time Factor:");
+	static float rt_factor = 1.0f;
+	std::snprintf(buf, sizeof(buf), "%.3f", curr_rt_factor);
+	ImGui::SetNextItemWidth(100.0f);
+	if (ImGui::InputFloat("##RTFactor", &rt_factor, 0.0f, 0.0f, "%.3f")) {
+		// Clamp the rt_factor so it never goes below 0.001.
+		if (rt_factor < 0.001f)
+			rt_factor = 0.001f;
+		set_real_time_factor(rt_factor);
+	}
+	ImGui::SameLine();
+	ImGui::Text(" : %.3f", curr_rt_factor);
+	ImGui::Dummy(ImVec2(0, 5));
+	ImGui::Separator();
 
-    float frame_rate = ImGui::GetIO().Framerate;
-    ImGui::Text("Performance:\n %.3f ms/frame\n (%.1f FPS)",
-                1000.0f / frame_rate, frame_rate);
-    ImGui::End();
-    ImGui::PopStyleVar(2);
+	// Pause / Play toggle button
+	const char* label = m_play ? "Pause" : "Play";
+	if (ImGui::Button(label, ImVec2(150, 0))) {
+		m_play = !m_play;
+	}
+	if (ImGui::Button("Reset Simulation", ImVec2(150, 0))) {
+		scene.reset();
+		scene.step(1e-4f);
+	}
+	ImGui::Dummy(ImVec2(0, 1));
+	ImGui::Separator();
+
+	float frame_rate = ImGui::GetIO().Framerate;
+	ImGui::Text("Performance:\n %.3f ms/frame\n (%.1f FPS)\n",
+				1000.0f / frame_rate, frame_rate);
+	ImGui::End();
+	ImGui::PopStyleVar(2);
 }
 

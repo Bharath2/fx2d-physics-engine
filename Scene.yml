@@ -1,37 +1,53 @@
-scene_size: [12, 8]            # in x, y directions  
-background: ./assets/bg.png     # color or image_path
-
-physics:
-    max_time_step: 0.05  
-    real_time_factor: 1.0 
+scene:
+    size: [12, 8]  
     gravity: [0, -10]
+    background: ./assets/bg.png  
 
 entities:
-    body1:
-        pose: [0, 0, 0]                     # x, y, theta ; orientation in degrees
-        init_velocity:  [1, 6, 0]           # won't be used for child links
+    ground:
+        pose: [6, 1.3, 0]
         physics:
-            mass: 1
-            inertia: 1                     # if not given will be calculated from visual geometry  
-            gravity_scale: 1.0             # scale gravity (float) (0.0 will disable effect of gravity)
-            velocity_damping: 0.0          # damping will be applied when the entity moves  
-            elasticity:  0.8               # 0 to 1 used in calculating coefficient of restitution
+            elasticity:  0.6
+            gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
+            external_forces_enabled: false
             static_friction: 0.3           # used in calculation of contact forces
             dynamic_friction: 0.2          # used in calculation of contact forces
-            external_forces_enabled: true  # if false external influences or collisions do not effect, except gravity
-        visual:
-            pose: [0, 0, 0]             # relative to body frame
-            geometry: 
-                circle: 0.5             # circle, rectangle, polygon
-            texture: ./assets/ball.png  # color(RGBA) or image path
-            border_color: [0, 0, 0, 255] 
+        # visual:
+        #     geometry: 
+        #         rectangle: [12, 0.5]      # width, height
         collision:
-            pose: [0, 0, 0]          # relative to body frame
             geometry: 
-              circle: 0.5           # circle, rectangle, polygon
-    body2:
-        pose: [6, 4, 0]                     # x, y, theta
+                rectangle: [18, 0.5]      # width, height
+    # ball:
+    #     pose: [10, 4, 0]                     # x, y, theta ; orientation in degrees
+    #     init_velocity:  [0, 0, 0]           # won't be used for child links
+    #     physics:
+    #         mass: 1
+    #         # inertia: 0.125                     # if not given will be calculated from visual geometry  
+    #         gravity_scale: 1.0             # scale gravity (float) (0.0 will disable effect of gravity)
+    #         velocity_damping: 0.0          # damping will be applied when the entity moves  
+    #         elasticity:  0.8               # 0 to 1 used in calculating coefficient of restitution
+    #         static_friction: 0.3           # used in calculation of contact forces
+    #         dynamic_friction: 0.2          # used in calculation of contact forces
+    #         external_forces_enabled: true  # if false external influences or collisions do not effect, except gravity
+    #     visual:
+    #         pose: [0, 0, 0]             # relative to body frame
+    #         geometry: 
+    #             circle: 0.5             # circle, rectangle, polygon
+    #         texture: ./assets/ball.png  # color(RGBA) or image path
+    #         border_color: [0, 0, 0, 255] 
+    #         border_thickness: 1.0
+    #     collision:
+    #         pose: [0, 0, 0]          # relative to body frame
+    #         geometry: 
+    #           circle: 0.5           # circle, rectangle, polygon
+    box:
+        pose: [7, 6, 0]                     # x, y, theta
         physics:
+            mass: 2
+            # inertia: 0.125
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
             # gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
             # external_forces_enabled: false
         visual:
@@ -39,23 +55,33 @@ entities:
                 rectangle: [1, 0.5]      # width, height
             texture: ./assets/box.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
+            border_thickness: 1.0
         collision:
             geometry: 
                 rectangle: [1, 0.5]      # width, height
 
-    body3:
-        pose: [8, 4, -45]                     # x, y, theta
+    plane:
+        pose: [7, 2.25, 0]                     # x, y, theta
         physics:
             gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
             external_forces_enabled: false
         visual:
+            # pose: [1, 1, 0]
             geometry: 
-                rectangle: [5, 0.5]      # width, height
-            texture: ./assets/box.png  # color(RGBA) or image path
+                polygon: 
+                  - [0, 0]
+                  - [0, -2]
+                  - [-2, -2]
+            texture: ./assets/plane.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
+            border_thickness: 1.0
         collision:
+            # pose: [1, 1, 0]
             geometry: 
-                rectangle: [5, 0.5]      # width, height
+                polygon: 
+                  - [0, 0]
+                  - [0, -2]
+                  - [-2, -2]
 
 # joints:
 #     joint1:
