@@ -35,7 +35,6 @@ void FxEntity::set_inertia() {
         _inv_inertia = 0.0f;
         return;
     }
-    
     _inertia = m_visual->calc_inertia(_mass);
     _inv_inertia = (_inertia == 0.0f) ? 0.0f : 1.0f / _inertia;
 }
@@ -44,8 +43,9 @@ void FxEntity::set_inertia() {
 void FxEntity::reset() {
     pose = _init_pose;
     velocity = _init_velocity;
-    prev_pose = _init_pose;  
+    prev_pose = _init_pose;
     prev_velocity = _init_velocity;
+    m_pose_carry = {0, 0, 0};
     m_eff_force = {0.0f, 0.0f};
     m_eff_moment = 0.0f;
     m_eff_impulse = {0.0f, 0.0f};
@@ -126,12 +126,12 @@ void FxEntity::apply_impulse(const FxVec2f& impulse, const FxVec2f& contact_poin
 // Get instantaneous velocity at a specific position
 FxVec2f FxEntity::velocity_at_world_point(const FxVec2f& position) const {
     FxVec2f r = position - pose.xy(); // vector from center of mass to position
-    return velocity.xy() + FxVec2f(-r.y() * velocity.theta(), r.x() * velocity.theta());
+    return velocity.xy() + velocity.theta() * r.perp();
 }
 
 // Get instantaneous velocity at a local point (relative to entity's center)
 FxVec2f FxEntity::velocity_at_local_point(const FxVec2f& local_position) const {
-    return velocity.xy() + FxVec2f(-local_position.y() * velocity.theta(), local_position.x() * velocity.theta());
+    return velocity.xy() + velocity.theta() * local_position.perp();
 }
 
 // Calculte the effect of all forces and moments with no gravity
@@ -141,7 +141,7 @@ FxVec3f FxEntity::calc_acceleration() {
 
 // Calculte the effect of all forces and moments
 FxVec3f FxEntity::calc_acceleration(const FxVec2f& gravity) {
-    FxVec3f acc{0.0f, 0.0f, 0.0f};
+    FxVec3f acc{0.0, 0.0, 0.0};
     if (_mass > 0.0f) {
         acc.xy() += m_eff_force * _inv_mass;  // Linear acceleration
         acc.xy() += gravity_scale * gravity;   // Gravity effect
@@ -172,7 +172,25 @@ bool FxEntity::aabb_overlap_check(const std::shared_ptr<FxEntity>& other) const 
     return aabb_overlap_check(*other);
 }
 
-void FxEntity::step(const FxVec2f& gravity, const float& step_dt){
+
+// Update pose from velocity using mixed precision
+void FxEntity::__update_pose(const double& step_dt) {
+    // Do math in double, store to float, track what didn't fit
+    auto carry_add = [](float& dst, double inc, double& carry) {
+        double s = (double)dst + inc + carry;
+        float  f = (float) s;
+        carry = s - (double)f;
+        dst = f;
+    };
+    carry_add(pose.x(),     (double)velocity.x()     * step_dt, m_pose_carry.x());
+    carry_add(pose.y(),     (double)velocity.y()     * step_dt, m_pose_carry.y());
+    carry_add(pose.theta(), (double)velocity.theta() * step_dt, m_pose_carry.theta());
+    // wrap to [0, 2pi) when incremented
+    while (pose.theta() >= 2.0f*FxPif) pose.theta() -= 2.0f*FxPif;
+    while (pose.theta() < 0.0f) pose.theta() += 2.0f*FxPif;
+}
+
+void FxEntity::step(const FxVec2f& gravity, const double& step_dt){
     // Apply accumulated impulses to velocity
     if (_inv_mass > 0.0f) {
         velocity.xy() += m_eff_impulse * _inv_mass;
@@ -180,28 +198,12 @@ void FxEntity::step(const FxVec2f& gravity, const float& step_dt){
     if (_inv_inertia > 0.0f) {
         velocity.theta() += m_eff_impulse_moment * _inv_inertia;
     }
-
-    FxVec3f half_step_acc =  0.5*calc_acceleration(gravity);
-    prev_pose = pose - half_step_acc * step_dt * step_dt;  
+    
+    // Update pose and velocity using float precision
+    prev_pose = pose;
     prev_velocity = velocity;  
-    velocity += half_step_acc * step_dt;
-    pose += velocity * step_dt;
-    
-    // Normalize theta to [0, 2*pi) range
-    while (pose.theta() < 0.0f) {
-        pose.theta() += 2.0f * FxPif;
-    }
-    while (pose.theta() >= 2.0f * FxPif) {
-        pose.theta() -= 2.0f * FxPif;
-    }
-    
-    // Safety check: prevent invalid positions
-    if (std::isnan(pose.x()) || std::isnan(pose.y()) || std::isnan(pose.theta()) ||
-        std::abs(pose.x()) > 1000.0f || std::abs(pose.y()) > 1000.0f) {
-        // Reset to safe position if invalid
-        pose = _init_pose;
-        velocity = {0.0f, 0.0f, 0.0f};
-    }
+    velocity += calc_acceleration(gravity) * step_dt;
+    update_pose(step_dt); // pose += velocity * step_dt;
     
     // update pose of the collision shape and visual shape
     if(m_collision != nullptr) {

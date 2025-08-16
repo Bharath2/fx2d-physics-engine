@@ -64,12 +64,16 @@ namespace FxSolver {
     }
 
     FxContact compute_contact_one_way(const FxShape* m_shape, const FxShape* o_shape) {
-        FxContact contact; contact.is_valid = true; contact.penetration_depth = 0.f;
+        auto contact = FxContact(true); 
+        contact.penetration_depth = 0.0f;
     
         // Circle vs Circle
         if (m_shape->is_circle() && o_shape->is_circle()) {
-            FxVec2f c1 = m_shape->centroid(), c2 = o_shape->centroid(), d = c2 - c1;
-            float dist = d.norm(), r1 = m_shape->radius(), r2 = o_shape->radius();
+            FxVec2f c1 = m_shape->centroid(); 
+            FxVec2f c2 = o_shape->centroid(); 
+            FxVec2f d = c2 - c1;
+            float dist = d.norm();
+            float r1 = m_shape->radius(), r2 = o_shape->radius();
             float penetration = (r1 + r2) - dist;
             if (penetration > 0.f) {
                 FxVec2f n = (dist > 1e-8f) ? d / dist : FxVec2f{1.f,0.f};
@@ -82,18 +86,18 @@ namespace FxSolver {
     
         // Circle vs Polygon
         if (m_shape->is_circle() && !o_shape->is_circle()) {
-            const auto& verts = o_shape->vertices();
-            if (verts.empty()) { contact.is_valid = false; return contact; }
+            const auto& o_vertices = o_shape->vertices();
+            if (o_vertices.empty()) { contact.is_valid = false; return contact; }
             FxVec2f c = m_shape->centroid();
             float r = m_shape->radius(), min_dist = FxInfinityf; 
             FxVec2f closest(0.0f, 0.0f);
-            for (size_t i=0, n=verts.size(); i<n; ++i) {
-                const FxVec2f &a = verts[i], &b = verts[(i+1)%n];
-                FxVec2f e = b - a; 
-                float el2 = e.dot(e); 
-                if (el2 < 1e-12f) continue;
-                float t = std::clamp((c - a).dot(e) / el2, 0.f, 1.f);
-                FxVec2f p = a + t * e; 
+            for (size_t i=0, n=o_vertices.size(); i<n; ++i) {
+                const FxVec2f &s = o_vertices[i], &e = o_vertices[(i+1)%n];
+                FxVec2f dir = e - s; 
+                float edge_length = dir.dot(dir); 
+                if (edge_length < 1e-8f) continue;
+                float t = std::clamp((c - s).dot(dir) / edge_length, 0.f, 1.f);
+                FxVec2f p = s + t * dir; 
                 float d = (c - p).norm();
                 if (d < min_dist) { 
                     min_dist = d; 
@@ -112,26 +116,33 @@ namespace FxSolver {
     
         // Polygon vs Circle (reuse, flip normal so it stays m->o)
         if (!m_shape->is_circle() && o_shape->is_circle()) {
-            FxContact c = compute_contact_one_way(o_shape, m_shape);
-            if (c.is_valid) { c.normal = -c.normal; } // now from polygon(m) -> circle(o)
-            return c;
+            contact = compute_contact_one_way(o_shape, m_shape);
+            if (contact.is_valid) { contact.normal = -contact.normal; } // now from polygon(m) -> circle(o)
+            return contact;
         }
     
         // Polygon vs Polygon
-        const auto &m_vertices = m_shape->vertices(), &o_vertices = o_shape->vertices();
-        std::size_t m_ref_edge_index=0, o_pen_vertex_index=0; FxVec2f m_ref_edge_dir{0,0};
+        const auto &m_vertices = m_shape->vertices(); 
+        const auto &o_vertices = o_shape->vertices();
+        std::size_t m_ref_edge_index=0, o_pen_vertex_index=0; 
+        FxVec2f m_ref_edge_dir{0, 0};
         float best_penetration = FxInfinityf;
         for (size_t i=0, n=m_vertices.size(); i<n; ++i) {
-            const FxVec2f &s = m_vertices[i], &e = m_vertices[(i+1)%n];
+            const FxVec2f &s = m_vertices[i];
+            const FxVec2f &e = m_vertices[(i+1)%n];
             FxVec2f dir = (e - s).normalized();
             FxVec2f axis = dir.perp();
             auto o_proj = o_shape->project_onto(axis, s);
             auto [omin_idx, omin_val] = o_proj.argmin();
-            if (omin_val > 0.f) { contact.is_valid = false; return contact; } // separating axis
+            if (omin_val > 0.f) { // separating axis
+                contact.is_valid = false; 
+                return contact; 
+            } 
             float pen = std::abs(omin_val);
             if (pen < best_penetration) {
-                best_penetration = pen; contact.normal = axis;
-                m_ref_edge_index = i; o_pen_vertex_index = omin_idx; m_ref_edge_dir = dir;
+                contact.normal = axis; best_penetration = pen; 
+                m_ref_edge_dir = dir; m_ref_edge_index = i; 
+                o_pen_vertex_index = omin_idx; 
             }
         }
         contact.penetration_depth = best_penetration;
@@ -141,25 +152,22 @@ namespace FxSolver {
             FxVec2f v = o_vertices[o_pen_vertex_index];
             FxVec2f fwd = o_vertices[(o_pen_vertex_index+1)%oN] - v;
             FxVec2f bwd = v - o_vertices[(o_pen_vertex_index+oN-1)%oN];
-            constexpr float eps = 0.001f;
-            float df = std::abs(fwd.normalized().dot(m_ref_edge_dir));
-            float db = std::abs(bwd.normalized().dot(m_ref_edge_dir));
-            const FxVec2f &mA = m_vertices[m_ref_edge_index], &mB = m_vertices[(m_ref_edge_index+1)%m_vertices.size()];
-            if (df > db){
-                if (df > 1.f - eps) {
-                    contact.position = _projected_midpoint(v, v+fwd, mA, mB);
-                } else {
-                    auto intersection = getSegmentIntersection(v, v+fwd, mA, mB);
-                    contact.position = intersection ? *intersection : v;
-                }
+            float dot_fwd = std::abs(fwd.normalized().dot(m_ref_edge_dir));
+            float dot_bwd = std::abs(bwd.normalized().dot(m_ref_edge_dir));
+            const FxVec2f &m_edge_start = m_vertices[m_ref_edge_index]; 
+            const FxVec2f &m_edge_end = m_vertices[(m_ref_edge_index+1)%m_vertices.size()];
+            float dot_ = dot_fwd;
+            FxVec2f o_edge_start = v, o_seg_end = v + fwd;
+            if (dot_bwd > dot_fwd) {
+                dot_ = dot_bwd;
+                o_edge_start = v - bwd; o_seg_end = v;
             }
-            else {
-                if (db > 1.f - eps) {
-                    contact.position = _projected_midpoint(v - bwd, v, mA, mB);
-                } else {
-                    auto intersection = getSegmentIntersection(v - bwd, v, mA, mB);
-                    contact.position = intersection ? *intersection : v;
-                }
+            constexpr float eps = 5e-4f;
+            if (dot_ > 1.f - eps) {
+                contact.position = _projected_midpoint(o_edge_start, o_seg_end, m_edge_start, m_edge_end);
+            } else {
+                auto intersection = getSegmentIntersection(o_edge_start, o_seg_end, m_edge_start, m_edge_end);
+                contact.position = intersection ? *intersection : v;
             }
         }
         return contact;
@@ -167,9 +175,8 @@ namespace FxSolver {
 
     // Separating Axis Theorem collision check method
     const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1, const std::shared_ptr<FxEntity>& entity2) {
-        if (!entity1 || !entity2) return FxContact(false);
-        
         // Check if both entities have collision geometry
+        if (!entity1 || !entity2) return FxContact(false);
         if (!entity1->collision_geometry() || !entity2->collision_geometry()) {
             return FxContact(false);
         }
@@ -183,7 +190,6 @@ namespace FxSolver {
         // the shapes are considered to be intersecting if they are not separated along any axis.
         const FxShape* m_shape = entity1->collision_geometry().get();
         const FxShape* o_shape = entity2->collision_geometry().get();
-        
         // For circles, contact point is along the line joining centers
         if (m_shape->is_circle()) { 
             contact = compute_contact_one_way(m_shape, o_shape);
@@ -192,17 +198,13 @@ namespace FxSolver {
         } else {
             auto contact1 = compute_contact_one_way(m_shape, o_shape);
             auto contact2 = compute_contact_one_way(o_shape, m_shape);
-            // Use SAT logic: if either direction finds no collision, then no collision
+            // if either direction finds no collision
             if (!contact1.is_valid || !contact2.is_valid) {
-                contact.is_valid = false;
+                contact.is_valid = false; 
                 return contact;
             }
-            if (contact1.penetration_depth <= contact2.penetration_depth) {
-                contact = contact1;
-            } else {
-                contact = contact2;
-                contact.normal = -contact.normal;
-            }
+            // minimum penetration is the actual contact
+            contact = (contact1.penetration_depth <= contact2.penetration_depth) ? contact1 : contact2;
         }
         // Ensure normal points from entity1 to entity2
         FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();

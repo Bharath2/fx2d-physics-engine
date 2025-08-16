@@ -21,12 +21,12 @@ private:
     static constexpr size_t m_enitities_limit = 4096; // no of entities in the scene can not exceed 4096
     std::vector<std::shared_ptr<FxEntity>> m_entities_vec; // stores pointers to all entities
     std::unordered_map<std::string, size_t> m_entities_map; // maps entity's name to index in the entities vector
-    std::function<void(FxScene&, float dt)> m_func_step_callback; //custom callback function invoked in the step method
+    std::function<void(FxScene&, double dt)> m_func_step_callback; //custom callback function invoked in the step method
     
     // max and min time step values that can be use in step method 
-    float m_max_time_step = 0.5f;
-    static constexpr float m_min_time_step = 1e-4f;
-    static constexpr size_t m_substeps = 11;
+    double m_max_time_step = 0.1;
+    static constexpr double m_min_time_step = 1e-3;
+    size_t m_substeps = 11;
     
 public:
     // scene size [x, y] units
@@ -44,11 +44,12 @@ public:
     // calls reset of all entities
     void reset();
     // simulation step
-    void step(float step_dt); 
-    void set_max_time_step(const float& step_dt);
+    void step(double step_dt); 
+    void set_max_time_step(const double& step_dt);
+    void set_substeps(const size_t& substeps) { m_substeps = substeps; }
     void set_gravity(const FxVec2f& o_gravity) { gravity = o_gravity; }
     // custom call back function called after every time step, user gets access to the scene.
-    void set_step_callback(const std::function<void(FxScene&, float dt)>& callback){
+    void set_step_callback(const std::function<void(FxScene&, double dt)>& callback){
         m_func_step_callback = callback;
     }
     // Method to set a fillColor

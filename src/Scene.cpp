@@ -10,16 +10,14 @@ void FxScene::reset() {
 }
 
 // set the maximum limit for time step
-void FxScene::set_max_time_step(const float& step_dt){
+void FxScene::set_max_time_step(const double& step_dt){
     if (step_dt < m_min_time_step){
-        throw std::invalid_argument("FxScene: max time step (dt) must be greater than 2e-6");
-    } else if (step_dt > 0.1f){
+        throw std::invalid_argument("FxScene: max time step (dt) must be greater than 1e-3");
+    } else if (step_dt > 0.1){
         throw std::invalid_argument("FxScene: max time step (dt) must be less than or equal to 0.1");
     }
     m_max_time_step = step_dt;
 }
-
-
 
 // Returns true if added; false if an entity with the name already exists.
 bool FxScene::add_entity(std::shared_ptr<FxEntity> entity) {
@@ -74,26 +72,15 @@ std::shared_ptr<FxEntity> FxScene::get_entity(const std::string& name) const {
 }
 
 // simulation step
-void FxScene::step(float step_dt) {
+void FxScene::step(double step_dt) {
     // Throw an error if dt is negative
     if (step_dt < m_min_time_step) {
         throw std::invalid_argument("FxScene: dt (delta time) is too small");
     }
-    float clamped_dt = std::clamp(step_dt, m_min_time_step, m_max_time_step);
-    const float substep_dt = clamped_dt / static_cast<float>(m_substeps);
-
-    // Broad phase: collect candidate pairs once per frame
-    std::vector<std::pair<size_t, size_t>> broad_pairs;
-    broad_pairs.reserve(m_entities_vec.size());
-    for (size_t i = 0; i < m_entities_vec.size(); ++i) {
-        for (size_t j = i + 1; j < m_entities_vec.size(); ++j) {
-            if (FxSolver::aabb_overlap_check(m_entities_vec[i], m_entities_vec[j])) {
-                broad_pairs.emplace_back(i, j);
-            }
-        }
-    }
-
+    double clamped_dt = std::clamp(step_dt, m_min_time_step, m_max_time_step);
+    const double substep_dt = clamped_dt / static_cast<double>(m_substeps);
     // Substeps
+    std::vector<FxContact> contacts;
     for (size_t iter = 0; iter < m_substeps; ++iter) {
         // Integrate (stores prev_pose internally)
         for_each_entity(std::execution::par, [&](auto entity) {
@@ -109,12 +96,13 @@ void FxScene::step(float step_dt) {
             }
         });
 
-        // Narrow phase: compute contacts for candidate pairs
-        std::vector<FxContact> contacts;
-        contacts.reserve(broad_pairs.size());
-        for (const auto& [i, j] : broad_pairs) {
+        // Narrow phase: compute contacts
+        contacts.clear();
+        for (size_t i = 0; i < m_entities_vec.size(); ++i) {
+            for (size_t j = i + 1; j < m_entities_vec.size(); ++j) {
             FxContact c = FxSolver::collision_check(m_entities_vec[i], m_entities_vec[j]);
             if (c.is_valid) contacts.emplace_back(std::move(c));
+            }
         }
 
         // Solve contact penetration (position-level)

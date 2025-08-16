@@ -47,6 +47,7 @@ private:
     // store initial state for reset
     FxVec3f _init_pose {0, 0, 0};
     FxVec3f _init_velocity {0, 0, 0};
+    FxVec3d m_pose_carry {0, 0, 0};
     
     // visual and collision shapes
     std::shared_ptr<FxCollisionShape> m_collision;
@@ -62,16 +63,19 @@ private:
 
     // axis aligned bounding box in world coordinates
     FxArray<float> m_bounding_box {-1.0f, -1.0f, -1.0f, -1.0f}; 
+
+    //update pose from velocity
+    void __update_pose(const double& step_dt);
     
 public:
     // unique name for an entity
     const std::string name;
 
-    // current state
+    // current state (public interface - single precision)
     FxVec3f pose {0, 0, 0};    // x, y, theta
     FxVec3f velocity {0, 0, 0};   // velocity along x, y axis and angular velocity along z axis
 
-    // previous pose and velocity for tracking changes
+    // previous pose and velocity for tracking changes (public interface)
     FxVec3f prev_pose {0, 0, 0};  
     FxVec3f prev_velocity {0, 0, 0};
 
@@ -143,7 +147,9 @@ public:
     // resolve the forces and torques and calculate acceleration;
     FxVec3f calc_acceleration();
     FxVec3f calc_acceleration(const FxVec2f& gravity);
-    void step(const FxVec2f& gravity, const float& step_dt);
+    
+
+    void step(const FxVec2f& gravity, const double& step_dt);
 
     ~FxEntity(){}
 };

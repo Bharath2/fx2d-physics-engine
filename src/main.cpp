@@ -21,7 +21,7 @@
 
 int main(int, char**){
     auto scene = FxYAML::buildScene("./Scene.yml");
-    Renderer renderer(scene, 120);
+    Renderer renderer(scene, 60);
     renderer.run();
 
     return 0;

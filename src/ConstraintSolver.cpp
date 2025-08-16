@@ -19,13 +19,16 @@ namespace FxSolver {
         FxEntity& A = *contact.entity1;
         FxEntity& B = *contact.entity2;
         
+        // Debug output for penetration depth and entity information
+        // std::cout << "Entity A: " << A.get_name() << " pos: [" << A.pose.x() << ", " << A.pose.y() << "]" << std::endl;
+        // std::cout << "Entity B: " << B.get_name() << " pos: [" << B.pose.x() << ", " << B.pose.y() << "]" << std::endl;
+        // std::cout << "Penetration depth: " << contact.penetration_depth << std::endl;
         // Normalize contact normal
         FxVec2f n = contact.normal; 
         
         // Mass and inertia properties
         const float wA = A.inv_mass(), wB = B.inv_mass();
         const float IA = A.inv_inertia(), IB = B.inv_inertia();
-        if (wA + wB + IA + IB <= 1e-8f) return;
         
         // Contact point relative to each entity's center
         FxVec2f rA = contact.position - A.pose.xy();
@@ -36,8 +39,7 @@ namespace FxSolver {
         float K_n = wA + wB + IA * ra_n * ra_n + IB * rb_n * rb_n;
         
         if (K_n > 1e-8f) { 
-            // Only resolve the amount beyond the tolerance
-            float correction_depth = contact.penetration_depth - penetration_tolerance;
+            float correction_depth = contact.penetration_depth;
             float lambdaP = correction_depth / K_n; 
             FxVec2f dP = n * lambdaP; 
             A.pose.xy() -= wA * dP; 
@@ -55,7 +57,7 @@ namespace FxSolver {
 
     // Post-constraint velocity impulses for restitution and dynamic friction
     void resolve_velocities(const FxContact& contact) {
-        if (!contact.is_valid || contact.penetration_depth <= 0.0f) return;
+        if (!contact.is_valid || contact.penetration_depth <= 1e-6f) return;
         if (!contact.entity1 || !contact.entity2) return;
 
         // Get entity references
@@ -68,14 +70,21 @@ namespace FxSolver {
         // Mass and inertia properties
         const float wA = A.inv_mass(), wB = B.inv_mass();
         const float IA = A.inv_inertia(), IB = B.inv_inertia();
-        if (wA + wB + IA + IB <= 1e-8f) return;
         
         // Contact point relative to each entity's center
         FxVec2f rA = contact.position - A.pose.xy();
         FxVec2f rB = contact.position - B.pose.xy();
-        // Velocities at contact point
+        
+        // Calculate velocities at contact point 
         FxVec2f vA = A.velocity_at_local_point(rA);
         FxVec2f vB = B.velocity_at_local_point(rB);
+
+        //  // Debug output
+        //  std::cout << " | Entity A: " << A.get_name() << " pos: [" << A.pose.x() << ", " << A.pose.y() << "]" << std::endl
+        //  << " | Entity B: " << B.get_name() << " pos: [" << B.pose.x() << ", " << B.pose.y() << "]" << std::endl
+        //  << " | Contact position: [" << contact.position.x() << ", " << contact.position.y() << "]" << std::endl
+        //  << " | vA: [" << vA.x() << ", " << vA.y() << "]" << std::endl
+        //  << " | vB: [" << vB.x() << ", " << vB.y() << "]" << std::endl;
 
         // Relative velocity and its normal component
         float vn = (vB - vA).dot(n); 
@@ -99,11 +108,9 @@ namespace FxSolver {
             }
         }
         
-        // Velocities at contact point
+        // Recalculate velocities at contact point after normal impulse using local points
         vA = A.velocity_at_local_point(rA);
         vB = B.velocity_at_local_point(rB);
-        
-        // Relative velocity and its tangential component
         FxVec2f vRel = vB - vA;
         FxVec2f vRel_t = vRel - (vRel).dot(n)*n; 
         FxVec2f t = vRel_t.normalized();
@@ -114,7 +121,7 @@ namespace FxSolver {
         float K_t = wA + wB + IA * ra_t * ra_t + IB * rb_t * rb_t; 
 
         float jt = 0.0f;
-        if (K_t > 1e-8f) { 
+        if (K_t > 1e-7f) { 
             // Unclamped tangential impulse to cancel vt
             jt = -vt / K_t;
             // Coulomb cone: clamp by μ * jn
@@ -126,7 +133,7 @@ namespace FxSolver {
                 float sign = (jt >= 0.0f) ? 1.0f : -1.0f;
                 jt = sign * (mu_k * jn);
             }
-            if (std::fabs(jt) > 1e-8f) {
+            if (std::fabs(jt) > 1e-7f) {
                 FxVec2f Pt = t * jt;
                 A.velocity.xy()     -= wA * Pt;
                 B.velocity.xy()     += wB * Pt;
@@ -134,11 +141,6 @@ namespace FxSolver {
                 B.velocity.theta()  += IB * jt * rb_t;
             }
         }
-        
-        
-        // // Debug output
-        // std::cout << " | Normal force: " << jn/dt << std::endl
-        //           << " | Frictional force: " << jt/dt << std::endl;
     }
 
 

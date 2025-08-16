@@ -12,11 +12,13 @@
 #include <concepts> 
 #include <numbers>
 
-// Constant representing positive infinity for float type
+// Constant representing positive infinity
 static constexpr float FxInfinityf = std::numeric_limits<float>::infinity();
+static constexpr double FxInfinityd = std::numeric_limits<double>::infinity();
 
-// Constant representing pi for float type
+// Constant representing pi 
 static constexpr float FxPif = std::numbers::pi_v<float>;
+static constexpr double FxPid = std::numbers::pi_v<double>;
 
 // concept to capture float, double, long double, int etc..
 template<typename T>
@@ -51,7 +53,7 @@ public:
 
     // Degree‐based rotate (default "rotate_inplace" uses degrees)
     FxVec2f& rotate_inplace(float degrees) noexcept {
-        constexpr float FX_DEG2RAD = 3.14159265f / 180.0f;
+        constexpr float FX_DEG2RAD = FxPif / 180.0f;
         return rotate_inplace_rad(degrees * FX_DEG2RAD);
     }
 
@@ -75,6 +77,62 @@ public:
     
     FxVec2f perpCW() const {
         return FxVec2f(y(), -x()); // CW perpendicular
+    }
+};
+
+// Custom 2D double vector with .x() getter and .set_x() setter.
+class FxVec2d : public Eigen::Vector2d {
+public:
+    // Inherit constructors
+    using Eigen::Vector2d::Vector2d;
+
+    // Getter for x and y.
+    double& x() { return (*this)(0); }
+    double& y() { return (*this)(1); }
+
+    // Const getters.
+    double x() const { return (*this)(0); }
+    double y() const { return (*this)(1); }
+
+    // Setter for x and y.
+    void set_x(double val) { (*this)(0) = val; }
+    void set_y(double val) { (*this)(1) = val; }
+
+    //Radian‐based rotate (suffix "_rad")
+    FxVec2d& rotate_inplace_rad(double theta) noexcept {
+        const double c = std::cos(theta), s = std::sin(theta);
+        double xi = x(), yi = y();
+        set_x(xi * c - yi * s);
+        set_y(xi * s + yi * c);
+        return *this;
+    }
+
+    // Degree‐based rotate (default "rotate_inplace" uses degrees)
+    FxVec2d& rotate_inplace(double degrees) noexcept {
+        constexpr double FX_DEG2RAD = FxPid / 180.0;
+        return rotate_inplace_rad(degrees * FX_DEG2RAD);
+    }
+
+    // — non-mutating rotation: returns a rotated copy
+    FxVec2d rotate(double theta) const  noexcept {
+        return FxVec2d(*this).rotate_inplace(theta);
+    }
+    FxVec2d rotate_rad(double theta) const  noexcept {
+        return FxVec2d(*this).rotate_inplace_rad(theta);
+    }
+
+    // Cross product with another 2D vector (returns scalar)
+    double cross(const FxVec2d& other) const {
+        return x() * other.y() - y() * other.x();
+    }
+
+    // Perpendicular vectors
+    FxVec2d perp() const {
+        return FxVec2d(-y(), x()); // CCW perpendicular
+    }
+    
+    FxVec2d perpCW() const {
+        return FxVec2d(y(), -x()); // CW perpendicular
     }
 };
 
@@ -109,6 +167,39 @@ public:
     FxVec2f get_xy() { return FxVec2f(this->data()); }
     FxVec2f xy() const { return this->head<2>(); }
     void set_xy(const FxVec2f& v2) { this->head<2>() = v2; }
+};
+
+using FxVec2dMap = Eigen::Map<Eigen::Vector2d>;
+
+// Custom 3D double vector with .x(), .y(), .z() getters and corresponding setters.
+class FxVec3d : public Eigen::Vector3d {
+public:
+    using Eigen::Vector3d::Vector3d;
+
+    // Getters.
+    double& x() { return (*this)(0); }
+    double& y() { return (*this)(1); }
+    double& z() { return (*this)(2); }
+    // to use the third value as orientation 
+    double& theta() { return (*this)(2); }
+
+     // Const getters.
+    double x() const { return (*this)(0); }
+    double y() const { return (*this)(1); }
+    double z() const { return (*this)(2); }
+    double theta() const { return (*this)(2); }
+
+    // Setters.
+    void set_x(double val) { (*this)(0) = val; }
+    void set_y(double val) { (*this)(1) = val; }
+    void set_z(double val) { (*this)(2) = val; }
+    // when used as orientation
+    void set_theta(double val) { (*this)(2) = val; }
+
+    FxVec2dMap xy() { return FxVec2dMap(this->data()); }
+    FxVec2d get_xy() { return FxVec2d(this->data()); }
+    FxVec2d xy() const { return this->head<2>(); }
+    void set_xy(const FxVec2d& v2) { this->head<2>() = v2; }
 };
 
 
@@ -167,6 +258,38 @@ template<Numeric S>
 inline FxVec3f operator-(FxVec3f const& v, S s) { return FxVec3f(v.array() - static_cast<float>(s)); }
 template<Numeric S>
 inline FxVec3f operator-(S s, FxVec3f const& v) { return FxVec3f((FxVec3f::Scalar(static_cast<float>(s)) * FxVec3f::Ones()).array() - v.array()); }
+
+// FxVec2d scalar operations with generic Numeric s
+template<Numeric S>
+inline FxVec2d operator*(FxVec2d const& v, S s) { return FxVec2d(v.array() * static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec2d operator*(S s, FxVec2d const& v) { return v * s; }
+template<Numeric S>
+inline FxVec2d operator/(FxVec2d const& v, S s) { return FxVec2d(v.array() / static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec2d operator+(FxVec2d const& v, S s) { return FxVec2d(v.array() + static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec2d operator+(S s, FxVec2d const& v) { return v + s; }
+template<Numeric S>
+inline FxVec2d operator-(FxVec2d const& v, S s) { return FxVec2d(v.array() - static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec2d operator-(S s, FxVec2d const& v) { return FxVec2d((FxVec2d::Scalar(static_cast<double>(s)) * FxVec2d::Ones()).array() - v.array()); }
+
+// FxVec3d scalar operations with generic Numeric s
+template<Numeric S>
+inline FxVec3d operator*(FxVec3d const& v, S s) { return FxVec3d(v.array() * static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec3d operator*(S s, FxVec3d const& v) { return v * s; }
+template<Numeric S>
+inline FxVec3d operator/(FxVec3d const& v, S s) { return FxVec3d(v.array() / static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec3d operator+(FxVec3d const& v, S s) { return FxVec3d(v.array() + static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec3d operator+(S s, FxVec3d const& v) { return v + s; }
+template<Numeric S>
+inline FxVec3d operator-(FxVec3d const& v, S s) { return FxVec3d(v.array() - static_cast<double>(s)); }
+template<Numeric S>
+inline FxVec3d operator-(S s, FxVec3d const& v) { return FxVec3d((FxVec3d::Scalar(static_cast<double>(s)) * FxVec3d::Ones()).array() - v.array()); }
 
 // FxVec4f scalar operations with generic Numeric s
 template<Numeric S>
