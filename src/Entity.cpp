@@ -203,7 +203,7 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt){
     prev_pose = pose;
     prev_velocity = velocity;  
     velocity += calc_acceleration(gravity) * step_dt;
-    update_pose(step_dt); // pose += velocity * step_dt;
+    __update_pose(step_dt); // pose += velocity * step_dt;
     
     // update pose of the collision shape and visual shape
     if(m_collision != nullptr) {

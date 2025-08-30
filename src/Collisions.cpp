@@ -162,7 +162,7 @@ namespace FxSolver {
                 dot_ = dot_bwd;
                 o_edge_start = v - bwd; o_seg_end = v;
             }
-            constexpr float eps = 5e-4f;
+            constexpr float eps = 1e-4f;
             if (dot_ > 1.f - eps) {
                 contact.position = _projected_midpoint(o_edge_start, o_seg_end, m_edge_start, m_edge_end);
             } else {

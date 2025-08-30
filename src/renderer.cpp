@@ -24,12 +24,20 @@ Renderer::~Renderer() {
 }
 
 void Renderer::init(int fps) {
-	// Calculate FIXED_DT from the provided FPS
-	m_fixed_dt = 1.0f / static_cast<float>(fps);
+	// Clamp FPS to reasonable range and warn if outside bounds
+	if (fps < 10 || fps > 240) {
+		std::cerr << "Warning: Clamping FPS to valid range [10, 240]." << std::endl;
+		fps = std::clamp(fps, 10, 240);
+	}
 	
+	// Calculate FIXED_DT from the provided FPS
+	m_fixed_dt = 1.0 / static_cast<double>(fps);
+
+	// Calculate window size from scene dimensions
 	m_display_w = static_cast<unsigned int>(m_scale * scene.size.x());
 	m_display_h = static_cast<unsigned int>(m_scale * scene.size.y());
 
+	SetTraceLogLevel(LOG_NONE); 
 	SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 	InitWindow(m_display_w, m_display_h, "Fx2D");
 	SetTargetFPS(fps);
@@ -44,30 +52,22 @@ void Renderer::init(int fps) {
 }
 
 void Renderer::run() {
-	float curr_rt_factor = 0.0f;
+	double curr_rt_factor = 0.0;
 	
 	while (!WindowShouldClose()) {
-		float frame_dt = GetFrameTime();
-		// Prevent spiral-of-death after pauses:
-		if (frame_dt > 0.2f) frame_dt = 0.2f;
-		
-		// Apply real-time factor to frame delta time
-		float scaled_frame_dt = frame_dt * m_real_time_factor;
-		// Clamp the scaled frame time
-		float clamped_frame_dt = std::clamp(scaled_frame_dt, m_min_time_step, m_max_time_step);
-		
-		m_dt_accumulator += clamped_frame_dt;
-		
-		// Calculate actual real-time factor for UI display
-		curr_rt_factor = (frame_dt > 0.0f) ? (clamped_frame_dt / frame_dt) : 1.0f;
-		
-		// Step the simulation in fixed increments
-		while (m_dt_accumulator >= m_fixed_dt) {
-			if (m_play) {
-				scene.step(m_fixed_dt);
-			}
-			m_dt_accumulator -= m_fixed_dt;
+		double org_frame_dt = static_cast<double>(GetFrameTime());
+		double frame_dt = std::min(org_frame_dt, 0.2);
+		double sim_in_dt = frame_dt * m_real_time_factor;
+		if (m_play) m_dt_accumulator += sim_in_dt;
+		// UI: actual applied real-time factor this frame
+		curr_rt_factor = frame_dt > 0 ? (sim_in_dt / frame_dt) : 1.0;
+		// Consume accumulator 
+		double curr_step_dt = std::clamp(m_fixed_dt*m_real_time_factor, m_min_time_step, m_max_time_step);
+		while (m_dt_accumulator >= curr_step_dt) {
+			scene.step(curr_step_dt);
+			m_dt_accumulator -= curr_step_dt;
 		}
+
 		BeginDrawing();
 		if (m_hasBackgroundTexture) {
 			DrawTexturePro(
@@ -84,11 +84,13 @@ void Renderer::run() {
 		EndDrawing();
 	}
 }
-
-void Renderer::set_real_time_factor(const float& rt_factor) {
-	if (rt_factor < 0.001f) {
-		std::cerr << "RayLibRenderer: real time factor must be greater than 0.001" << std::endl;
-		m_real_time_factor = 0.001f;
+void Renderer::set_real_time_factor(const double& rt_factor) {
+	if (rt_factor < 0.01) {
+		std::cerr << "Renderer: real time factor must be greater than 0.01" << std::endl;
+		m_real_time_factor = 0.01;
+	} else if (rt_factor > 10.0) {
+		std::cerr << "Renderer: real time factor must be less than or equal to 10" << std::endl;
+		m_real_time_factor = 10.0;
 	} else {
 		m_real_time_factor = rt_factor;
 	}
@@ -146,19 +148,14 @@ void Renderer::draw_scene() {
 					// Center the rotation at the circle center
 					Rectangle src{0, 0, (float)tex.width, (float)tex.height};
 					Rectangle dst{x, y, 2.0f * r, 2.0f * r};
-
 					// rotate about the center of the circle (origin at dst center)
 					Vector2 origin{r, r};
-
-					// raylib rotates CCW in screen space (+y down), your pose.theta() is CCW in world.
 					// The earlier sign looked right; keep if it matches your convention.
 					const float deg = -pose.theta() * 180.0f / FxPif;
-
 					DrawTexturePro(tex, src, dst, origin, deg, WHITE);
 					drewTexture = true;
 				}
 			}
-
 			if (!drewTexture) {
 				DrawCircleV(Vector2{x, y}, r, to_rl_color(visual->fillColor()));
 			}
@@ -167,13 +164,6 @@ void Renderer::draw_scene() {
 		} else {
 			const FxVec2fArray& verts = visual->vertices();
 			const size_t n = verts.size();
-			// screen-space vertices
-			std::vector<Vector2> pts;
-			pts.reserve(n);
-			for (size_t i = 0; i < n; ++i) {
-				pts.push_back(Vector2{ sx(verts[i].x()), sy(verts[i].y()) });
-			}
-
 			bool drewTexture = false;
 			if (!visual->fillTexture().empty()) {
 				auto bounds = (visual->__vertices()).bounds();
@@ -189,28 +179,24 @@ void Renderer::draw_scene() {
 					drewTexture = true;
 				}
 			}
-
-			if (!drewTexture) {
-				// Solid fill via fan
-				for (size_t i = 1; i + 1 < n; ++i) {
-					DrawTriangle(pts[0], pts[i], pts[i + 1], to_rl_color(visual->fillColor()));
-				}
+			// screen-space vertices
+			std::vector<Vector2> pts;
+			pts.reserve(n);
+			pts.push_back(Vector2{ sx(verts[0].x()), sy(verts[0].y()) });
+			for (size_t i = 1; i < n; ++i) {
+				pts.push_back(Vector2{ sx(verts[i].x()), sy(verts[i].y()) });
+				// Draw triangle fan for solid fill (skip first two vertices)
+				if (!drewTexture && i >= 2)
+					DrawTriangle(pts[0], pts[i-1], pts[i], to_rl_color(visual->fillColor()));
+				DrawLineV(pts[i-1], pts[i], to_rl_color(visual->outlineColor()));
 			}
-
-			// Outline on top
-			for (size_t i = 0; i < n; ++i) {
-				const Vector2& a = pts[i];
-				const Vector2& b = pts[(i + 1) % n];
-				DrawLineV(a, b, to_rl_color(visual->outlineColor()));
-			}
+			// Draw final outline edge from last vertex to first
+			DrawLineV(pts[n-1], pts[0], to_rl_color(visual->outlineColor()));
 		}
 	});
 }
 
-void Renderer::draw_ui(float curr_rt_factor) {
-	// ImGui::SetNextWindowSize(ImVec2(300, 180), ImGuiCond_Once);
-	// ImGui::Begin("Simulation Controls (raylib)");
-// void Renderer::draw_ui(float curr_rt_factor) {
+void Renderer::draw_ui(double curr_rt_factor) {
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 8));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
 	ImGui::Begin("Simulation Controls");
@@ -239,16 +225,13 @@ void Renderer::draw_ui(float curr_rt_factor) {
 
 	ImGui::Text("Real Time Factor:");
 	static float rt_factor = 1.0f;
-	std::snprintf(buf, sizeof(buf), "%.3f", curr_rt_factor);
+	std::snprintf(buf, sizeof(buf), "%.3f", static_cast<float>(curr_rt_factor));
 	ImGui::SetNextItemWidth(100.0f);
 	if (ImGui::InputFloat("##RTFactor", &rt_factor, 0.0f, 0.0f, "%.3f")) {
-		// Clamp the rt_factor so it never goes below 0.001.
-		if (rt_factor < 0.001f)
-			rt_factor = 0.001f;
-		set_real_time_factor(rt_factor);
+		set_real_time_factor(static_cast<double>(rt_factor));
 	}
 	ImGui::SameLine();
-	ImGui::Text(" : %.3f", curr_rt_factor);
+	ImGui::Text(" : %.3f", static_cast<float>(curr_rt_factor));
 	ImGui::Dummy(ImVec2(0, 5));
 	ImGui::Separator();
 
@@ -259,7 +242,7 @@ void Renderer::draw_ui(float curr_rt_factor) {
 	}
 	if (ImGui::Button("Reset Simulation", ImVec2(150, 0))) {
 		scene.reset();
-		scene.step(1e-4f);
+		scene.step(m_min_time_step);
 	}
 	ImGui::Dummy(ImVec2(0, 1));
 	ImGui::Separator();
@@ -271,3 +254,32 @@ void Renderer::draw_ui(float curr_rt_factor) {
 	ImGui::PopStyleVar(2);
 }
 
+
+
+//   // Policy: keep min <= base <= max, prefer 1× base most of the time
+//   constexpr float kMinMult = 0.5f;  // allow small steps when accumulator is low
+//   constexpr float kMaxMult = 3.0f;  // allow fewer, larger steps when catching up
+
+//   m_min_time_step  = kMinMult * m_fixed_dt;  // e.g. 0.5× base
+//   m_max_time_step  = kMaxMult * m_fixed_dt;  // e.g. 3×   base
+
+
+// m_fixed_dt = 1.0f / float(fps);
+// float curr_rt_factor = 0.0f;
+
+// constexpr float kHitchCap = 0.25f; // cap huge pauses
+
+// while (!WindowShouldClose()) {
+//     float org_frame_dt = GetFrameTime();
+// 	float frame_dt =  std::min(org_frame_dt, 0.2f);
+//     float sim_in_dt = frame_dt * m_real_time_factor;
+//     if (m_play) m_dt_accumulator += sim_in_dt;
+//     // UI: actual applied real-time factor this frame
+//     curr_rt_factor = frame_dt > 0 ? (sim_in_dt / frame_dt) : 1.0f;
+//     // Consume accumulator 
+//     while (m_dt_accumulator >= m_min_time_step) {
+//         float k = std::min(3.0f, std::floor(m_dt_accumulator / m_fixed_dt));
+//         step_dt = std::clamp(k * m_fixed_dt, m_min_time_step, m_max_time_step);
+//         scene.step(step_dt);
+//         m_dt_accumulator -= step_dt;
+//     }

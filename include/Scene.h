@@ -18,16 +18,19 @@
 // Scene class takes care of entities motion and collisions
 class FxScene {
 private:
-    static constexpr size_t m_enitities_limit = 4096; // no of entities in the scene can not exceed 4096
-    std::vector<std::shared_ptr<FxEntity>> m_entities_vec; // stores pointers to all entities
-    std::unordered_map<std::string, size_t> m_entities_map; // maps entity's name to index in the entities vector
-    std::function<void(FxScene&, double dt)> m_func_step_callback; //custom callback function invoked in the step method
-    
+    // no of entities in the scene can not exceed 4096
+    static constexpr size_t m_enitities_limit = 4096; 
     // max and min time step values that can be use in step method 
     double m_max_time_step = 0.1;
     static constexpr double m_min_time_step = 1e-3;
     size_t m_substeps = 11;
+    //custom callback function invoked in the step method
+    std::function<void(FxScene&, double dt)> m_func_step_callback; 
     
+protected:
+    std::vector<std::shared_ptr<FxEntity>> m_entities_vec; // stores pointers to all entities
+    std::unordered_map<std::string, size_t> m_entities_map; // maps entity's name to index in the entities vector
+
 public:
     // scene size [x, y] units
     const FxVec2ui size; 

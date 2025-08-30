@@ -10,7 +10,6 @@ namespace FxSolver {
         // Early exits for invalid contacts
         if (!contact.is_valid) return;
         if (!contact.entity1 || !contact.entity2) return;
-        
         // Allow small penetration - only resolve if depth exceeds threshold
         const float penetration_tolerance = 1e-3f; // tolerance
         if (contact.penetration_depth <= penetration_tolerance) return;
@@ -20,9 +19,10 @@ namespace FxSolver {
         FxEntity& B = *contact.entity2;
         
         // Debug output for penetration depth and entity information
-        // std::cout << "Entity A: " << A.get_name() << " pos: [" << A.pose.x() << ", " << A.pose.y() << "]" << std::endl;
-        // std::cout << "Entity B: " << B.get_name() << " pos: [" << B.pose.x() << ", " << B.pose.y() << "]" << std::endl;
-        // std::cout << "Penetration depth: " << contact.penetration_depth << std::endl;
+        std::cout << "Entity A: " << A.get_name() << " pos: [" << A.pose.x() << ", " << A.pose.y() << "]" << std::endl;
+        std::cout << "Entity B: " << B.get_name() << " pos: [" << B.pose.x() << ", " << B.pose.y() << "]" << std::endl;
+        std::cout << "Contact position: [" << contact.position.x() << ", " << contact.position.y() << "]" << std::endl;
+        std::cout << "Penetration depth: " << contact.penetration_depth << std::endl;
         // Normalize contact normal
         FxVec2f n = contact.normal; 
         

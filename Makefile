@@ -1,76 +1,95 @@
-# --- Compiler and Flags ---
+# ============================================================
+# Toolchain / PATH
+# ============================================================
 export PATH := /mingw64/bin:/usr/bin:/bin:$(PATH)
 
 CXX := g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -o3 \
-            -I./ \
-            -Iinclude \
-            -Ilib/imgui \
-			-Ilib/imgui-sfml \
-            -I/mingw64/include/eigen3 \
+AR  := ar
 
-# --- Linker and Libraries ---
-LDFLAGS := -lsfml-window -lsfml-graphics -lsfml-system -lopengl32 -lyaml-cpp
-
-# --- Files and Directories ---
+# ============================================================
+# Project
+# ============================================================
 TARGET := Fx2D.exe
 BUILD_DIR := build
 
-# Application's source files.
-APP_SRCS := src/main.cpp \
-            src/core.cpp \
-			src/renderer.cpp \
-			src/yaml_utils.cpp \
-			
+# ============================================================
+# pkg-config (MSYS2)
+# ============================================================
+RAYLIB_CFLAGS := $(shell pkg-config --cflags raylib)
+RAYLIB_LIBS   := $(shell pkg-config --libs   raylib)
+YAML_CFLAGS   := $(shell pkg-config --cflags yaml-cpp)
+YAML_LIBS     := $(shell pkg-config --libs --static yaml-cpp)
 
-# Define the ImGui core and backend source files.
-IMGUI_SRCS := lib/imgui/imgui.cpp \
-			  lib/imgui/imgui_draw.cpp \
-			  lib/imgui/imgui_tables.cpp \
-			  lib/imgui/imgui_widgets.cpp \
-			  lib/imgui-sfml/imgui-SFML.cpp \
+# ============================================================
+# Flags
+# ============================================================
+CXXFLAGS := -std=c++20 -Wall -Wextra -O3\
+            -DNO_FONT_AWESOME \
+            -I./ -Iinclude \
+            -Ilib/imgui -Ilib/rlImGui \
+            -I/mingw64/include/eigen3 \
+            -DYAML_CPP_STATIC_DEFINE \
+            $(YAML_CFLAGS) \
+            $(RAYLIB_CFLAGS)
 
+LDFLAGS := $(RAYLIB_LIBS) $(YAML_LIBS)
 
-# Combine all source files to be compiled.
-SRCS := $(APP_SRCS) $(IMGUI_SRCS)
-# Automatically generate object file names from source files.
+# ============================================================
+# Sources
+# ============================================================
+APP_SRCS := \
+    src/main.cpp \
+    src/Entity.cpp \
+    src/Scene.cpp \
+    src/Collisions.cpp \
+    src/ConstraintSolver.cpp \
+    src/Renderer.cpp \
+    src/YamlUtils.cpp
+
+IMGUI_CORE_SRCS := \
+    lib/imgui/imgui.cpp \
+    lib/imgui/imgui_draw.cpp \
+    lib/imgui/imgui_tables.cpp \
+    lib/imgui/imgui_widgets.cpp
+
+RLIMGUI_SRCS := \
+    lib/rlImGui/rlImGui.cpp \
+    $(IMGUI_CORE_SRCS)
+
+SRCS := $(APP_SRCS) $(RLIMGUI_SRCS)
 OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS))
-OBJDIRS := $(sort $(dir $(OBJS)))
 
-# --- Build Rules ---
-# Default target: Build the final executable.
-all: init $(TARGET)
+# ============================================================
+# Phony targets
+# ============================================================
+.PHONY: all clean rebuild debug init
+
+all: raylib
 
 init:
-	@echo "Creating build directories...$(OBJDIRS)"
-	@mkdir -p build/lib
-	@mkdir -p build/src
-	@mkdir -p $(OBJDIRS)
+	@mkdir -p $(BUILD_DIR)
 
-$(TARGET): $(OBJS)
-	@echo "Linking..."
+# ============================================================
+# Build rules
+# ============================================================
+raylib: init $(OBJS)
+	@echo "Linking (raylib) -> $(TARGET)"
 	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
-	@echo "Build finished: $(TARGET)"
+	@echo "Built: $(TARGET)"
 
-# Pattern rule for object files.
 $(BUILD_DIR)/%.o: %.cpp
-	@echo "Creating directory for $@"
 	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
+	@echo "Compiling (raylib) $<"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# --- Cleanup ---
-# Removes the final executable and the build directory with all the object files.
+# ============================================================
+# Housekeeping
+# ============================================================
 clean:
-	@echo "Cleaning up..."
-	rm -f $(TARGET)
-	rm -rf $(BUILD_DIR)
+	@echo "Cleaning..."
+	@rm -rf $(BUILD_DIR) $(TARGET)
 
-# --- Rebuild Target ---
 rebuild: clean all
 
-# --- Debug Build ---
 debug: CXXFLAGS += -g -DDEBUG
 debug: clean all
-
-.PHONY: all clean
