@@ -1,4 +1,4 @@
-#include "Entity.h"
+#include "Fx2D/Entity.h"
 
 // FxEntity contructor with name validation
 FxEntity::FxEntity(const std::string &entityName) : name(entityName) {
@@ -130,8 +130,32 @@ FxVec2f FxEntity::velocity_at_world_point(const FxVec2f& position) const {
 }
 
 // Get instantaneous velocity at a local point (relative to entity's center)
+FxArray<FxVec2f> FxEntity::velocity_at_local_point(const FxArray<FxVec2f>& local_position) const {
+    return velocity.xy() + velocity.theta() * local_position.perp();
+}
+
+// Get instantaneous velocity at a specific position
+FxArray<FxVec2f> FxEntity::velocity_at_world_point(const FxArray<FxVec2f>& position) const {
+    auto r = position - pose.xy(); // vector from center of mass to position
+    return velocity.xy() + velocity.theta() * r.perp();
+}
+
+// Get instantaneous velocity at a local point (relative to entity's center)
 FxVec2f FxEntity::velocity_at_local_point(const FxVec2f& local_position) const {
     return velocity.xy() + velocity.theta() * local_position.perp();
+}
+
+// Convert local point to world coordinates
+FxVec2f FxEntity::to_world_frame(const FxVec2f& local_point) const {
+    // Rotate local point by entity's orientation and translate by entity's position
+    return pose.xy() + local_point.rotate_rad(pose.theta());
+}
+
+// Convert world point to local coordinates
+FxVec2f FxEntity::to_entity_frame(const FxVec2f& world_point) const {
+    // Translate by entity's position and rotate by negative entity's orientation
+    FxVec2f translated = world_point - pose.xy();
+    return translated.rotate_rad(-pose.theta());
 }
 
 // Calculte the effect of all forces and moments with no gravity
@@ -185,9 +209,8 @@ void FxEntity::__update_pose(const double& step_dt) {
     carry_add(pose.x(),     (double)velocity.x()     * step_dt, m_pose_carry.x());
     carry_add(pose.y(),     (double)velocity.y()     * step_dt, m_pose_carry.y());
     carry_add(pose.theta(), (double)velocity.theta() * step_dt, m_pose_carry.theta());
-    // wrap to [0, 2pi) when incremented
-    while (pose.theta() >= 2.0f*FxPif) pose.theta() -= 2.0f*FxPif;
-    while (pose.theta() < 0.0f) pose.theta() += 2.0f*FxPif;
+    // wrap to [-pi, pi) when incremented
+    pose.set_theta(FxAngleWrap(pose.theta()));
 }
 
 void FxEntity::step(const FxVec2f& gravity, const double& step_dt){

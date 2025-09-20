@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -e
+
+# MinGW generator only on Windows/MSYS
+GEN=()
+EXT=""
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) GEN=(-G "MinGW Makefiles"); EXT=".exe" ;;
+esac
+
+APP="Fx2D"
+BIN="$APP$EXT"
+
+cmd="${1:-build}"
+bt="${2:-Release}"
+
+cfg()   { cmake -S . -B build "${GEN[@]}" -DCMAKE_BUILD_TYPE="$bt"; }
+build() { cmake --build build -j; cp "build/$BIN" "$BIN"; }
+
+case "$cmd" in
+  clean)   rm -rf build "$BIN" ;;
+  rebuild) rm -rf build "$BIN"; cfg; build ;;
+  debug)   bt=Debug; rm -rf build "$BIN"; cfg; build ;;
+  all|build) cfg; build ;;
+  *) echo "usage: $0 [build|rebuild|debug|clean|all] [Release|Debug]"; exit 1 ;;
+esac

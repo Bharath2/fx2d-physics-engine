@@ -8,8 +8,8 @@
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
 
-#include "MathTypes.h"
-#include "Core.h"
+#include "Fx2D/Math.h"
+#include "Fx2D/Core.h"
 
 namespace fs = std::filesystem;
 

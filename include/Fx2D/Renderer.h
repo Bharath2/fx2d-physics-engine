@@ -7,15 +7,16 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h"
 #include "rlImGui.h"
+#include <rlgl.h>
 
 #include <memory>
 #include <string>
 #include <unordered_map>
 
-#include "Core.h"
-#include "MathTypes.h"
+#include "Fx2D/Core.h"
+#include "Fx2D/Math.h"
 
-class Renderer {
+class FxRylbRenderer {
 protected:
 	FxScene &scene;
 	unsigned int m_scale;
@@ -26,7 +27,7 @@ protected:
 	
 	// Real-time factor variables
 	double m_real_time_factor = 1.0;
-	double m_max_time_step = 0.1;
+	double m_max_time_step = 0.06;
 	double m_min_time_step = 1e-3;
 	
 	// background settings
@@ -46,10 +47,10 @@ protected:
 	void draw_ui(double curr_rt_factor);
 	void draw_scene();
 public:
-	Renderer(FxScene &scene, int fps = 60, unsigned int scale = 100);
-	~Renderer();
+	FxRylbRenderer(FxScene &scene, int fps = 60, unsigned int scale = 100);
+	~FxRylbRenderer();
 
-	void run();
+	void run(bool play = true);
 	void set_background(const FxVec4ui8 &color);
 	void set_background(const std::string &filepath);
 	void set_real_time_factor(const double& rt_factor);

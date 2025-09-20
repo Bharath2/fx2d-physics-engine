@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <functional>
 #include <execution>
@@ -11,9 +12,9 @@
 #include <iostream>
 #include <utility>
 
-#include "MathTypes.h"
-#include "Entity.h"
-#include "Solver.h"
+#include "Fx2D/Math.h"
+#include "Fx2D/Entity.h"
+#include "Fx2D/Solver.h"
 
 // Scene class takes care of entities motion and collisions
 class FxScene {
@@ -21,15 +22,24 @@ private:
     // no of entities in the scene can not exceed 4096
     static constexpr size_t m_enitities_limit = 4096; 
     // max and min time step values that can be use in step method 
-    double m_max_time_step = 0.1;
+    static constexpr double m_max_time_step = 0.06;
     static constexpr double m_min_time_step = 1e-3;
     size_t m_substeps = 11;
     //custom callback function invoked in the step method
-    std::function<void(FxScene&, double dt)> m_func_step_callback; 
-    
+    std::function<void(FxScene&, double dt)> m_func_step_callback;
+    // dirty flag to track when constraints need cleaning
+    bool m_constraints_dirty = false; 
+    // auto-increment counter for entity IDs
+    size_t m_next_entity_id = 1;
+    // Collision exclusion system
+    std::unordered_set<uint32_t> m_no_collision_pairs;
+
 protected:
     std::vector<std::shared_ptr<FxEntity>> m_entities_vec; // stores pointers to all entities
     std::unordered_map<std::string, size_t> m_entities_map; // maps entity's name to index in the entities vector
+    
+    std::vector<std::shared_ptr<FxConstraint>> m_constraints_vec; // stores all constraints
+    std::unordered_map<std::string, size_t> m_constraints_map; // maps constraint name to index in vector
 
 public:
     // scene size [x, y] units
@@ -48,7 +58,6 @@ public:
     void reset();
     // simulation step
     void step(double step_dt); 
-    void set_max_time_step(const double& step_dt);
     void set_substeps(const size_t& substeps) { m_substeps = substeps; }
     void set_gravity(const FxVec2f& o_gravity) { gravity = o_gravity; }
     // custom call back function called after every time step, user gets access to the scene.
@@ -64,6 +73,20 @@ public:
     bool delete_entity(const std::string& name);
     // Returns the entity pointer if found; otherwise returns nullptr.
     std::shared_ptr<FxEntity> get_entity(const std::string& name) const;
+
+    // Constraint management
+    // Returns true if added; false if a constraint with the name already exists
+    bool add_constraint(std::shared_ptr<FxConstraint> constraint);
+    // Returns true if deletion succeeded, false if the constraint wasn't found
+    bool delete_constraint(const std::string& name);
+    // Returns the constraint pointer if found; otherwise returns nullptr
+    FxConstraint* get_constraint(const std::string& name) const;
+
+    // Collision pair management
+    void enable_collision(const std::string& entity1_name, const std::string& entity2_name);
+    void enable_collision(std::shared_ptr<FxEntity> entity1, std::shared_ptr<FxEntity> entity2);
+    void disable_collision(const std::string& entity1_name, const std::string& entity2_name);
+    void disable_collision(std::shared_ptr<FxEntity> entity1, std::shared_ptr<FxEntity> entity2);
 
     // for_each_entity applies the given function on each entity in a given execution mode
     template <typename ExecPolicy, typename Func>
@@ -99,6 +122,20 @@ public:
                     raw_entities_vec.end(),
                     results.begin(),
                     std::forward<Func>(func));
+    }
+private:
+    // Removes constraints with dead entities
+    void sweep_dead_constraints();
+    
+    // 12 bits per index (0..4095) - packs two entity IDs into a single uint32_t
+    static uint32_t pack_id_pair(size_t a, size_t b) {
+        if (a > b) std::swap(a, b);
+        return static_cast<uint32_t>((a << 12) | b);
+    }
+    
+    // Inline collision exclusion check
+    inline bool is_collision_pair(size_t i, size_t j) const {
+        return !(m_no_collision_pairs.find(pack_id_pair(i, j)) != m_no_collision_pairs.end());
     }
 };
 

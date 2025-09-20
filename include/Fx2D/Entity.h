@@ -6,14 +6,14 @@
 #include <regex>
 #include <stdexcept>
 
-#include "MathTypes.h"
+#include "Fx2D/Math.h"
 
 // container for visual shape 
 struct FxVisualShape : public FxShape {
     private:    
         FxVec4ui8 m_fillColor {200, 200, 200, 255};    // Fill color (RGBA)
         FxVec4ui8 m_outlineColor {10, 10, 10, 255};    // Outline color (RGBA)
-        float m_outlineThickness = 1.0f;               // Outline thickness in pixels
+        float m_outlineThickness = 2.5f;               // Outline thickness in pixels
         std::string m_fillTexturePath = "";                // File path to texture file (empty = no texture)
     public:
         // 1. "Inherit" all of FxShape's ctors
@@ -38,6 +38,9 @@ using FxCollisionShape = FxShape;
 // Class for entity attributes and methods
 class FxEntity {
 private:
+    // unique identifier assigned by scene
+    size_t m_entity_id = 0;
+    
     // mass and inertia
     float _mass = 1.0f;     
     float _inertia = 1.0f;   // around center of mass
@@ -85,12 +88,17 @@ public:
     float gravity_scale = 1.0f;
     float static_friction = 0.0f;
     float dynamic_friction = 0.0f;
+    
+    // entity state
+    bool enabled = true;  // If false, entity is skipped in physics updates, collisions, and rendering
 
     // contructor with name validation
     explicit FxEntity(const std::string& entityName);
 
-    // getter for the name
+    // getter for the name and ID
     const std::string& get_name() const {return name;}
+    size_t get_entity_id() const {return m_entity_id;}
+    void set_entity_id(size_t id) {m_entity_id = id;}
 
     // resets current state to inital state
     void reset();
@@ -141,8 +149,14 @@ public:
 
     // Get instantaneous velocity at a specific position
     FxVec2f velocity_at_world_point(const FxVec2f& position) const;
-    // Get instantaneous velocity at a local point (relative to entity's center)
     FxVec2f velocity_at_local_point(const FxVec2f& local_position) const;
+    // Vector implementations of above 
+    FxArray<FxVec2f> velocity_at_world_point(const FxArray<FxVec2f>& position) const;
+    FxArray<FxVec2f> velocity_at_local_point(const FxArray<FxVec2f>& local_position) const;
+    
+    // Convert local point to world coordinates and vice-versa
+    FxVec2f to_world_frame(const FxVec2f& local_point) const;
+    FxVec2f to_entity_frame(const FxVec2f& world_point) const;
 
     // resolve the forces and torques and calculate acceleration;
     FxVec3f calc_acceleration();

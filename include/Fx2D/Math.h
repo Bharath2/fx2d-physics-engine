@@ -20,6 +20,14 @@ static constexpr double FxInfinityd = std::numeric_limits<double>::infinity();
 static constexpr float FxPif = std::numbers::pi_v<float>;
 static constexpr double FxPid = std::numbers::pi_v<double>;
 
+// Helper function for angle wrapping
+static inline float FxAngleWrap(float angle) {
+    while (angle >= FxPif) angle -= 2.0f * FxPif;
+    while (angle < -FxPif) angle += 2.0f * FxPif;
+    return angle;
+}
+
+
 // concept to capture float, double, long double, int etc..
 template<typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>; 
@@ -164,7 +172,7 @@ public:
     void set_theta(float val) { (*this)(2) = val; }
 
     FxVec2fMap xy() { return FxVec2fMap(this->data()); }
-    FxVec2f get_xy() { return FxVec2f(this->data()); }
+    FxVec2f get_xy() const { return FxVec2f(this->data()); }
     FxVec2f xy() const { return this->head<2>(); }
     void set_xy(const FxVec2f& v2) { this->head<2>() = v2; }
 };
@@ -197,7 +205,7 @@ public:
     void set_theta(double val) { (*this)(2) = val; }
 
     FxVec2dMap xy() { return FxVec2dMap(this->data()); }
-    FxVec2d get_xy() { return FxVec2d(this->data()); }
+    FxVec2d get_xy() const { return FxVec2d(this->data()); }
     FxVec2d xy() const { return this->head<2>(); }
     void set_xy(const FxVec2d& v2) { this->head<2>() = v2; }
 };
@@ -899,18 +907,31 @@ class FxArray {
 
     // 2) In-place rotate by degrees
     FxArray& rotate_inplace(float degrees) noexcept requires std::same_as<T, FxVec2f> {
-        constexpr float FX_DEG2RAD = 3.14159265358979323846f / 180.0f;
+        constexpr float FX_DEG2RAD = 3.1415926535898f / 180.0f;
         return rotate_inplace_rad(degrees * FX_DEG2RAD);
     }
 
-    // 3) Non-mutating rotate by radians → new array
+    // 3) In-place rotate by degrees
+    FxArray& perp_inplace() noexcept requires std::same_as<T, FxVec2f> {
+        for (auto& e : *this) e = e.perp();
+        return *this;
+    }
+
+    // 4) Non-mutating perp → new array
+    FxArray perp() const requires std::same_as<T, FxVec2f> {
+        FxArray tmp = *this;
+        tmp.perp_inplace();
+        return tmp;
+    }
+
+    // 5) Non-mutating rotate by radians → new array
     FxArray rotate_rad(float theta_rad) const requires std::same_as<T, FxVec2f> {
         FxArray tmp = *this;
         tmp.rotate_inplace_rad(theta_rad);
         return tmp;
     }
 
-    // 4) Non-mutating rotate by degrees → new array
+    // 6) Non-mutating rotate by degrees → new array
     FxArray rotate(float degrees) const requires std::same_as<T, FxVec2f> {
         FxArray tmp = *this;
         tmp.rotate_inplace(degrees);
