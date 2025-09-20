@@ -214,4 +214,4 @@ namespace FxSolver {
         return contact;
     }
 
-}
+} // namespace FxSolver

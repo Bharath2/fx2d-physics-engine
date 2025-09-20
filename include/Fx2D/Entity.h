@@ -37,7 +37,7 @@ using FxCollisionShape = FxShape;
 
 // Class for entity attributes and methods
 class FxEntity {
-private:
+  private:
     // unique identifier assigned by scene
     size_t m_entity_id = 0;
     
@@ -70,7 +70,7 @@ private:
     //update pose from velocity
     void __update_pose(const double& step_dt);
     
-public:
+  public:
     // unique name for an entity
     const std::string name;
 
@@ -162,7 +162,6 @@ public:
     FxVec3f calc_acceleration();
     FxVec3f calc_acceleration(const FxVec2f& gravity);
     
-
     void step(const FxVec2f& gravity, const double& step_dt);
 
     ~FxEntity(){}

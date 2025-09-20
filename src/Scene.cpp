@@ -219,10 +219,8 @@ void FxScene::step(double step_dt) {
         contacts.clear();
         for (size_t i = 0; i < m_entities_vec.size(); ++i) {
             if (!m_entities_vec[i]->enabled) continue;  // Skip disabled entities
-            
             for (size_t j = i + 1; j < m_entities_vec.size(); ++j) {
                 if (!m_entities_vec[j]->enabled) continue;  // Skip disabled entities
-                
                 // Skip collision detection for excluded pairs
                 if (is_collision_pair(m_entities_vec[i]->get_entity_id(), 
                                       m_entities_vec[j]->get_entity_id())) {
@@ -247,7 +245,6 @@ void FxScene::step(double step_dt) {
         // Update velocities from positions with velocity clamping - skip disabled entities
         for_each_entity(std::execution::par, [&](auto entity) {
             if (!entity->enabled) return;  // Skip disabled entities
-            
             FxVec3f delta = (entity->pose - entity->prev_pose);
             delta.set_theta(FxAngleWrap(delta.theta()));
             entity->velocity = delta / substep_dt;

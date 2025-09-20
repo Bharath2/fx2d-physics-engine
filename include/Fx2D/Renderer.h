@@ -17,36 +17,31 @@
 #include "Fx2D/Math.h"
 
 class FxRylbRenderer {
-protected:
+  protected:
 	FxScene &scene;
 	unsigned int m_scale;
 	unsigned int m_display_w, m_display_h;
 	// Fixed timestep variables
 	double m_fixed_dt = 1.0 / 60.0;
 	double m_dt_accumulator = 0.0;
-	
 	// Real-time factor variables
 	double m_real_time_factor = 1.0;
 	double m_max_time_step = 0.06;
 	double m_min_time_step = 1e-3;
-	
+	bool m_play = true; // run-state
 	// background settings
 	Color m_backgroundColor { 50, 50, 50, 255 };
 	Texture2D m_backgroundTexture { 0, 0, 0, 0, 0 };
 	bool m_hasBackgroundTexture { false };
-
 	// texture cache for entity textures
 	std::unordered_map<std::string, Texture2D> m_textureCache;
 	Texture2D get_or_load_texture(const std::string& path);
-
-	// run-state
-	bool m_play = true;
-
 	// helpers
 	void init(int fps = 60);
 	void draw_ui(double curr_rt_factor);
 	void draw_scene();
-public:
+
+  public:
 	FxRylbRenderer(FxScene &scene, int fps = 60, unsigned int scale = 100);
 	~FxRylbRenderer();
 

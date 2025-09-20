@@ -165,7 +165,7 @@ void FxSeparationConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     if (m_axis_is_local){
         gth1 = (axw.perp()).dot(d);
     }
-    active = true;
+    active = true; gth2 = 0.0f;
 }
 
 
@@ -208,15 +208,12 @@ void FxMotionAlongAxisConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     if (m_axis_is_local) {
         gth1 = axw.dot(d);
     }
-    active = true;
+    active = true; gth2 = 0.0f;
 }
 
 
 namespace FxSolver {
     void resolve_penetration(const FxContact& contact, float dt) {
-
-        // auto pc = FxPenetrationConstraint(contact);
-        // pc.resolve(dt);
         // Early exits for invalid contacts
         if (!contact.is_valid()) return;
         if (!contact.entity1 || !contact.entity2) return;
@@ -227,16 +224,8 @@ namespace FxSolver {
         // Get entity references
         FxEntity& A = *contact.entity1;
         FxEntity& B = *contact.entity2;
-        // // Debug output for penetration depth and entity information (only for pole)
-        // if (A.get_name() == "box" || B.get_name() == "box") {
-        //     std::cout << "Entity A: " << A.get_name() << " pos: [" << A.pose.x() << ", " << A.pose.y() << "] vel: [" << A.velocity.x() << ", " << A.velocity.y() << "]" << std::endl;
-        //     std::cout << "Entity B: " << B.get_name() << " pos: [" << B.pose.x() << ", " << B.pose.y() << "] vel: [" << B.velocity.x() << ", " << B.velocity.y() << "]" << std::endl;
-        //     std::cout << "Contact position: [" << contact.position[0].x() << ", " << contact.position[0].y() << "]" << std::endl;
-        //     std::cout << "Contact normal: [" << contact.normal.x() << ", " << contact.normal.y() << "]" << std::endl;
-        //     std::cout << "Penetration depth: " << contact.penetration_depth << std::endl;
-        //     std::cout << contact.count <<std::endl;
-        // }
         FxVec2f n = (contact.normal); 
+
         // Mass and inertia properties
         const float wA = A.inv_mass(), wB = B.inv_mass();
         const float IA = A.inv_inertia(), IB = B.inv_inertia();
@@ -272,7 +261,7 @@ namespace FxSolver {
     }
 
     // Post-constraint velocity impulses for restitution and dynamic friction
-    void resolve_velocities(const FxContact& contact, float dt) {
+    void resolve_velocities(const FxContact& contact) {
         if (!contact.is_valid() || contact.penetration_depth <= 1e-4f) return;
         if (!contact.entity1 || !contact.entity2) return;
 

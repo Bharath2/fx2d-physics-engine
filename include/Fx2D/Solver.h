@@ -10,14 +10,14 @@
 class FxEntity;
 
 struct FxContact {
-private:
+  private:
     bool m_is_valid = false;  
-public:
+  public:
     size_t count = 0;                                             // True if contact is valid
     FxArray<FxVec2f> position {{0.0f, 0.0f}, {0.0f, 0.0f}};      // upto to 2 Contact points in world coordinates
     FxVec2f normal {0.0f, 0.0f};              // Contact normal (unit vector)
     float penetration_depth = FxInfinityf;    // Penetration depth (positive if overlapping)
-    // Entity pointers (null if invalid contact)
+
     std::shared_ptr<FxEntity> entity1 = nullptr;  // First entity in collision
     std::shared_ptr<FxEntity> entity2 = nullptr;  // Second entity in collision
     
@@ -36,7 +36,7 @@ public:
 
 // Position-based constraint base class for XPBD solver
 class FxConstraint {
-public:
+  public:
     std::string name;                 // "id1_id2_constraint-name"
     float compliance = 1e-7f;          // XPBD alpha = compliance / dt^2
     // bool entities_collide = false;     // Whether connected entities should collide
@@ -66,7 +66,7 @@ public:
     float lower_limit = 0.0f;    // Lower angle limit (degrees)
     float upper_limit = FxPif;    // Upper angle limit (degrees)
     float slop  = 0.01f;    // Tolerance zone around limits
-    bool  enabled = true;  // Whether this constraint is active
+    bool enabled = true;  // Whether this constraint is active
     FxAngularLimitConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
@@ -76,7 +76,7 @@ public:
 class FxAngleLockConstraint : public FxConstraint {
 public:
     float target = 0.0f;   // Target relative angle
-    bool  enabled = true;  // Whether this constraint is active
+    bool enabled = true;  // Whether this constraint is active
     FxAngleLockConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, float tgt = 0.0f);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
@@ -88,7 +88,7 @@ private:
     FxVec2f m_anchor1;     // Local anchor point on entity1
     FxVec2f m_anchor2;     // Local anchor point on entity2
 public:
-    bool    enabled = true; // Whether this constraint is active
+    bool enabled = true; // Whether this constraint is active
     FxAnchorConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
                             const FxVec2f& anchor, bool anchor_is_local = true);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
@@ -105,14 +105,11 @@ public:
     float upper_limit = 10;       // Upper limit for projection
     float slop = 0.0001f;   // Tolerance zone around limits
     bool enabled = true;    // Whether this constraint is active
-    
     FxSeparationConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
                            const FxVec2f& axis, bool axis_is_local = true);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
 };
-
-
 
 // Constraint that forces motion along a specified axis
 class FxMotionAlongAxisConstraint : public FxConstraint {
@@ -122,7 +119,6 @@ private:
     float m_initial_projection; // Initial perpendicular distance projection
 public:
     bool enabled = true;    // Whether this constraint is active
-    
     FxMotionAlongAxisConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
                                const FxVec2f& axis, bool axis_is_local = true);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
@@ -139,11 +135,9 @@ namespace FxSolver {
     const FxContact collision_check(const FxEntity& entity1, const FxEntity& entity2);
     const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1, const std::shared_ptr<FxEntity>& entity2);
 
-    // XPBD Constraint Solver
-    void resolve_constraints_xpbd(FxConstraint& contraints, float dt = 0.016f);
     // Main collision resolution method 
     void resolve_penetration(const FxContact& contact, float dt = 0.016f);
     // Velocity-level solver: restitution and dynamic friction impulses
-    void resolve_velocities(const FxContact& contact, float dt = 0.016f);
+    void resolve_velocities(const FxContact& contact);
 
 } // namespace FxSolver

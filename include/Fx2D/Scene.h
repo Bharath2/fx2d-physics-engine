@@ -18,7 +18,7 @@
 
 // Scene class takes care of entities motion and collisions
 class FxScene {
-private:
+  private:
     // no of entities in the scene can not exceed 4096
     static constexpr size_t m_enitities_limit = 4096; 
     // max and min time step values that can be use in step method 
@@ -34,14 +34,14 @@ private:
     // Collision exclusion system
     std::unordered_set<uint32_t> m_no_collision_pairs;
 
-protected:
+  protected:
     std::vector<std::shared_ptr<FxEntity>> m_entities_vec; // stores pointers to all entities
     std::unordered_map<std::string, size_t> m_entities_map; // maps entity's name to index in the entities vector
     
     std::vector<std::shared_ptr<FxConstraint>> m_constraints_vec; // stores all constraints
     std::unordered_map<std::string, size_t> m_constraints_map; // maps constraint name to index in vector
 
-public:
+  public:
     // scene size [x, y] units
     const FxVec2ui size; 
     // background color or texture path
@@ -123,7 +123,7 @@ public:
                     results.begin(),
                     std::forward<Func>(func));
     }
-private:
+  private:
     // Removes constraints with dead entities
     void sweep_dead_constraints();
     
