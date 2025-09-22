@@ -11,7 +11,7 @@ int main(int, char**){
     // Initialize renderer with 60 FPS target
     FxRylbRenderer renderer(scene, 60);
     // Start the simulation loop
-    renderer.run();
+    renderer.run(false);
 
     return 0;
 }

@@ -10,128 +10,70 @@ void FxScene::reset() {
 }
 
 // Returns true if added; false if an entity with the name already exists.
-bool FxScene::add_entity(std::shared_ptr<FxEntity> entity) {
+bool FxScene::add_entity(const std::shared_ptr<FxEntity>& entity) {
     if (entity.get() == nullptr) {
         std::cerr << "FxScene: Cannot add a null entity." << std::endl;
         return false;
     }
-    if(m_entities_vec.size() < m_enitities_limit){
-        if (m_entities_map.find(entity->get_name()) != m_entities_map.end()) {
-            std::cerr << "FxScene: Entity with name '" << entity->get_name() << "' already exists." << std::endl;
-            return false;
-        }
-        // Assign unique entity ID
-        entity->set_entity_id(m_next_entity_id++);
-        m_entities_vec.push_back(entity);
-        m_entities_map[entity->get_name()] = m_entities_vec.size() - 1;
-        return true;
-    } else {
-        std::cerr << "FxScene: Entities limit exceeded." << std::endl;
-        return false;
-    }
+    return m_entities.add(entity);
 }
 
 // Returns true if deletion succeeded, false if the entity wasn't found.
 bool FxScene::delete_entity(const std::string& name) {
-    auto it = m_entities_map.find(name);
-    if (it == m_entities_map.end()) {
-        std::cerr << "FxScene: Entity with name '" << name << "' not found." << std::endl;
-        return false;
+    bool success = m_entities.remove(name);
+    if (success) {
+        // constraints need sweeping
+        m_constraints_dirty = true;
     }
-    // swap the last element with element to be deleted;
-    size_t idx = it->second;
-    size_t last_idx = m_entities_vec.size() - 1;
-    if (idx != last_idx) {
-        m_entities_vec[idx] = m_entities_vec[last_idx];
-        m_entities_map[m_entities_vec[last_idx]->get_name()] = idx;
-    }
-    // Remove the last element from the vector.
-    m_entities_vec.pop_back();
-    // erase from map
-    m_entities_map.erase(it);
-    // constraints need sweeping
-    m_constraints_dirty = true;
-    return true;
+    return success;
 }
 
 // Returns the entity pointer if found; otherwise returns nullptr.
 std::shared_ptr<FxEntity> FxScene::get_entity(const std::string& name) const {
-    auto it = m_entities_map.find(name);
-    if (it == m_entities_map.end()) {
-        std::cerr << "FxScene: Entity with name '" << name << "' not found." << std::endl;
-        return nullptr;
-    }
-    size_t idx = it->second;
-    return m_entities_vec[idx];
+    return m_entities.get(name);
 }
 
 // Returns true if added; false if a constraint with the name already exists.
-bool FxScene::add_constraint(std::shared_ptr<FxConstraint> constraint) {
+bool FxScene::add_constraint(const std::shared_ptr<FxConstraint>& constraint) {
     if (constraint.get() == nullptr) {
         std::cerr << "FxScene: Cannot add a null constraint." << std::endl;
         return false;
     }
-    const std::string& name = constraint->name;
-    if (m_constraints_map.find(name) != m_constraints_map.end()) {
-        std::cerr << "FxScene: Constraint with name '" << name << "' already exists." << std::endl;
-        return false;
+    bool success = m_constraints.add(constraint);
+    if (success) {
+        // Add to collision exclusion if entities should not collide
+        if (constraint->entity1 && constraint->entity2) {
+            m_entities.disable_collision(constraint->entity1->get_name(), constraint->entity2->get_name());
+        }
     }
-    m_constraints_map[name] = m_constraints_vec.size();
-    m_constraints_vec.push_back(constraint);
-    
-    // Add to collision exclusion if entities should not collide
-    if (constraint->entity1 && constraint->entity2) {
-        disable_collision(constraint->entity1, constraint->entity2);
-    }
-    
-    // std::cout<<m_constraints_vec.size()<<std::endl;
-    return true;
+    return success;
 }
 
 // Returns true if deletion succeeded, false if the constraint wasn't found.
 bool FxScene::delete_constraint(const std::string& name) {
-    auto it = m_constraints_map.find(name);
-    if (it == m_constraints_map.end()) {
-        std::cerr << "FxScene: Constraint with name '" << name << "' not found." << std::endl;
-        return false;
+    // Get constraint before deletion to handle collision exclusion
+    auto constraint = m_constraints.get(name);
+    if (constraint) {
+        // Remove from collision exclusion before deleting the constraint
+        if (constraint->entity1 && constraint->entity2) {
+             m_entities.enable_collision(constraint->entity1->get_name(), constraint->entity2->get_name());
+        }
     }
-    // Remove from collision exclusion before deleting the constraint
-    auto& constraint = m_constraints_vec[it->second];
-    if (constraint->entity1 && constraint->entity2) {
-         enable_collision(constraint->entity1, constraint->entity2);
-    }
-    
-    // swap the last element with element to be deleted;
-    size_t idx = it->second;
-    size_t last_idx = m_constraints_vec.size() - 1;
-    if (idx != last_idx) {
-        m_constraints_vec[idx] = std::move(m_constraints_vec[last_idx]);
-        m_constraints_map[m_constraints_vec[idx]->name] = idx;
-    }
-    // Remove the last element from the vector.
-    m_constraints_vec.pop_back();
-    // erase from map
-    m_constraints_map.erase(it);
-    return true;
+    return m_constraints.remove(name);
 }
 
-// Returns the constraint pointer if found; otherwise returns nullptr.
-FxConstraint* FxScene::get_constraint(const std::string& name) const {
-    auto it = m_constraints_map.find(name);
-    if (it == m_constraints_map.end()) {
-        std::cerr << "FxScene: Constraint with name '" << name << "' not found." << std::endl;
-        return nullptr;
-    }
-    size_t idx = it->second;
-    return m_constraints_vec[idx].get();
-}
+// // Returns the constraint pointer if found; otherwise returns nullptr.
+// FxConstraint* FxScene::get_constraint(const std::string& name) const {
+//     return m_constraints.get_rawptr(name);
+// }
 
 void FxScene::sweep_dead_constraints() {
     std::vector<std::string> dead_names;
-    for (const auto& c : m_constraints_vec) {
+    const auto& constraints_vec = m_constraints.items();
+    for (const auto& c : constraints_vec) {
         bool dead = !c->entity1 || !c->entity2 ||
-                    m_entities_map.find(c->entity1->get_name()) == m_entities_map.end() ||
-                    m_entities_map.find(c->entity2->get_name()) == m_entities_map.end();
+                    !m_entities.get_rawptr(c->entity1->get_name()) ||
+                    !m_entities.get_rawptr(c->entity2->get_name());
         if (dead) dead_names.push_back(c->name);
     }
     for (const auto& name : dead_names) {
@@ -139,45 +81,6 @@ void FxScene::sweep_dead_constraints() {
     }
 }
 
-// Enable collision between two entities by name
-void FxScene::enable_collision(const std::string& entity1_name, const std::string& entity2_name) {
-    auto e1 = get_entity(entity1_name);
-    auto e2 = get_entity(entity2_name);
-    if (e1 && e2) {
-        enable_collision(e1, e2);
-    }
-}
-
-// Enable collision between two entities by shared_ptr
-void FxScene::enable_collision(std::shared_ptr<FxEntity> entity1, std::shared_ptr<FxEntity> entity2) {
-    if (!entity1 || !entity2 || entity1.get() == entity2.get()) {
-        std::cerr << "FxScene: Invalid entities for collision enabling." << std::endl;
-        return;
-    }
-    uint32_t pair_id = pack_id_pair(entity1->get_entity_id(), entity2->get_entity_id());
-    // Remove from no-collision set if it exists (enable collision)
-    m_no_collision_pairs.erase(pair_id);
-}
-
-// Disable collision between two entities by name
-void FxScene::disable_collision(const std::string& entity1_name, const std::string& entity2_name) {
-    auto e1 = get_entity(entity1_name);
-    auto e2 = get_entity(entity2_name);
-    if (e1 && e2) {
-        disable_collision(e1, e2);
-    }
-}
-
-// Disable collision between two entities by shared_ptr
-void FxScene::disable_collision(std::shared_ptr<FxEntity> entity1, std::shared_ptr<FxEntity> entity2) {
-    if (!entity1 || !entity2 || entity1.get() == entity2.get()) {
-        std::cerr << "FxScene: Invalid entities for collision disabling." << std::endl;
-        return;
-    }
-    uint32_t pair_id = pack_id_pair(entity1->get_entity_id(), entity2->get_entity_id());
-    // Add to no-collision set (disable collision)
-    m_no_collision_pairs.insert(pair_id);
-}
 
 
 // simulation step
@@ -196,13 +99,11 @@ void FxScene::step(double step_dt) {
     }
 
     // Substeps
-    // std::cout<<substep_dt<<std::endl;
     std::vector<FxContact> contacts;
+    const auto& entities_vec = m_entities.items();
     for (size_t iter = 0; iter < m_substeps; ++iter) {
-        // Integrate (stores prev_pose internally) - skip disabled entities
         for_each_entity(std::execution::par, [&](auto entity) {
             if (!entity->enabled) return;  // Skip disabled entities
-            
             entity->step(gravity, substep_dt);
             // Simple boundary handling
             if ((entity->pose.x() >= size.x() && entity->velocity.x() > 0.0f) ||
@@ -217,19 +118,12 @@ void FxScene::step(double step_dt) {
 
         // compute contacts - skip disabled entities
         contacts.clear();
-        for (size_t i = 0; i < m_entities_vec.size(); ++i) {
-            if (!m_entities_vec[i]->enabled) continue;  // Skip disabled entities
-            for (size_t j = i + 1; j < m_entities_vec.size(); ++j) {
-                if (!m_entities_vec[j]->enabled) continue;  // Skip disabled entities
-                // Skip collision detection for excluded pairs
-                if (is_collision_pair(m_entities_vec[i]->get_entity_id(), 
-                                      m_entities_vec[j]->get_entity_id())) {
-                    FxContact c = FxSolver::collision_check(m_entities_vec[i], m_entities_vec[j]);
-                    if (c.is_valid()){
-                        contacts.emplace_back(c);
-                    };
-                }
-            }
+        auto broad_phase_pairs = m_entities.get_broad_phase_pairs();
+        for (const auto& pair : broad_phase_pairs) {
+            FxContact c = FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
+            if (c.is_valid()){
+                contacts.emplace_back(std::move(c));
+            };
         }
 
         // Solve contact penetration (position-level)
@@ -237,8 +131,9 @@ void FxScene::step(double step_dt) {
             FxSolver::resolve_penetration(c, substep_dt);
         }
 
-        // Solve constraints (position-level)
-        for (const auto& c : m_constraints_vec) {
+        // Solve constraints (XPBD-style)
+        const auto& constraints_vec = m_constraints.items();
+        for (const auto& c : constraints_vec) {
             c->resolve(substep_dt);
         }
 

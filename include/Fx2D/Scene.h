@@ -15,6 +15,7 @@
 #include "Fx2D/Math.h"
 #include "Fx2D/Entity.h"
 #include "Fx2D/Solver.h"
+#include "Fx2D/Registry.h"
 
 // Scene class takes care of entities motion and collisions
 class FxScene {
@@ -25,21 +26,12 @@ class FxScene {
     static constexpr double m_max_time_step = 0.06;
     static constexpr double m_min_time_step = 1e-3;
     size_t m_substeps = 11;
-    //custom callback function invoked in the step method
-    std::function<void(FxScene&, double dt)> m_func_step_callback;
     // dirty flag to track when constraints need cleaning
     bool m_constraints_dirty = false; 
-    // auto-increment counter for entity IDs
-    size_t m_next_entity_id = 1;
-    // Collision exclusion system
-    std::unordered_set<uint32_t> m_no_collision_pairs;
 
   protected:
-    std::vector<std::shared_ptr<FxEntity>> m_entities_vec; // stores pointers to all entities
-    std::unordered_map<std::string, size_t> m_entities_map; // maps entity's name to index in the entities vector
-    
-    std::vector<std::shared_ptr<FxConstraint>> m_constraints_vec; // stores all constraints
-    std::unordered_map<std::string, size_t> m_constraints_map; // maps constraint name to index in vector
+    FxEntityRegistry m_entities;              // stores pointers to all entities with collision management
+    FxNamedRegistry<FxConstraint> m_constraints; // stores all constraints
 
   public:
     // scene size [x, y] units
@@ -51,7 +43,7 @@ class FxScene {
     FxVec2f gravity {0.0f, -9.81f}; 
 
     // constructor, destructor 
-    FxScene(FxVec2ui SceneSize) : size(SceneSize) {};
+    FxScene(FxVec2ui SceneSize) : m_entities(m_enitities_limit), size(SceneSize) {};
     ~FxScene() {};
 
     // calls reset of all entities
@@ -68,74 +60,48 @@ class FxScene {
     void set_fillColor(const FxVec4ui8& color) { fillColor = color; fillTexturePath = ""; }
     void set_fillTexture(const std::string& filePath) { fillTexturePath = filePath;}
     // Returns true if added; false if an entity with the name already exists.
-    bool add_entity(std::shared_ptr<FxEntity> entity);
+    bool add_entity(const std::shared_ptr<FxEntity>& entity);
     // Returns true if deletion succeeded, false if the entity wasn't found.
     bool delete_entity(const std::string& name);
     // Returns the entity pointer if found; otherwise returns nullptr.
     std::shared_ptr<FxEntity> get_entity(const std::string& name) const;
 
-    // Constraint management
     // Returns true if added; false if a constraint with the name already exists
-    bool add_constraint(std::shared_ptr<FxConstraint> constraint);
+    bool add_constraint(const std::shared_ptr<FxConstraint>& constraint);
     // Returns true if deletion succeeded, false if the constraint wasn't found
     bool delete_constraint(const std::string& name);
-    // Returns the constraint pointer if found; otherwise returns nullptr
-    FxConstraint* get_constraint(const std::string& name) const;
 
-    // Collision pair management
-    void enable_collision(const std::string& entity1_name, const std::string& entity2_name);
-    void enable_collision(std::shared_ptr<FxEntity> entity1, std::shared_ptr<FxEntity> entity2);
-    void disable_collision(const std::string& entity1_name, const std::string& entity2_name);
-    void disable_collision(std::shared_ptr<FxEntity> entity1, std::shared_ptr<FxEntity> entity2);
+    // Registry access methods
+    size_t entity_count() const { return m_entities.size(); }
+    size_t constraint_count() const { return m_constraints.size(); }
+    bool entity_exists(const std::string& name) const { return m_entities.get_rawptr(name) != nullptr; }
+    bool constraint_exists(const std::string& name) const { return m_constraints.get_rawptr(name) != nullptr; }
+
+    // Collision pair management (delegated to entity registry)
+    void enable_collision(const std::string& entity1_name, const std::string& entity2_name) {
+        m_entities.enable_collision(entity1_name, entity2_name);
+    }
+    void disable_collision(const std::string& entity1_name, const std::string& entity2_name) {
+        m_entities.disable_collision(entity1_name, entity2_name);
+    }
 
     // for_each_entity applies the given function on each entity in a given execution mode
     template <typename ExecPolicy, typename Func>
     void for_each_entity(ExecPolicy&& policy, Func&& func) {
-        // copy to a new vector of raw pointers
-        std::vector<FxEntity*> raw_entities_vec;
-        raw_entities_vec.reserve(m_entities_vec.size());
-        for (const auto& entity : m_entities_vec) {
-            raw_entities_vec.push_back(entity.get());
-        }
-        // pass to std::for_each to do the required optimization
-        std::for_each(std::forward<ExecPolicy>(policy),
-                      raw_entities_vec.begin(),
-                      raw_entities_vec.end(),
-                      std::forward<Func>(func));
+        m_entities.for_each(std::forward<ExecPolicy>(policy), std::forward<Func>(func));
     }
 
     // transform_entities collects return values vector in a given execution mode
     template <typename ExecPolicy, typename Func>
     void transform_entities(ExecPolicy&& policy, Func&& func,
         std::vector<std::invoke_result_t<Func, std::shared_ptr<FxEntity>>>& results){
-        // set results vector size
-        results.resize(m_entities_vec.size()); 
-        // copy to a new vector of raw pointers
-        std::vector<FxEntity*> raw_entities_vec;
-        raw_entities_vec.reserve(m_entities_vec.size());
-        for (const auto& entity : m_entities_vec) {
-            raw_entities_vec.push_back(entity.get());
-        }
-        // pass to std::tranform to do the required optimization
-        std::transform(std::forward<ExecPolicy>(policy),
-                    raw_entities_vec.begin(),
-                    raw_entities_vec.end(),
-                    results.begin(),
-                    std::forward<Func>(func));
+        m_entities.transform(std::forward<ExecPolicy>(policy), std::forward<Func>(func), results);
     }
+    
   private:
     // Removes constraints with dead entities
     void sweep_dead_constraints();
-    
-    // 12 bits per index (0..4095) - packs two entity IDs into a single uint32_t
-    static uint32_t pack_id_pair(size_t a, size_t b) {
-        if (a > b) std::swap(a, b);
-        return static_cast<uint32_t>((a << 12) | b);
-    }
-    
-    // Inline collision exclusion check
-    inline bool is_collision_pair(size_t i, size_t j) const {
-        return !(m_no_collision_pairs.find(pack_id_pair(i, j)) != m_no_collision_pairs.end());
-    }
-};
 
+     //custom callback function invoked in the step method
+     std::function<void(FxScene&, double dt)> m_func_step_callback;
+};

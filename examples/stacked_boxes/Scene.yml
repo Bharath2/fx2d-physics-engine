@@ -1,7 +1,7 @@
 scene:
     size: [12, 8]  
     gravity: [0, -10]
-    # background: ./assets/bg.png  
+    background: [255, 255, 255, 255]  #./assets/bricks.png
 
 entities:
     ground:
@@ -15,12 +15,13 @@ entities:
         visual:
             geometry: 
                 rectangle: [12, 1.0]      # width, height
-            texture: [10, 10, 10, 255] 
+            texture: [50, 50, 50, 255] 
+            border_thickness: 5.0
         collision:
             geometry: 
                 rectangle: [18, 1.0]      # width, height
     floor:
-        pose: [6, 2.75, 0]
+        pose: [6, 3.0, 0]
         physics:
             elasticity:  0.6
             gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
@@ -30,13 +31,13 @@ entities:
         visual:
             geometry: 
                 rectangle: [6, 0.75]      # width, height
-            texture: [10, 10, 10, 255] 
+            texture: ./assets/wood.png  # color(RGBA) or image path
         collision:
             geometry: 
                 rectangle: [6, 0.75]      # width, height
     ball:
         pose: [10, 6.0, 0]                     # x, y, theta ; orientation in degrees
-        init_velocity:  [-6, 0, 0]           # won't be used for child links
+        init_velocity:  [-5, 0, 0]           # won't be used for child links
         physics:
             mass: 5
             # inertia: 0.125                     # if not given will be calculated from visual geometry  
@@ -50,7 +51,7 @@ entities:
             pose: [0, 0, 0]             # relative to body frame
             geometry: 
                 circle: 0.5             # circle, rectangle, polygon
-            texture: ./assets/ball2.png  # color(RGBA) or image path
+            texture: ./assets/ball.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255] 
             border_thickness: 5.0
         collision:
@@ -58,7 +59,7 @@ entities:
             geometry: 
               circle: 0.5           # circle, rectangle, polygon
     box1:
-        pose: [5, 3.5, 0]                     # x, y, theta
+        pose: [5.25, 3.75, 0]                     # x, y, theta
         physics:
             mass: 1
             elasticity: 1.0
@@ -74,7 +75,7 @@ entities:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
     box2:
-        pose: [6, 3.5, 0]                     # x, y, theta
+        pose: [6.25, 3.75, 0]                     # x, y, theta
         physics:
             mass: 1
             elasticity: 1.0
@@ -90,7 +91,7 @@ entities:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
     box3:
-        pose: [7, 3.5, 0]                     # x, y, theta
+        pose: [7.25, 3.75, 0]                     # x, y, theta
         physics:
             mass: 1
             elasticity: 1.0
@@ -106,7 +107,7 @@ entities:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
     box4:
-        pose: [5.5, 4.25, 0]                     # x, y, theta
+        pose: [5.75, 4.5, 0]                     # x, y, theta
         physics:
             mass: 1
             elasticity: 1.0
@@ -122,7 +123,7 @@ entities:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
     box5:
-        pose: [6.5, 4.25, 0]                     # x, y, theta
+        pose: [6.75, 4.5, 0]                     # x, y, theta
         physics:
             mass: 1
             elasticity: 1.0
@@ -138,7 +139,7 @@ entities:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
     box6:
-        pose: [6, 5.0, 0]                     # x, y, theta
+        pose: [6.25, 5.25, 0]                     # x, y, theta
         physics:
             mass: 1
             elasticity: 1.0
@@ -153,10 +154,3 @@ entities:
         collision:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-joints:
-    joint1:
-        type: revolute    # linear_x, linear_z
-        parent: body1
-        child: body2
-        limits: []
-        pose: [] # w.r.t to the parent 

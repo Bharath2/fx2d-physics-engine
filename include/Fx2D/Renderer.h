@@ -24,6 +24,7 @@ class FxRylbRenderer {
 	// Fixed timestep variables
 	double m_fixed_dt = 1.0 / 60.0;
 	double m_dt_accumulator = 0.0;
+	double m_simulation_time = 0.0; //total time elaspsed from start in seconds
 	// Real-time factor variables
 	double m_real_time_factor = 1.0;
 	double m_max_time_step = 0.06;

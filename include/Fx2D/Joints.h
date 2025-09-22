@@ -12,22 +12,27 @@ protected:
     std::shared_ptr<FxEntity> entity1;
     std::shared_ptr<FxEntity> entity2;
     
-public:
+private:
     std::string name;       // Joint name for identification
+    
+public:
+    bool enabled = true;    // Whether joint is enabled
     bool entities_collide = false;  // Whether connected entities should collide
     
-    FxJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, const std::string& joint_name);
+    FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2);
     virtual ~FxJoint() = default;
-    
-    // Entity access
-    std::shared_ptr<FxEntity> get_entity1() const { return entity1; }
-    std::shared_ptr<FxEntity> get_entity2() const { return entity2; }
+
+    // Accessor method for name
+    const std::string& get_name() const { return name; }
 };
 
 // Revolute joint that directly controls entity states (not constraint-based)
 class FxRevoluteJoint : public FxJoint {
+private:
+    FxVec2f m_anchor_point; // Anchor point in entity1's local coordinates
+    
 public:
-    FxRevoluteJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2);
+    FxRevoluteJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor_point);
     
     // Control methods - directly apply changes instantly
     void set_theta(float angle);
@@ -46,7 +51,7 @@ private:
     float m_initial_distance; // Initial distance projection along axis
     
 public:
-    FxPrismaticJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, const FxVec2f& local_axis);
+    FxPrismaticJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, const FxVec2f& local_axis);
     
     // Control methods - directly apply changes instantly
     void set_position(float position);      // Set relative position along axis

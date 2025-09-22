@@ -42,7 +42,7 @@ void FxConstraint::resolve(float dt) {
 }
 
 // FxAngleLockConstraint constructors
-FxAngleLockConstraint::FxAngleLockConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, float tgt) {
+FxAngleLockConstraint::FxAngleLockConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, float tgt) {
     entity1 = e1; entity2 = e2; target = tgt;
     name = e1->get_name() + "_" + e2->get_name() + "_AngleLock";
 }
@@ -55,11 +55,11 @@ void FxAngleLockConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     C = FxAngleWrap(entity2->pose.theta() - entity1->pose.theta() - target);
     // Only angular gradients are non-zero
     g1 = FxVec2f(0.0f, 0.0f); g2 = FxVec2f(0.0f, 0.0f);
-    gth1 = 1.0f; gth2 = -1.0f; active = true;
+    gth1 = -1.0f; gth2 = 1.0f; active = true;
 }
 
 // FxAngularLimitConstraint constructors
-FxAngularLimitConstraint::FxAngularLimitConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2) {
+FxAngularLimitConstraint::FxAngularLimitConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2) {
     entity1 = e1; entity2 = e2;
     name = e1->get_name() + "_" + e2->get_name() + "_AngleLmt";
 }
@@ -86,7 +86,7 @@ void FxAngularLimitConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
 }
 
 // FxAnchorConstraint constructors
-FxAnchorConstraint::FxAnchorConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
+FxAnchorConstraint::FxAnchorConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
                                         const FxVec2f& anchor, bool anchor_is_local) {
     entity1 = e1; entity2 = e2;
     if(!anchor_is_local){
@@ -126,18 +126,28 @@ void FxAnchorConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     active = true;
 }
 
-// FxLinearLimitConstraint constructors
-FxSeparationConstraint::FxSeparationConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
+// FxSeparationConstraint constructors
+FxSeparationConstraint::FxSeparationConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
                                                   const FxVec2f& axis, bool axis_is_local) {
     entity1 = e1; entity2 = e2;
     m_axis = axis.normalized();
     m_axis_is_local = axis_is_local;
+    // Store the initial distance projection
+    FxVec2f axw = m_axis;
+    if (m_axis_is_local) {
+        axw = m_axis.rotate_rad(entity1->pose.theta());
+    }
+    const FxVec2f a1 = entity1->pose.xy();
+    const FxVec2f a2 = entity2->pose.xy();
+    const FxVec2f d = a2 - a1;
+    m_initial_projection = axw.dot(d);
     name = e1->get_name() + "_" + e2->get_name() + "_LinearLmt";
 }
 
-// FxLinearLimitConstraint implementation
+// FxSeparationConstraint implementation
 void FxSeparationConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                                         float& gth1, float& gth2, bool& active) const {
+            // std::cout << "FxSeparationConstraint initialized: " << name << std::endl;
     if (!enabled) { return; }
     // Transform axis to world coordinates based on is_local flag
     FxVec2f axw = m_axis;
@@ -148,9 +158,9 @@ void FxSeparationConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     const FxVec2f a1 = entity1->pose.xy();
     const FxVec2f a2 = entity2->pose.xy();
     const auto d = a2 - a1;
-
     // Calculate projection of separation vector onto world axis
-    const float s = axw.dot(d);
+    const float current_projection = axw.dot(d);
+    const float s = current_projection - m_initial_projection;
     // Check if projection violates lower or upper bounds
     const bool lowHit = s < (lower_limit - slop);
     const bool upHit  = s > (upper_limit + slop);
@@ -160,17 +170,17 @@ void FxSeparationConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     const float bound = lowHit ? (lower_limit - slop) : (upper_limit + slop);
     C = s - bound;
     // Linear gradients
-    g1 = axw; g2 = -axw;
+    g1 = -axw; g2 = axw;
     // Calculate angular gradient contributions
     if (m_axis_is_local){
-        gth1 = (axw.perp()).dot(d);
+        gth1 = -(axw.perp()).dot(d);
     }
     active = true; gth2 = 0.0f;
 }
 
 
 // FxMotionAlongAxisConstraint constructors
-FxMotionAlongAxisConstraint::FxMotionAlongAxisConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
+FxMotionAlongAxisConstraint::FxMotionAlongAxisConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
                                                          const FxVec2f& axis, bool axis_is_local) {
     entity1 = e1; entity2 = e2;
     m_axis = axis.normalized();
@@ -203,10 +213,10 @@ void FxMotionAlongAxisConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     // Constraint violation - current perpendicular distance should equal initial distance
     C = daxw.dot(d) - m_initial_projection;
     // Linear gradients
-    g1 = -daxw; g2 = daxw;
+    g1 = daxw; g2 = -daxw;
     // Angular gradient contribution
     if (m_axis_is_local) {
-        gth1 = axw.dot(d);
+        gth1 = -axw.dot(d);
     }
     active = true; gth2 = 0.0f;
 }
@@ -327,7 +337,7 @@ namespace FxSolver {
             float jt = -vt / Kt;
 
             float max_static = mu_s * std::max(0.f, jn_sum);
-            if (std::fabs(jt) > max_static && std::fabs(vt) > 0.01f) {
+            if (std::fabs(jt) > max_static) {
                 jt = (jt >= 0.f ? 1.f : -1.f) * (mu_k * std::max(0.f, jn_sum));
             }
 

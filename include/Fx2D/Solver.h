@@ -55,6 +55,8 @@ class FxConstraint {
                           float& gth1, float& gth2, bool& active) const = 0;
     // One-iteration XPBD/PBD correction (no lambda term in numerator)
     void resolve(float dt);
+    // Accessor method for name (required by FxNamedRegistry)
+    const std::string& get_name() const { return name; }
     virtual ~FxConstraint() = default;
 };
 
@@ -67,7 +69,7 @@ public:
     float upper_limit = FxPif;    // Upper angle limit (degrees)
     float slop  = 0.01f;    // Tolerance zone around limits
     bool enabled = true;  // Whether this constraint is active
-    FxAngularLimitConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2);
+    FxAngularLimitConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
 };
@@ -77,7 +79,7 @@ class FxAngleLockConstraint : public FxConstraint {
 public:
     float target = 0.0f;   // Target relative angle
     bool enabled = true;  // Whether this constraint is active
-    FxAngleLockConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, float tgt = 0.0f);
+    FxAngleLockConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, float tgt = 0.0f);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
 };
@@ -89,7 +91,7 @@ private:
     FxVec2f m_anchor2;     // Local anchor point on entity2
 public:
     bool enabled = true; // Whether this constraint is active
-    FxAnchorConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
+    FxAnchorConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
                             const FxVec2f& anchor, bool anchor_is_local = true);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
@@ -100,12 +102,13 @@ class FxSeparationConstraint : public FxConstraint {
 private:
     FxVec2f m_axis;         // Axis direction (normalized)
     bool m_axis_is_local;   // Whether axis is local to entity1 or in world coordinates
+    float m_initial_projection;
 public:
     float lower_limit = 0;        // Lower limit for projection
     float upper_limit = 10;       // Upper limit for projection
     float slop = 0.0001f;   // Tolerance zone around limits
     bool enabled = true;    // Whether this constraint is active
-    FxSeparationConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
+    FxSeparationConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
                            const FxVec2f& axis, bool axis_is_local = true);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;
@@ -119,7 +122,7 @@ private:
     float m_initial_projection; // Initial perpendicular distance projection
 public:
     bool enabled = true;    // Whether this constraint is active
-    FxMotionAlongAxisConstraint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2,
+    FxMotionAlongAxisConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
                                const FxVec2f& axis, bool axis_is_local = true);
     void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                   float& gth1, float& gth2, bool& active) const override;

@@ -4,21 +4,21 @@
 #include <stdexcept>
 
 // FxJoint base class implementation
-FxJoint::FxJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, const std::string& joint_name) {
+FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2) {
     if (!e1 || !e2) {
         throw std::invalid_argument("Joint entities cannot be null");
     }
     if (e1.get() == e2.get()) {
         throw std::invalid_argument("Joint cannot connect an entity to itself");
     }
+    this->name = name;
     entity1 = e1;
     entity2 = e2;
-    name = joint_name;
 }
 
 // FxRevoluteJoint implementation
-FxRevoluteJoint::FxRevoluteJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, const FxVec2f& origin)
-    : FxJoint(e1, e2, e1->get_name() + "_" + e2->get_name() + "_RevoluteJoint"), joint_origin(origin) {
+FxRevoluteJoint::FxRevoluteJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor_point)
+    : FxJoint(name, e1, e2), m_anchor_point(anchor_point) {
 }
 
 void FxRevoluteJoint::set_theta(float angle) {
@@ -35,12 +35,12 @@ void FxRevoluteJoint::set_theta(float angle) {
         float angle_correction1 = -angle_error * (I1 / total_inv_inertia);
         float angle_correction2 = angle_error * (I2 / total_inv_inertia);
         
-        entity1->pose.theta() += angle_correction1;
-        entity2->pose.theta() += angle_correction2;
+        entity1->pose.theta() = FxAngleWrap(entity1->pose.theta() + angle_correction1);
+        entity2->pose.theta() = FxAngleWrap(entity2->pose.theta() + angle_correction2);
         
         // Also update previous pose to maintain consistency
-        entity1->prev_pose.theta() += angle_correction1;
-        entity2->prev_pose.theta() += angle_correction2;
+        entity1->prev_pose.theta() = FxAngleWrap(entity1->prev_pose.theta() + angle_correction1);
+        entity2->prev_pose.theta() = FxAngleWrap(entity2->prev_pose.theta() + angle_correction2);
     }
 }
 
@@ -80,8 +80,8 @@ float FxRevoluteJoint::get_omega() const {
 
 
 // FxPrismaticJoint implementation
-FxPrismaticJoint::FxPrismaticJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr<FxEntity> e2, const FxVec2f& local_axis)
-    : FxJoint(e1, e2, e1->get_name() + "_" + e2->get_name() + "_PrismaticJoint") {
+FxPrismaticJoint::FxPrismaticJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, const FxVec2f& local_axis)
+    : FxJoint(name, e1, e2) {
     m_axis = local_axis.normalized();
     
     // Store initial distance projection along the axis
@@ -91,7 +91,7 @@ FxPrismaticJoint::FxPrismaticJoint(std::shared_ptr<FxEntity> e1, std::shared_ptr
 }
 
 void FxPrismaticJoint::set_position(float position) {
-    if (!enabled || !is_valid()) return;
+    if (!enabled) return;
     
     // Transform local axis to world coordinates
     FxVec2f world_axis = m_axis.rotate_rad(entity1->pose.theta());
@@ -121,7 +121,7 @@ void FxPrismaticJoint::set_position(float position) {
 }
 
 void FxPrismaticJoint::set_velocity(float velocity) {
-    if (!enabled || !is_valid()) return;
+    if (!enabled) return;
     
     // Transform local axis to world coordinates
     FxVec2f world_axis = m_axis.rotate_rad(entity1->pose.theta());
@@ -147,7 +147,7 @@ void FxPrismaticJoint::set_velocity(float velocity) {
 }
 
 void FxPrismaticJoint::set_force(float force) {
-    if (!enabled || !is_valid()) return;
+    if (!enabled) return;
     
     // Transform local axis to world coordinates
     FxVec2f world_axis = m_axis.rotate_rad(entity1->pose.theta());
@@ -159,8 +159,6 @@ void FxPrismaticJoint::set_force(float force) {
 }
 
 float FxPrismaticJoint::get_position() const {
-    if (!is_valid()) return 0.0f;
-    
     // Transform local axis to world coordinates
     FxVec2f world_axis = m_axis.rotate_rad(entity1->pose.theta());
     
@@ -170,8 +168,6 @@ float FxPrismaticJoint::get_position() const {
 }
 
 float FxPrismaticJoint::get_velocity() const {
-    if (!is_valid()) return 0.0f;
-    
     // Transform local axis to world coordinates
     FxVec2f world_axis = m_axis.rotate_rad(entity1->pose.theta());
     

@@ -1,0 +1,139 @@
+scene:
+    size: [12, 6]  
+    gravity: [0, -10]
+    background: [225, 225, 225, 255] #./assets/bg.png  
+
+entities:
+    ground:
+        pose: [6, 0.75, 0]
+        physics:
+            elasticity:  0.6
+            gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
+            external_forces_enabled: false
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
+        visual:
+            geometry: 
+                rectangle: [12, 1.5]      # width, height
+            texture: [98, 66, 38, 200]
+            border_thickness: 5.0
+        collision:
+            geometry: 
+                rectangle: [18, 1.5]      # width, height
+    
+    box:
+        pose: [2, 2.2, 0]
+        physics:
+            mass: 5.0
+            elasticity:  0.6
+        visual:
+            geometry: 
+                rectangle: [1.0, 1.25]      # width, height
+            texture: ./assets/bricks.png
+            border_thickness: 0.25
+        collision:
+            geometry: 
+                rectangle: [1.0, 1.25]      # width, height
+
+    truck_head:
+        pose: [9, 3.25, 0]           #9.1, 2.85          # x, y, theta
+        physics:
+            mass: 2
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
+        visual:
+            geometry: 
+                rectangle: [1.25, 1.5]      # width, height
+            texture: ./assets/head.png  # color(RGBA) or image path
+            border_color: [0, 0, 0, 255]
+            border_thickness: 0.0
+        collision:
+            geometry: 
+                rectangle: [1.25, 1.5]      # width, height
+   
+    wheel2:
+        pose: [9.1, 2.6, 0]                     # x, y, theta
+        physics:
+            mass: 0.25
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
+        visual:
+            geometry: 
+                circle: 0.4    # width, height
+            texture: ./assets/wheel.png  # color(RGBA) or image path
+            border_color: [0, 0, 0, 255]
+            border_thickness: 2.5
+        collision:
+            geometry: 
+                circle: 0.4      # width, height
+
+
+    plane:
+        pose: [10.6, 1.8, 0]                     # x, y, theta
+        physics:
+            gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
+            external_forces_enabled: false
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
+        visual:
+            geometry: 
+                polygon: 
+                  - [0, 0]
+                  - [8, 0]
+                  - [8, 0.85]
+            texture:  [98, 66, 38, 200]  # color(RGBA) or image path
+            border_color: [0, 0, 0, 255]
+            border_thickness: 1.5
+        collision:
+            geometry: 
+                polygon: 
+                  - [0, 0]
+                  - [8, 0]
+                  - [8, 0.85]
+
+    truck_back:
+        pose: [10.72, 3.075, 0]    # 11.2, 2.6  # x, y, theta
+        physics:
+            mass: 2
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
+        visual:
+            geometry: 
+                rectangle: [2.25, 1.0]      # width, height
+            texture: ./assets/back2.png  # color(RGBA) or image path
+            border_color: [0, 0, 0, 255]
+            border_thickness: 2.0
+        collision:
+            geometry: 
+                rectangle: [2.25, 1.0]      # width, height
+
+    wheel1:
+        pose: [11.2, 2.6, 0]                     # x, y, theta
+        physics:
+            mass: 0.25
+            static_friction: 0.3           # used in calculation of contact forces
+            dynamic_friction: 0.2          # used in calculation of contact forces
+        visual:
+            geometry: 
+                circle: 0.4      # width, height
+            texture: ./assets/wheel.png  # color(RGBA) or image path
+            border_color: [0, 0, 0, 255]
+            border_thickness: 2.5
+        collision:
+            geometry: 
+                circle: 0.4      # width, height
+
+   
+# joints:
+#     wheel_joint1:
+#         type: revolute  
+#         parent: entity1
+#         child: entity2
+#         limits: []
+#         pose: [] # w.r.t to the parent 
+     
+
+
+            
+
+             
