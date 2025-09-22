@@ -46,8 +46,6 @@ chmod +x fxmake       # Make executable
 ## Quick Start
 
 ### Basic Usage
-
-Load a scene and sender simulation.
 ```cpp
 #include "Fx2D/Core.h"
 
@@ -66,12 +64,18 @@ int main() {
 
 For headless simulation, testing, or data collection.
 ```cpp
+int main() {
+    // Load scene from YAML
+    auto scene = FxYAML::buildScene("./Scene.yml");
+
     const double dt = 0.001f;             // Fixed time step in seconds
     auto ball = scene.get_entity("ball"); // Get the poiner to the entity by name "ball"
     for (size_t i = 0; i < 10; ++i) {
         scene.step(dt); // Advance physics without rendering
         std::cout<< ball->pose <<std::endl;  
     }
+    return 0;
+}
 ```
 
 ### Running Examples
