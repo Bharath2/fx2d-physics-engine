@@ -83,6 +83,7 @@ BSD-3-Clause License
 - Add controllable joints
 - Improve velocity resolution in collisions  
 - Add dynamic AABB tree
+- and More.
 
 ## Contributing
 
