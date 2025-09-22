@@ -80,7 +80,7 @@ int main() {
 
 ### Running Examples
 
-To run an example, copy the `main.cpp` from [examples/](./examples/) to `src/`, build the project, and ensure `Scene.yml` and assets are accessible to the executable.
+To run an example, copy the `main.cpp` from `[examples/](./examples/)` to `src/`, build the project, and ensure `Scene.yml` and assets are accessible to the executable.
 
 ```bash
 ./Fx2D      # Linux/macOS
