@@ -137,7 +137,7 @@ void FxScene::step(double step_dt) {
             c->resolve(substep_dt);
         }
 
-        // Update velocities from positions with velocity clamping - skip disabled entities
+        // Update velocities from positions - skip disabled entities
         for_each_entity(std::execution::par, [&](auto entity) {
             if (!entity->enabled) return;  // Skip disabled entities
             FxVec3f delta = (entity->pose - entity->prev_pose);
