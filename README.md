@@ -45,6 +45,8 @@ chmod +x fxmake       # Make executable
 
 ## Quick Start
 
+### Basic Usage
+
 ```cpp
 #include "Fx2D/Core.h"
 
