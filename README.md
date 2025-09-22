@@ -47,6 +47,7 @@ chmod +x fxmake       # Make executable
 
 ### Basic Usage
 
+Load a scene and sender simulation.
 ```cpp
 #include "Fx2D/Core.h"
 
@@ -63,13 +64,13 @@ int main() {
 }
 ```
 
+For headless simulation, testing, or data collection.
 ```cpp
-    // For headless simulation, testing, or data collection.
-    const double dt = 0.001f; // Fixed time step in seconds
-    auto ball = scene.get_entity("ball");
+    const double dt = 0.001f;             // Fixed time step in seconds
+    auto ball = scene.get_entity("ball"); // Get the poiner to the entity by name "ball"
     for (size_t i = 0; i < 10; ++i) {
         scene.step(dt); // Advance physics without rendering
-        std::cout<<ball->pose<<std::endl;
+        std::cout<< ball->pose <<std::endl;  
     }
 ```
 
