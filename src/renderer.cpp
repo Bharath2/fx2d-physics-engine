@@ -129,8 +129,7 @@ Texture2D FxRylbRenderer::get_or_load_texture(const std::string& path) {
 }
 
 void FxRylbRenderer::draw_scene() {
-    // Smooth edges (enable once, before InitWindow in your setup ideally):
-    // Helper for nice ring tessellation (≈6 px per segment)
+    // Helper for nice ring tessellation
     auto ring_segments = [](float radius_px) {
         int seg = (int)ceilf((2.0f * PI * radius_px) / 6.0f);
         if (seg < 16) seg = 16;
@@ -154,7 +153,6 @@ void FxRylbRenderer::draw_scene() {
 
         if (visual->is_circle()) {
             const float r = m_scale * visual->radius();
-            // --- textured fill (optional) ---
             if (!visual->fillTexture().empty()) {
                 Texture2D tex = get_or_load_texture(visual->fillTexture());
                 if (tex.id != 0) {
@@ -167,8 +165,6 @@ void FxRylbRenderer::draw_scene() {
             } else {
 				DrawCircleV(Vector2{x, y}, r, to_rl_color(visual->fillColor()));
             }
-
-            // --- outline (thickness-aware) ---
             const float outline_px = std::max(0.0f, visual->outlineThickness());
             if (outline_px > 0.0f) {
                 const float inner = std::max(0.0f, r - 0.5f * outline_px);
@@ -188,13 +184,12 @@ void FxRylbRenderer::draw_scene() {
 			const float c = cosf(pose.theta()), s = sinf(pose.theta());
 			const FxVec2f C = pose.get_xy(); // world center
 			for (size_t i = 0; i < n; ++i) {
-				// world = C + R * local
 				float wx = C.x() + c * local[i].x() - s * local[i].y();
 				float wy = C.y() + s * local[i].x() + c * local[i].y();
 				pts.push_back(Vector2{ sx(wx), sy(wy) });
 			}
 		
-			// / --- textured fill (current bounding-box approach in local space) ---
+			// --- textured fill --
 			rlDisableBackfaceCulling();
             if (!visual->fillTexture().empty()) {
 				Texture2D tex = get_or_load_texture(visual->fillTexture());
@@ -222,7 +217,7 @@ void FxRylbRenderer::draw_scene() {
 			} else {
 				DrawTriangleFan(pts.data(), (int)n, to_rl_color(visual->fillColor()));
 			}
-			// --- outline (thickness-aware with rounded joins) ---
+			// --- outline (thickness with rounded joins) ---
 			const float outline_px = std::max(0.0f, visual->outlineThickness());
 			if (outline_px > 0.0f) {
 				for (size_t i = 0; i < n; ++i) {
