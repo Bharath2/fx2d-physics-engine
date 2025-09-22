@@ -53,7 +53,7 @@ chmod +x fxmake       # Make executable
 int main() {
     // Load scene from YAML
     auto scene = FxYAML::buildScene("./Scene.yml");
-    
+
     // Initialize renderer with 60 FPS target
     FxRylbRenderer renderer(scene, 60);
     
@@ -61,6 +61,17 @@ int main() {
     renderer.run();
     return 0;
 }
+```
+
+```cpp
+    // For headless simulation, testing, or data collection.
+    const double dt = 0.001f; // Fixed time step in seconds
+    auto ball = scene.get_entity("ball");
+    for (size_t i = 0; i < 10; ++i) {
+        scene.step(dt); // Advance physics without rendering
+        std::cout<<ball->pose<<std::endl;
+    }
+    */
 ```
 
 ### Running Examples
