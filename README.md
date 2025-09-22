@@ -71,7 +71,6 @@ int main() {
         scene.step(dt); // Advance physics without rendering
         std::cout<<ball->pose<<std::endl;
     }
-    */
 ```
 
 ### Running Examples
