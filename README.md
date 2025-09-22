@@ -1,10 +1,9 @@
 # Fx2D
 
-A 2D physics simulator written in C++.
+A 2D physics simulator written in C++ (20).
 
 #### [Examples](./examples/)
 ![image](./examples/stacked_boxes/play.gif)
-![truck](./examples/truck/play.gif)
 
 ## Key Features
 - **SAT collision detection:** Efficient circle and polygon collision using the Separating Axis Theorem (SAT)
@@ -31,13 +30,13 @@ A 2D physics simulator written in C++.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
+cmake --build build -j
 ```
 
 ### Method 2: Using fxmake
 
 ```bash
-chmod +x fxmake       # Make executable (Unix-like systems)
+chmod +x fxmake       # Make executable
 ./fxmake              # Build in Release mode
 ./fxmake debug        # Build in Debug mode
 ./fxmake rebuild      # Clean and rebuild
@@ -71,6 +70,8 @@ To run an example, copy the `main.cpp` from `examples/` to `src/`, build the pro
 ./Fx2D.exe  # Windows
 ```
 
+![truck](./examples/truck/play.gif)
+
 ## License
 
 BSD-3-Clause License
@@ -85,3 +86,5 @@ BSD-3-Clause License
 
 Contributions are welcome! Please follow the existing code style and conventions.
 
+- **Bugs & feature requests:** Open a new issue describing the problem or proposal clearly (steps to reproduce, or the rationale/use case).
+- **Working on features/fixes:** Create a new branch from `main`, commit your changes, and open a pull request referencing the issue.
