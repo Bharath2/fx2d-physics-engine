@@ -22,7 +22,7 @@ A 2D physics simulator written in C++ (20).
 - **raylib** 4.5+ - Scene rendering and graphics
 - **yaml-cpp** - YAML parsing for scene configuration
 - **ImGui** 1.92 - User interface framework
-- **rlImGui** - Raylib-ImGui integration (included) 
+- **rlImGui** - Raylib-ImGui integration
 
 ## Building
 
