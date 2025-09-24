@@ -9,10 +9,10 @@ A 2D physics simulator written in C++ (20).
 - **SAT collision detection:** Efficient circle and polygon collision using the Separating Axis Theorem (SAT)
 - **XPBD constraint solver:** Position-based dynamics with compliance control
 - **Modern memory management:** Safe resource handling with `std::shared_ptr` / `std::unique_ptr`
-- **YAML scene configuration:** Declarative setup of entities, textures, and physics parameters in `.yml` files
+- **YAML based scene description:** Declarative setup of entities, textures, and physics parameters in `.yml` files
 - **Dynamic scene modification:** Runtime manipulation of entities and constraints
 - **FxArray & Math Utilities**: NumPy-style `FxArray` and comprehensive linear-algebra utilities in Fx2D/Math.h
-- **raylib-based rendering:** Lightweight, cross-platform renderer with ImGui integration
+- **raylib-based rendering:** Lightweight, cross-platform renderer with raylib and ImGui integration
 
 
 ## Dependencies
