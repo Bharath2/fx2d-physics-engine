@@ -4,6 +4,7 @@
 
 // calls reset of all entities
 void FxScene::reset() {
+    m_time_elapsed = 0.0; // Reset elapsed time
     for_each_entity(std::execution::par, [](auto entity) {
         entity->reset(); // Apply reset() to each entity
     });
@@ -148,6 +149,9 @@ void FxScene::step(double step_dt) {
             FxSolver::resolve_velocities(c);
         }
     }
+
+    // Update total elapsed time
+    m_time_elapsed += clamped_dt;
 
     // If a custom step callback function is set, call it
     if (m_func_step_callback) {

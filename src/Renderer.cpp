@@ -86,6 +86,7 @@ void FxRylbRenderer::run(bool play) {
 		EndDrawing();
 	}
 }
+
 void FxRylbRenderer::set_real_time_factor(const double& rt_factor) {
 	if (rt_factor < 0.01) {
 		std::cerr << "FxRylbRenderer: real time factor must be greater than 0.01" << std::endl;
@@ -177,7 +178,7 @@ void FxRylbRenderer::draw_scene() {
 			const size_t n = local.size();
 			if (n < 3) return; // A polygon needs at least 3 vertices.
 		
-			// --- build screen-space vertices by applying pose (T·R) to LOCAL verts ---
+			//  build screen-space vertices by applying pose (T·R) to LOCAL verts ---
 			std::vector<Vector2> pts;
 			pts.reserve(n);
 			const float c = cosf(pose.theta()), s = sinf(pose.theta());
@@ -188,7 +189,7 @@ void FxRylbRenderer::draw_scene() {
 				pts.push_back(Vector2{ sx(wx), sy(wy) });
 			}
 		
-			// --- textured fill --
+			// textured fill
 			rlDisableBackfaceCulling();
             if (!visual->fillTexture().empty()) {
 				Texture2D tex = get_or_load_texture(visual->fillTexture());
@@ -216,7 +217,7 @@ void FxRylbRenderer::draw_scene() {
 			} else {
 				DrawTriangleFan(pts.data(), (int)n, to_rl_color(visual->fillColor()));
 			}
-			// --- outline (thickness with rounded joins) ---
+			// outline (thickness with rounded joins)
 			const float outline_px = std::max(0.0f, visual->outlineThickness());
 			if (outline_px > 0.0f) {
 				for (size_t i = 0; i < n; ++i) {
@@ -258,19 +259,19 @@ void FxRylbRenderer::draw_ui(double curr_rt_factor) {
 		gravity_y = std::clamp(gravity_y, -20.0f, 20.0f);
 		m_scene.gravity.set_y(gravity_y);
 	}
-	ImGui::Dummy(ImVec2(0, 5));
+	ImGui::Dummy(ImVec2(0, 1));
 	ImGui::Separator();
 
-	ImGui::Text("Real Time Factor:");
+	ImGui::Text("Real Time Factor");
 	static float rt_factor = 1.0f;
 	std::snprintf(buf, sizeof(buf), "%.3f", static_cast<float>(curr_rt_factor));
+	ImGui::SameLine();
+	ImGui::Text(": %.3f", static_cast<float>(curr_rt_factor));
 	ImGui::SetNextItemWidth(100.0f);
 	if (ImGui::InputFloat("##RTFactor", &rt_factor, 0.0f, 0.0f, "%.3f")) {
 		set_real_time_factor(static_cast<double>(rt_factor));
 	}
-	ImGui::SameLine();
-	ImGui::Text(" : %.3f", static_cast<float>(curr_rt_factor));
-	ImGui::Dummy(ImVec2(0, 5));
+	ImGui::Dummy(ImVec2(0, 1));
 	ImGui::Separator();
 
 	// Pause / Play toggle button
@@ -284,6 +285,11 @@ void FxRylbRenderer::draw_ui(double curr_rt_factor) {
 	}
 	ImGui::Dummy(ImVec2(0, 1));
 	ImGui::Separator();
+
+	ImGui::Text("Simulation Time: %.2f s", static_cast<float>(m_scene.time_elapsed()));
+	ImGui::Dummy(ImVec2(0, 1));
+	ImGui::Separator();
+
 
 	float frame_rate = ImGui::GetIO().Framerate;
 	ImGui::Text("Performance:\n %.3f ms/frame\n (%.1f FPS)\n",

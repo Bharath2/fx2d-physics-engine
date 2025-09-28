@@ -619,7 +619,7 @@ concept ConvertibleOrNumeric = std::convertible_to<U, T> || Numeric<U>;
 
 // Custom deleter for aligned arrays
 template<class T>
-struct AlignedDelete {
+struct FxArrayAlignedDelete {
     std::size_t align;
     void operator()(T* p) const noexcept {
         ::operator delete[](p, std::align_val_t(align));
@@ -628,12 +628,12 @@ struct AlignedDelete {
 
 // Helper function to create aligned arrays
 template<typename T>
-static std::unique_ptr<T[], AlignedDelete<T>>
-make_aligned_array(std::size_t n, std::size_t align = 32) {
-    if (n == 0) return {nullptr, AlignedDelete<T>{align}};
+static std::unique_ptr<T[], FxArrayAlignedDelete<T>>
+FxArray_make_aligned(std::size_t n, std::size_t align = 32) {
+    if (n == 0) return {nullptr, FxArrayAlignedDelete<T>{align}};
     // allocation (ctors run)
     T* p = static_cast<T*>(::operator new[](n * sizeof(T), std::align_val_t(align)));
-    return std::unique_ptr<T[], AlignedDelete<T>>(p, AlignedDelete<T>{align});
+    return std::unique_ptr<T[], FxArrayAlignedDelete<T>>(p, FxArrayAlignedDelete<T>{align});
 }
 
 // define the FxArray class template
@@ -642,7 +642,7 @@ class FxArray {
   private:
     static constexpr std::size_t kAlign = 32;                 // compile-time alignment
     std::size_t m_size = 0;
-    std::unique_ptr<T[], AlignedDelete<T>> m_arr;
+    std::unique_ptr<T[], FxArrayAlignedDelete<T>> m_arr;
 
   protected:
     // throws if index is out of bounds
@@ -688,11 +688,11 @@ class FxArray {
 
   public:
     // 1) default (empty)
-    FxArray() : m_arr(nullptr, AlignedDelete<T>{kAlign}) {}
+    FxArray() : m_arr(nullptr, FxArrayAlignedDelete<T>{kAlign}) {}
     // 2) n sized ctor (all zeros)
     explicit FxArray(std::size_t n)
       : m_size(n)
-      , m_arr(make_aligned_array<T>(n, kAlign))
+      , m_arr(FxArray_make_aligned<T>(n, kAlign))
     {}
 
     // 3) Dedicated init_list ctor — for braced lists
