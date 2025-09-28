@@ -74,7 +74,7 @@ void FxScene::sweep_dead_constraints() {
         bool dead = !c->entity1 || !c->entity2 ||
                     !m_entities.get_rawptr(c->entity1->get_name()) ||
                     !m_entities.get_rawptr(c->entity2->get_name());
-        if (dead) dead_names.push_back(c->name);
+        if (dead) dead_names.push_back(c->get_name());
     }
     for (const auto& name : dead_names) {
         delete_constraint(name);
@@ -106,13 +106,13 @@ void FxScene::step(double step_dt) {
             if (!entity->enabled) return;  // Skip disabled entities
             entity->step(gravity, substep_dt);
             // Simple boundary handling
-            if ((entity->pose.x() >= size.x() && entity->velocity.x() > 0.0f) ||
+            if ((entity->pose.x() >= static_cast<float>(size.x()) && entity->velocity.x() > 0.0f) ||
                 (entity->pose.x() <= 0.0f && entity->velocity.x() < 0.0f)) {
-                entity->pose.x() = entity->prev_pose.x() - entity->velocity.x() * substep_dt;
+                entity->pose.x() = entity->prev_pose.x() - static_cast<float>(entity->velocity.x() * substep_dt);
             }
-            if ((entity->pose.y() >= size.y() && entity->velocity.y() > 0.0f) ||
+            if ((entity->pose.y() >= static_cast<float>(size.y()) && entity->velocity.y() > 0.0f) ||
                 (entity->pose.y() <= 0.0f && entity->velocity.y() < 0.0f)) {
-                entity->pose.y() = entity->prev_pose.y() - entity->velocity.y() * substep_dt;
+                entity->pose.y() = entity->prev_pose.y() - static_cast<float>(entity->velocity.y() * substep_dt);
             }
         });
 
@@ -121,9 +121,7 @@ void FxScene::step(double step_dt) {
         auto broad_phase_pairs = m_entities.get_broad_phase_pairs();
         for (const auto& pair : broad_phase_pairs) {
             FxContact c = FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
-            if (c.is_valid()){
-                contacts.emplace_back(std::move(c));
-            };
+            if (c.is_valid()){ contacts.emplace_back(std::move(c)); }
         }
 
         // Solve contact penetration (position-level)

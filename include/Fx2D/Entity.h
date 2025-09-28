@@ -3,10 +3,19 @@
 
 #include <memory>
 #include <string>
-#include <regex>
 #include <stdexcept>
 
 #include "Fx2D/Math.h"
+
+inline bool is_valid_name(const std::string& s) {
+    if (s.empty()) return false;
+    return std::all_of(s.begin(), s.end(), [](unsigned char c){
+        return (c >= '0' && c <= '9') ||
+               (c >= 'A' && c <= 'Z') ||
+               (c >= 'a' && c <= 'z') ||
+               c == '_';
+    });
+}
 
 // container for visual shape 
 struct FxVisualShape : public FxShape {
@@ -38,8 +47,11 @@ using FxCollisionShape = FxShape;
 // Class for entity attributes and methods
 class FxEntity {
   private:
-    // unique identifier assigned by scene
-    size_t m_entity_id = 0;
+    // unique identifier assigned by scene or registry
+    uint32_t m_entity_id = 0;
+    
+    // unique name for an entity
+    std::string m_name;
     
     // mass and inertia
     float _mass = 1.0f;     
@@ -71,8 +83,6 @@ class FxEntity {
     void __update_pose(const double& step_dt);
     
   public:
-    // unique name for an entity
-    const std::string name;
 
     // current state (public interface - single precision)
     FxVec3f pose {0, 0, 0};    // x, y, theta
@@ -96,9 +106,9 @@ class FxEntity {
     explicit FxEntity(const std::string& entityName);
 
     // getter for the name and ID
-    const std::string& get_name() const {return name;}
-    size_t get_entity_id() const {return m_entity_id;}
-    void set_entity_id(size_t id) {m_entity_id = id;}
+    const std::string& get_name() const {return m_name;}
+    uint32_t get_entity_id() const {return m_entity_id;}
+    void set_entity_id(uint32_t id) {m_entity_id = id;}
 
     // resets current state to inital state
     void reset();
@@ -151,8 +161,8 @@ class FxEntity {
     FxVec2f velocity_at_world_point(const FxVec2f& position) const;
     FxVec2f velocity_at_local_point(const FxVec2f& local_position) const;
     // Vector implementations of above 
-    FxArray<FxVec2f> velocity_at_world_point(const FxArray<FxVec2f>& position) const;
-    FxArray<FxVec2f> velocity_at_local_point(const FxArray<FxVec2f>& local_position) const;
+    FxVec2fArray velocity_at_world_point(const FxVec2fArray& position) const;
+    FxVec2fArray velocity_at_local_point(const FxVec2fArray& local_position) const;
     
     // Convert local point to world coordinates and vice-versa
     FxVec2f to_world_frame(const FxVec2f& local_point) const;

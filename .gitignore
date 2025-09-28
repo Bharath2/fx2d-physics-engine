@@ -7,5 +7,7 @@ imgui.ini
 *.exe
 .vscode
 .vscode/*
+*.json
 .cursorignore
-Makefile
+./Makefile
+./Scene.yml

@@ -16,24 +16,11 @@ class FxNamedRegistry {
   protected:
     std::vector<std::shared_ptr<T>> m_items_vec;         // packed storage
     std::unordered_map<std::string, size_t> m_name_map;  // name -> index
+    size_t m_size_limit = std::numeric_limits<size_t>::max();  // Ceiling for max_size (can be lowered by derived classes)
     size_t m_max_size = std::numeric_limits<size_t>::max();
 
-  public:
-    FxNamedRegistry() = default;
-    explicit FxNamedRegistry(size_t max_size) : m_max_size(max_size) {}
-
-    void reserve(size_t n) {
-        if (n > m_max_size) m_max_size = n;
-        m_items_vec.reserve(n);
-        m_name_map.reserve(n);
-    }
-
-    size_t size()  const noexcept { return m_items_vec.size(); }
-    bool   empty() const noexcept { return m_items_vec.empty(); }
-    void   set_max_size(size_t n) { m_max_size = n; }
-
     // Add (1 refcount inc)
-    bool add(const std::shared_ptr<T>& item) {
+    bool _add(const std::shared_ptr<T>& item) {
         if (!item) { std::cerr << "FxNamedRegistry: Cannot add null item.\n"; return false; }
         if (m_items_vec.size() >= m_max_size) { 
             std::cerr << "FxNamedRegistry: Items limit exceeded.\n"; return false; 
@@ -48,7 +35,7 @@ class FxNamedRegistry {
     }
 
     // Remove by name (swap-pop fixup)
-    bool remove(const std::string& name) {
+    bool _remove(const std::string& name) {
         auto it = m_name_map.find(name);
         if (it == m_name_map.end()) { 
             std::cerr << "FxNamedRegistry: Item '" << name << "' not found.\n"; return false; 
@@ -64,6 +51,29 @@ class FxNamedRegistry {
         m_name_map.erase(it);
         return true;
     }
+
+  public:
+    FxNamedRegistry() = default;
+    explicit FxNamedRegistry(size_t max_size) : m_max_size(max_size) {}
+
+    void reserve(size_t n) {
+        if (n > m_max_size) n = m_max_size;
+        m_items_vec.reserve(n);
+        m_name_map.reserve(n);
+    }
+
+    size_t size()  const noexcept { return m_items_vec.size(); }
+    bool   empty() const noexcept { return m_items_vec.empty(); }
+    void   set_max_size(size_t n) { 
+        if (n > m_size_limit) {
+            std::cerr << "FxNamedRegistry: clamping max_size " << n << " to limit.\n";
+            m_max_size = m_size_limit;
+        } else { m_max_size = n; }
+    }
+
+    // Add (1 refcount inc) and Remove by name (swap-pop fixup)
+    virtual bool add(const std::shared_ptr<T>& item) { return _add(item); }
+    virtual bool remove(const std::string& name) { return _remove(name); }
 
     // Get shared ownership (1 refcount inc)
     std::shared_ptr<T> get(const std::string& name) const {
@@ -127,36 +137,42 @@ class FxEntity;
 // Specialized registry for entities that handles collision pair exclusion
 class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
   private:
-    std::unordered_set<uint32_t> m_no_collision_pairs;  // excluded collision pairs
-    size_t m_next_entity_id = 0;  // entity ID counter
+    std::unordered_set<uint64_t> m_no_collision_pairs;  // excluded collision pairs
+    uint32_t m_next_entity_id = 0;  // entity ID counter
 
   public:
     FxEntityRegistry() = default;
-    explicit FxEntityRegistry(size_t max_size) : FxNamedRegistry<FxEntity>(max_size) {}
+    explicit FxEntityRegistry(size_t max_size) : FxNamedRegistry<FxEntity>() {
+        m_size_limit = std::numeric_limits<uint32_t>::max();
+        set_max_size(max_size);
+        m_no_collision_pairs.max_load_factor(0.7f); // lower load factor => fewer probes
+    }
 
     // Override add method to set entity ID
-    bool add(const std::shared_ptr<FxEntity>& entity) {
-        if (!entity) { std::cerr << "FxEntityRegistry: Cannot add null entity.\n"; return false; }
-        if (m_items_vec.size() >= m_max_size) { 
-            std::cerr << "FxEntityRegistry: Entities limit exceeded.\n"; return false; 
+    bool add(const std::shared_ptr<FxEntity>& entity) override {
+        // Check if we've reached the ID limit before attempting to add
+        if (m_next_entity_id == std::numeric_limits<uint32_t>::max()) {
+            std::cerr << "FxEntityRegistry: Entity ID limit exceeded.\n";
+            return false;
         }
-        const std::string& name = entity->get_name();
-        if (m_name_map.find(name) != m_name_map.end()) {
-            std::cerr << "FxEntityRegistry: Entity '" << name << "' already exists.\n"; return false;
-        }
+        entity->set_entity_id(m_next_entity_id);
         // Set entity ID before adding
-        entity->set_entity_id(m_next_entity_id++);
-        m_items_vec.push_back(entity);                   // refcount++
-        m_name_map.emplace(name, m_items_vec.size()-1);
-        return true;
+        bool success = _add(entity);
+        if (success) { m_next_entity_id++; }
+        return success;
     }
+
+    // // Override remove method
+    // bool remove(const std::string& name) override {
+    //     return _remove(name);
+    // }
 
     // Enable collision between two entities by name
     void enable_collision(const std::string& entity1_name, const std::string& entity2_name) {
         auto e1 = get_rawptr(entity1_name);
         auto e2 = get_rawptr(entity2_name);
         if (e1 && e2 && e1 != e2) {
-            uint32_t pair_id = pack_id_pair(e1->get_entity_id(), e2->get_entity_id());
+            uint64_t pair_id = pack_id_pair(e1->get_entity_id(), e2->get_entity_id());
             m_no_collision_pairs.erase(pair_id);
         }
     }
@@ -166,7 +182,7 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         auto e1 = get_rawptr(entity1_name);
         auto e2 = get_rawptr(entity2_name);
         if (e1 && e2 && e1 != e2) {
-            uint32_t pair_id = pack_id_pair(e1->get_entity_id(), e2->get_entity_id());
+            uint64_t pair_id = pack_id_pair(e1->get_entity_id(), e2->get_entity_id());
             m_no_collision_pairs.insert(pair_id);
         }
     }
@@ -190,17 +206,15 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
     }
 
   private:
-
-    // Helper function to pack two entity IDs into a single uint32_t
-    // Need to improve this
-    static uint32_t pack_id_pair(size_t a, size_t b) {
+    // Helper function to pack two entity IDs into a single uint64_t
+    static uint64_t pack_id_pair(uint32_t a, uint32_t b) {
         if (a > b) std::swap(a, b);
-        return static_cast<uint32_t>((a << 12) | b);
+        return static_cast<uint64_t>(a) << 32 | static_cast<uint64_t>(b);
     }
 
     // Check if collision is enabled between two entities
-    bool is_collision_pair(size_t entity1_id, size_t entity2_id) const {
-        uint32_t pair_id = pack_id_pair(entity1_id, entity2_id);
+    bool is_collision_pair(uint32_t entity1_id, uint32_t entity2_id) const {
+        uint64_t pair_id = pack_id_pair(entity1_id, entity2_id);
         return m_no_collision_pairs.find(pair_id) == m_no_collision_pairs.end();
     }
 

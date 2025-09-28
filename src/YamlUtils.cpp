@@ -3,23 +3,6 @@
 
 namespace FxYAML {
 
-    YAML::Node LoadSmart(const std::string& textOrPath) {
-        try {
-            // Treat as file if it exists
-            // if (fs::exists(textOrPath) && fs::is_regular_file(textOrPath))
-            return YAML::LoadFile(textOrPath);
-            // // Otherwise parse the string as YAML
-            // auto text_ = textOrPath;
-            // return YAML::Load(text_);
-        }
-        catch (const YAML::Exception& e) {
-            throw std::runtime_error("YAML parse error: " + std::string(e.what()));
-        }
-        catch (const std::exception& e) {
-            throw std::runtime_error("YAML load error: " + std::string(e.what()));
-        }
-    }
-
     // Remove the indentation (leading spaces/tabs) from each line of a multi-line string.
     std::string deIndent(const std::string& raw) {
         // 1) Find the first non-blank line start
@@ -43,6 +26,24 @@ namespace FxYAML {
         return out.str();
     }
 
+    YAML::Node LoadSmart(const std::string& textOrPath) {
+        try {
+            // Treat as file if it exists
+            if (fs::exists(textOrPath) && fs::is_regular_file(textOrPath)){
+                return YAML::LoadFile(textOrPath);
+            } else {
+                auto text_ = deIndent(textOrPath);
+                return YAML::Load(text_);
+            }               
+        }
+        catch (const YAML::Exception& e) {
+            throw std::runtime_error("YAML parse error: " + std::string(e.what()));
+        }
+        catch (const std::exception& e) {
+            throw std::runtime_error("YAML load error: " + std::string(e.what()));
+        }
+    }
+    
 
     FxShape buildShape(const YAML::Node& config) {
         if (!config.IsMap()) {
@@ -65,23 +66,23 @@ namespace FxYAML {
         }
         FxShape shape;
         // 1) Circle?
-        if (auto node = geom["circle"]) {
-            float radius = node.as<float>();
+        if (auto circle_node = geom["circle"]) {
+            float radius = circle_node.as<float>();
             shape = FxShape(radius);
         }
         // 2) Rectangle?
-        else if (auto node = geom["rectangle"]) {
-            if (!node.IsSequence() || node.size() != 2)
+        else if (auto rect_node = geom["rectangle"]) {
+            if (!rect_node.IsSequence() || rect_node.size() != 2)
                 throw std::runtime_error("rectangle must be a 2-sequence.");
-            auto sz = parseArray<2>(node);
+            auto sz = parseArray<2>(rect_node);
             shape = FxShape({ sz[0], sz[1] });
         }
         // 3) Polygon?
-        else if (auto node = geom["polygon"]) {
-            if (!node.IsSequence())
+        else if (auto poly_node = geom["polygon"]) {
+            if (!poly_node.IsSequence())
                 throw std::runtime_error("polygon must be a sequence.");
             std::vector<FxVec2f> verts;
-            for (const auto &pt : node) {
+            for (const auto &pt : poly_node) {
                 if (!pt.IsSequence() || pt.size() != 2)
                     throw std::runtime_error("each polygon vertex must be a 2-sequence.");
                 auto pt_ = parseArray<2>(pt);

@@ -1,26 +1,32 @@
 #!/usr/bin/env bash
 set -e
 
-# MinGW generator only on Windows/MSYS
-GEN=()
-EXT=""
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*) GEN=(-G "MinGW Makefiles"); EXT=".exe" ;;
+APP="Fx2D" 
+BUILD_DIR="build"
+
+CMD="${1:-build}"
+CFG="${2:-Release}" 
+EXTRA="${3:-}"
+
+GEN=(); EXT="" 
+case "$(uname -s)" in 
+    MINGW*|MSYS*|CYGWIN*)
+        GEN=(-G "MinGW Makefiles"); EXT=".exe" ;; 
 esac
 
-APP="Fx2D"
-BIN="$APP$EXT"
+copy_bin() {
+    src="$BUILD_DIR/$APP$EXT"; [ -f "$src" ] || src="$BUILD_DIR/$CFG/$APP$EXT"
+    cp -f "$src" "./$APP$EXT"
+    echo "Copied: $src -> ./$APP$EXT"
+}
 
-cmd="${1:-build}"
-bt="${2:-Release}"
+cfg() { cmake -S . -B "$BUILD_DIR" "${GEN[@]}" -DCMAKE_BUILD_TYPE="$CFG" $EXTRA; }
+build() { cmake --build "$BUILD_DIR" --config "$CFG" --parallel; copy_bin; }
 
-cfg()   { cmake -S . -B build "${GEN[@]}" -DCMAKE_BUILD_TYPE="$bt"; }
-build() { cmake --build build -j; cp "build/$BIN" "$BIN"; }
-
-case "$cmd" in
-  clean)   rm -rf build "$BIN" ;;
-  rebuild) rm -rf build "$BIN"; cfg; build ;;
-  debug)   bt=Debug; rm -rf build "$BIN"; cfg; build ;;
-  all|build) cfg; build ;;
-  *) echo "usage: $0 [build|rebuild|debug|clean|all] [Release|Debug]"; exit 1 ;;
+case "$CMD" in
+  clean)   rm -rf "$BUILD_DIR" "./$APP$EXT" ;;
+  debug)   CFG=Debug; rm -rf "$BUILD_DIR" "./$APP$EXT"; cfg; build ;;
+  rebuild) rm -rf "$BUILD_DIR" "./$APP$EXT"; cfg; build ;;
+  build|all) cfg; build ;;
+  *) echo "usage: $0 [build|rebuild|debug|clean] [Release|Debug] [\"-DOPT=VAL …\"]"; exit 1 ;;
 esac
