@@ -27,7 +27,9 @@ class FxScene {
     static constexpr double m_min_time_step = 1e-3;
     size_t m_substeps = 11;
     // dirty flag to track when constraints need cleaning
-    bool m_constraints_dirty = false; 
+    bool m_constraints_dirty = false;
+    // total time elapsed since scene start
+    double m_time_elapsed = 0.0; 
 
   protected:
     FxEntityRegistry m_entities;              // stores pointers to all entities with collision management
@@ -49,7 +51,9 @@ class FxScene {
     // calls reset of all entities
     void reset();
     // simulation step
-    void step(double step_dt); 
+    void step(double step_dt);
+    // get total time elapsed since scene start
+    double time_elapsed() const { return m_time_elapsed; } 
     void set_substeps(const size_t& substeps) { m_substeps = substeps; }
     void set_gravity(const FxVec2f& o_gravity) { gravity = o_gravity; }
     // custom call back function called after every time step, user gets access to the scene.
@@ -102,6 +106,6 @@ class FxScene {
     // Removes constraints with dead entities
     void sweep_dead_constraints();
 
-     //custom callback function invoked in the step method
-     std::function<void(FxScene&, double dt)> m_func_step_callback;
+    //custom callback function invoked in the step method
+    std::function<void(FxScene&, double dt)> m_func_step_callback;
 };
