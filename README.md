@@ -95,9 +95,9 @@ BSD-3-Clause License
 
 ## Todo
 
-- Add controllable joints
+- Controllable joints
+- Dynamic AABB tree
 - Improve velocity resolution in collisions  
-- Add dynamic AABB tree
 - and More.
 
 ## Contributing
