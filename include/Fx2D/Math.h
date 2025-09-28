@@ -38,6 +38,9 @@ public:
     // Inherit constructors
     using Eigen::Vector2f::Vector2f;
 
+    // Constructor from single float (fills both components)
+    explicit FxVec2f(float a) : Eigen::Vector2f(a, a) {}
+
     // Getter for x and y.
     float& x() { return (*this)(0); }
     float& y() { return (*this)(1); }
@@ -93,6 +96,9 @@ class FxVec2d : public Eigen::Vector2d {
 public:
     // Inherit constructors
     using Eigen::Vector2d::Vector2d;
+
+    // Constructor from single double (fills both components)
+    explicit FxVec2d(double a) : Eigen::Vector2d(a, a) {}
 
     // Getter for x and y.
     double& x() { return (*this)(0); }
@@ -151,6 +157,9 @@ class FxVec3f : public Eigen::Vector3f {
 public:
     using Eigen::Vector3f::Vector3f;
 
+    // Constructor from single float (fills all components)
+    explicit FxVec3f(float a) : Eigen::Vector3f(a, a, a) {}
+
     // Getters.
     float& x() { return (*this)(0); }
     float& y() { return (*this)(1); }
@@ -184,6 +193,9 @@ class FxVec3d : public Eigen::Vector3d {
 public:
     using Eigen::Vector3d::Vector3d;
 
+    // Constructor from single double (fills all components)
+    explicit FxVec3d(double a) : Eigen::Vector3d(a, a, a) {}
+
     // Getters.
     double& x() { return (*this)(0); }
     double& y() { return (*this)(1); }
@@ -215,6 +227,9 @@ public:
 class FxVec4f : public Eigen::Vector4f {
 public:
     using Eigen::Vector4f::Vector4f;
+
+    // Constructor from single float (fills all components)
+    explicit FxVec4f(float a) : Eigen::Vector4f(a, a, a, a) {}
 
     // Getters.
     float& x() { return (*this)(0); }
@@ -602,14 +617,32 @@ concept FxVecT =
 template<typename U, typename T>
 concept ConvertibleOrNumeric = std::convertible_to<U, T> || Numeric<U>;
 
+// Custom deleter for aligned arrays
+template<class T>
+struct AlignedDelete {
+    std::size_t align;
+    void operator()(T* p) const noexcept {
+        ::operator delete[](p, std::align_val_t(align));
+    }
+};
 
+// Helper function to create aligned arrays
+template<typename T>
+static std::unique_ptr<T[], AlignedDelete<T>>
+make_aligned_array(std::size_t n, std::size_t align = 32) {
+    if (n == 0) return {nullptr, AlignedDelete<T>{align}};
+    // allocation (ctors run)
+    T* p = static_cast<T*>(::operator new[](n * sizeof(T), std::align_val_t(align)));
+    return std::unique_ptr<T[], AlignedDelete<T>>(p, AlignedDelete<T>{align});
+}
 
 // define the FxArray class template
 template<NumericOrFxVec T>
 class FxArray {
   private:
-    std::size_t    m_size  = 0;
-    std::unique_ptr<T[]> m_arr;
+    static constexpr std::size_t kAlign = 32;                 // compile-time alignment
+    std::size_t m_size = 0;
+    std::unique_ptr<T[], AlignedDelete<T>> m_arr;
 
   protected:
     // throws if index is out of bounds
@@ -641,11 +674,12 @@ class FxArray {
     template<typename Compare>
     std::pair<std::size_t, T>  best_pair(Compare cmp, const char* name) const {
         throw_if_empty(name);
+        T const* __restrict p = aligned_data();
         std::size_t bestIdx = 0;
-        T bestVal = m_arr[0];
+        T bestVal = p[0];
         for (std::size_t i = 1; i < m_size; ++i) {
-            if (cmp(m_arr[i], bestVal)) {
-                bestVal = m_arr[i];
+            if (cmp(p[i], bestVal)) {
+                bestVal = p[i];
                 bestIdx = i;
             }
         }
@@ -654,36 +688,39 @@ class FxArray {
 
   public:
     // 1) default (empty)
-    FxArray() = default;
+    FxArray() : m_arr(nullptr, AlignedDelete<T>{kAlign}) {}
     // 2) n sized ctor (all zeros)
     explicit FxArray(std::size_t n)
       : m_size(n)
-      , m_arr(std::make_unique<T[]>(n))
+      , m_arr(make_aligned_array<T>(n, kAlign))
     {}
 
     // 3) Dedicated init_list ctor — for braced lists
     FxArray(std::initializer_list<T> init)
       : FxArray(init.size())
-    { std::copy(init.begin(), init.end(), m_arr.get()); }
+    { std::copy(init.begin(), init.end(), aligned_data()); }
 
     // 4) one ctor for std::vector
     FxArray(std::vector<T> const& v)
       : FxArray(v.size())
-    { std::copy(v.begin(), v.end(), m_arr.get()); }
+    { std::copy(v.begin(), v.end(), aligned_data()); }
 
     // 5) one overload for c style array
     template<std::size_t N>
     FxArray(T const (&arr)[N])
       : FxArray(N)
-    { std::copy_n(arr, N, m_arr.get()); }
+    { std::copy_n(arr, N, aligned_data()); }
 
     // deep‐copy copy‐ctor using copy_n
     FxArray(FxArray const& o)
       : FxArray(o.m_size)
-    { std::copy_n(o.m_arr.get(), m_size, m_arr.get()); }
+    { std::copy_n(o.aligned_data(), m_size, aligned_data()); }
 
     // move-assignment (O(1) swap of pointers and size)
     FxArray(FxArray&&) noexcept = default;
+
+    // Default destructor is sufficient now
+    ~FxArray() = default;
 
     // = move-assignment
     FxArray& operator=(FxArray const& o) {
@@ -710,27 +747,32 @@ class FxArray {
 
     FxArray& operator=(FxArray&&) noexcept = default;
 
+    // Aligned raw-data helpers 
+    T*       aligned_data()       noexcept { return std::assume_aligned<kAlign>(m_arr.get()); }
+    T const* aligned_data() const noexcept { return std::assume_aligned<kAlign>(m_arr.get()); }
+
+
     // 1) UNCHECKED, inlined, noexcept operator[] for hot loops
-    T&       operator[](size_t i)       noexcept { return m_arr[i]; }
-    T const& operator[](size_t i) const noexcept { return m_arr[i]; }
+    T&       operator[](size_t i)       noexcept { return aligned_data()[i]; }
+    T const& operator[](size_t i) const noexcept { return aligned_data()[i]; }
 
     template<std::integral I>
-    T& operator()(I i) noexcept { return m_arr[static_cast<size_t>(i)]; }
+    T& operator()(I i) noexcept { return aligned_data()[static_cast<size_t>(i)]; }
 
     template<std::integral I>
-    T const& operator()(I i) const noexcept { return m_arr[static_cast<size_t>(i)]; }
+    T const& operator()(I i) const noexcept { return aligned_data()[static_cast<size_t>(i)]; }
     
     // 2) BOUNDS-CHECKED at(), still accepts *any* integral index
     template<std::integral I>
-    T& at(I idx) { return m_arr[checkIndex(idx)]; }
+    T& at(I idx) { return aligned_data()[checkIndex(idx)]; }
     template<std::integral I>
-    T const& at(I idx) const { return m_arr[checkIndex(idx)]; }
+    T const& at(I idx) const { return aligned_data()[checkIndex(idx)]; }
 
-    // for iterators
-    T*       begin()       noexcept { return data(); }
-    T const* begin() const noexcept { return data(); }
-    T*       end()         noexcept { return data() + m_size; }
-    T const* end()   const noexcept { return data() + m_size; }
+    // Iterators use aligned_data (helps vectorizers in range-for)
+    T*       begin()       noexcept { return aligned_data(); }
+    T const* begin() const noexcept { return aligned_data(); }
+    T*       end()         noexcept { return aligned_data() + m_size; }
+    T const* end()   const noexcept { return aligned_data() + m_size; }
 
     // size & raw data
     size_t size()  const noexcept { return m_size; }
@@ -746,8 +788,10 @@ class FxArray {
     template<typename U> requires (Numeric<T> && Numeric<U>)
     FxArray<U> as() const {
         FxArray<U> result(m_size);
+        T const* __restrict src = aligned_data();
+        U* __restrict dst = result.aligned_data();
         for (std::size_t i = 0; i < m_size; ++i)
-            result[i] = static_cast<U>(m_arr[i]);
+            dst[i] = static_cast<U>(src[i]);
         return result;
     }
 
@@ -783,18 +827,20 @@ class FxArray {
     // --- mean: requires T() + T+= U + T /= scalar ---
     T mean() const {
         throw_if_empty("mean");
-        T sum = m_arr[0];                     // initialize with first element
+        T const* __restrict p = aligned_data();
+        T sum = p[0];                     // initialize with first element
         for (std::size_t i = 1; i < m_size; ++i)
-            sum += m_arr[i];
+            sum += p[i];
         return sum / m_size;
     }
 
     // mean as float (casts each element to double for accuracy, returns float)
     float meanf() const requires Numeric<T> {
         throw_if_empty("meanf");
+        T const* __restrict p = aligned_data();
         double sum = 0.0;
         for (std::size_t i = 0; i < m_size; ++i)
-            sum += static_cast<double>(m_arr[i]);
+            sum += static_cast<double>(p[i]);
         return static_cast<float>(sum / m_size);
     }
 
@@ -802,9 +848,10 @@ class FxArray {
     float stddev() const requires Numeric<T> {
         throw_if_empty("stddev");
         double m = meanf();
+        T const* __restrict p = aligned_data();
         double acc = 0.0;
         for (std::size_t i = 0; i < m_size; ++i) {
-            double d = static_cast<double>(m_arr[i]) - m;
+            double d = static_cast<double>(p[i]) - m;
             acc += d * d;
         }
         return static_cast<float>( std::sqrt(acc / m_size) );
@@ -813,33 +860,43 @@ class FxArray {
     // --- unary minus (element‐wise negate) ---
     FxArray operator-() const {
         FxArray result(m_size);
+        T const* __restrict src = aligned_data();
+        T* __restrict dst = result.aligned_data();
         for (std::size_t i = 0; i < m_size; ++i)
-            result.m_arr[i] = -m_arr[i];
+            dst[i] = -src[i];
         return result;
     }
 
     // --- in-place with a single T ---
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator+=(U const& v) {
-        for (std::size_t i = 0; i < m_size; ++i) m_arr[i] += v;
+        T* __restrict p = aligned_data();
+        const T vv = static_cast<T>(v);
+        for (std::size_t i = 0; i < m_size; ++i) p[i] += vv;
         return *this;
     }
 
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator-=(U const& v) {
-        for (std::size_t i = 0; i < m_size; ++i) m_arr[i] -= v;
+        T* __restrict p = aligned_data();
+        const T vv = static_cast<T>(v);
+        for (std::size_t i = 0; i < m_size; ++i) p[i] -= vv;
         return *this;
     }
 
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator*=(U const& v) {
-        for (std::size_t i = 0; i < m_size; ++i) m_arr[i] *= v;
+        T* __restrict p = aligned_data();
+        const T vv = static_cast<T>(v);
+        for (std::size_t i = 0; i < m_size; ++i) p[i] *= vv;
         return *this;
     }
 
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator/=(U const& v) {
-        for (std::size_t i = 0; i < m_size; ++i) m_arr[i] /= v;
+        T* __restrict p = aligned_data();
+        const T vv = static_cast<T>(v);
+        for (std::size_t i = 0; i < m_size; ++i) p[i] /= vv;
         return *this;
     }
 
@@ -847,40 +904,50 @@ class FxArray {
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator+=(FxArray<U> const& o) {
         throw_if_size_mismatch("+=", o.size());
+        T* __restrict p = aligned_data();
+        U const* __restrict op = o.aligned_data();
         for (std::size_t i = 0; i < m_size; ++i)
-            m_arr[i] += o.m_arr[i];
+            p[i] += op[i];
         return *this;
     }
 
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator-=(FxArray<U> const& o) {
         throw_if_size_mismatch("-=", o.size());
+        T* __restrict p = aligned_data();
+        U const* __restrict op = o.aligned_data();
         for (std::size_t i = 0; i < m_size; ++i)
-            m_arr[i] -= o.m_arr[i];
+            p[i] -= op[i];
         return *this;
     }
 
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator*=(FxArray<U> const& o) {
         throw_if_size_mismatch("*=", o.size());
+        T* __restrict p = aligned_data();
+        U const* __restrict op = o.aligned_data();
         for (std::size_t i = 0; i < m_size; ++i)
-            m_arr[i] *= o.m_arr[i];
+            p[i] *= op[i];
         return *this;
     }
 
     template<typename U> requires ConvertibleOrNumeric<U, T>
     FxArray& operator/=(FxArray<U> const& o) {
         throw_if_size_mismatch("/=", o.size());
+        T* __restrict p = aligned_data();
+        U const* __restrict op = o.aligned_data();
         for (std::size_t i = 0; i < m_size; ++i)
-            m_arr[i] /= o.m_arr[i];
+            p[i] /= op[i];
         return *this;
     }
 
     // dot with one FxVec2f → returns FxArray<float>
     FxArray<float> dot(T const& v) const requires FxVecT<T>{
         FxArray<float> out(this->size());
+        T const* __restrict p = aligned_data();
+        float* __restrict result = out.aligned_data();
         for (size_t i = 0; i < this->size(); ++i)
-            out[i] = (*this)[i].dot(v);
+            result[i] = p[i].dot(v);
         return out;
     }
 
@@ -888,8 +955,11 @@ class FxArray {
     FxArray<float> dot(FxArray<T> const& o) const requires FxVecT<T>{
         this->throw_if_size_mismatch("dot", o.size());
         FxArray<float> out(this->size());
+        T const* __restrict p = aligned_data();
+        T const* __restrict op = o.aligned_data();
+        float* __restrict result = out.aligned_data();
         for (size_t i = 0; i < this->size(); ++i)
-            out[i] = (*this)[i].dot(o[i]);
+            result[i] = p[i].dot(op[i]);
         return out;
     }
 
@@ -897,23 +967,25 @@ class FxArray {
     FxArray& rotate_inplace_rad(float theta_rad) noexcept requires std::same_as<T, FxVec2f> {
         const float c = std::cos(theta_rad);
         const float s = std::sin(theta_rad);
-        for (auto& e : *this) {
-            float xi = e.x(), yi = e.y();
-            e.x() = xi * c - yi * s;
-            e.y() = xi * s + yi * c;
+        T* __restrict p = aligned_data();
+        for (std::size_t i = 0; i < m_size; ++i) {
+            float xi = p[i].x(), yi = p[i].y();
+            p[i].x() = xi * c - yi * s;
+            p[i].y() = xi * s + yi * c;
         }
         return *this;
     }
 
     // 2) In-place rotate by degrees
     FxArray& rotate_inplace(float degrees) noexcept requires std::same_as<T, FxVec2f> {
-        constexpr float FX_DEG2RAD = 3.1415926535898f / 180.0f;
+        constexpr float FX_DEG2RAD = FxPif / 180.0f;
         return rotate_inplace_rad(degrees * FX_DEG2RAD);
     }
 
     // 3) In-place rotate by degrees
     FxArray& perp_inplace() noexcept requires std::same_as<T, FxVec2f> {
-        for (auto& e : *this) e = e.perp();
+        T* __restrict p = aligned_data();
+        for (std::size_t i = 0; i < m_size; ++i) p[i] = p[i].perp();
         return *this;
     }
 
@@ -940,11 +1012,12 @@ class FxArray {
 
     FxArray<float> bounds() const requires std::same_as<T, FxVec2f>{
         this->throw_if_empty("extrema");
-        const auto& v0 = (*this)[0];
+        T const* __restrict p = aligned_data();
+        const auto& v0 = p[0];
         float minx = v0.x(), maxx = v0.x();
         float miny = v0.y(), maxy = v0.y();
         for (size_t i = 1, n = this->size(); i < n; ++i) {
-            const auto& v = (*this)[i];
+            const auto& v = p[i];
             float x = v.x(), y = v.y();
             if (x < minx)      minx = x;
             else if (x > maxx) maxx = x;
@@ -994,8 +1067,10 @@ inline FxArray<T> operator-(U const& scalar, FxArray<T> a) { return -a + scalar;
 template<typename T, Numeric U> 
 inline FxArray<T> operator/(U const& scalar, FxArray<T> const& a) {
   FxArray<T> result(a.size());
+  T const* __restrict src = a.aligned_data();
+  T* __restrict dst = result.aligned_data();
   for (size_t i = 0; i < result.size(); ++i)
-    result[i] = scalar / a[i];
+    dst[i] = scalar / src[i];
   return result;
 }
 
@@ -1003,8 +1078,10 @@ inline FxArray<T> operator/(U const& scalar, FxArray<T> const& a) {
 template<typename T>
 inline FxArray<T> operator/(T const& scalar, FxArray<T> const& a) {
   FxArray<T> result(a.size());
+  T const* __restrict src = a.aligned_data();
+  T* __restrict dst = result.aligned_data();
   for (size_t i = 0; i < result.size(); ++i)
-    result[i] = scalar / a[i];
+    dst[i] = scalar / src[i];
   return result;
 }
 

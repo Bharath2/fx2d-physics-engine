@@ -7,4 +7,6 @@ imgui.ini
 *.exe
 .vscode
 .vscode/*
-Makefile
+*.json
+./Makefile
+./Scene.yml

@@ -11,9 +11,7 @@ class FxJoint {
 protected:
     std::shared_ptr<FxEntity> entity1;
     std::shared_ptr<FxEntity> entity2;
-    
-private:
-    std::string name;       // Joint name for identification
+    std::string m_name;       // Joint name for identification
     
 public:
     bool enabled = true;    // Whether joint is enabled
@@ -23,7 +21,7 @@ public:
     virtual ~FxJoint() = default;
 
     // Accessor method for name
-    const std::string& get_name() const { return name; }
+    const std::string& get_name() const { return m_name; }
 };
 
 // Revolute joint that directly controls entity states (not constraint-based)

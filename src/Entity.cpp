@@ -1,10 +1,8 @@
 #include "Fx2D/Entity.h"
 
-// FxEntity contructor with name validation
-FxEntity::FxEntity(const std::string &entityName) : name(entityName) {
-    static const std::regex pattern{"^[A-Za-z0-9_]+$"};  // alphanumerics charaters or underscores are only allowed
-    if (!std::regex_match(name, pattern)) {
-        throw std::invalid_argument("FxEntity: Entity name must be alphanumeric.");
+FxEntity::FxEntity(const std::string& entityName) : m_name(entityName) {
+    if (!is_valid_name(m_name)) {
+        throw std::invalid_argument("FxEntity: Entity name must be alphanumeric or underscore.");
     }
 }
 
@@ -130,12 +128,12 @@ FxVec2f FxEntity::velocity_at_world_point(const FxVec2f& position) const {
 }
 
 // Get instantaneous velocity at a local point (relative to entity's center)
-FxArray<FxVec2f> FxEntity::velocity_at_local_point(const FxArray<FxVec2f>& local_position) const {
+FxVec2fArray FxEntity::velocity_at_local_point(const FxVec2fArray& local_position) const {
     return velocity.xy() + velocity.theta() * local_position.perp();
 }
 
 // Get instantaneous velocity at a specific position
-FxArray<FxVec2f> FxEntity::velocity_at_world_point(const FxArray<FxVec2f>& position) const {
+FxVec2fArray FxEntity::velocity_at_world_point(const FxVec2fArray& position) const {
     auto r = position - pose.xy(); // vector from center of mass to position
     return velocity.xy() + velocity.theta() * r.perp();
 }

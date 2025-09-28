@@ -14,7 +14,7 @@ struct FxContact {
     bool m_is_valid = false;  
   public:
     size_t count = 0;                                             // True if contact is valid
-    FxArray<FxVec2f> position {{0.0f, 0.0f}, {0.0f, 0.0f}};      // upto to 2 Contact points in world coordinates
+    FxVec2fArray position {{0.0f, 0.0f}, {0.0f, 0.0f}};      // upto to 2 Contact points in world coordinates
     FxVec2f normal {0.0f, 0.0f};              // Contact normal (unit vector)
     float penetration_depth = FxInfinityf;    // Penetration depth (positive if overlapping)
 
@@ -36,27 +36,28 @@ struct FxContact {
 
 // Position-based constraint base class for XPBD solver
 class FxConstraint {
+  protected:
+    std::string m_name;                 // "id1_id2_constraint-name"
+    double compliance = 1e-7;           // XPBD alpha = compliance / dt^2
   public:
-    std::string name;                 // "id1_id2_constraint-name"
-    float compliance = 1e-7f;          // XPBD alpha = compliance / dt^2
     // bool entities_collide = false;     // Whether connected entities should collide
     std::shared_ptr<FxEntity> entity1;
     std::shared_ptr<FxEntity> entity2;
     // Set stiffness (converts to compliance internally)
-    void set_stiffness(float k) {
-        if (k <= 0.0f) return;
-        compliance = 1.0f / k;
+    void set_stiffness(double k) {
+        if (k <= 0.0) return;
+        compliance = 1.0 / k;
     }
-    void setCompliance(float c) { 
-        compliance = std::max(0.0f, c); 
+    void setCompliance(double c) { 
+        compliance = std::max(0.0, c); 
     }
     // Evaluate C and gradients; set active=false to skip
     virtual void evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                           float& gth1, float& gth2, bool& active) const = 0;
     // One-iteration XPBD/PBD correction (no lambda term in numerator)
-    void resolve(float dt);
+    void resolve(double dt);
     // Accessor method for name (required by FxNamedRegistry)
-    const std::string& get_name() const { return name; }
+    const std::string& get_name() const { return m_name; }
     virtual ~FxConstraint() = default;
 };
 
@@ -139,7 +140,7 @@ namespace FxSolver {
     const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1, const std::shared_ptr<FxEntity>& entity2);
 
     // Main collision resolution method 
-    void resolve_penetration(const FxContact& contact, float dt = 0.016f);
+    void resolve_penetration(const FxContact& contact, double dt = 0.016f);
     // Velocity-level solver: restitution and dynamic friction impulses
     void resolve_velocities(const FxContact& contact);
 

@@ -91,6 +91,7 @@ add_library(Fx2Dlib STATIC
   src/Scene.cpp
   src/Collisions.cpp
   src/Constraints.cpp
+  src/Joints.cpp
   src/Renderer.cpp
   src/YamlUtils.cpp
 )
@@ -108,27 +109,12 @@ target_link_libraries(Fx2Dlib PUBLIC
   ${RAYLIB_TARGET}
 )
 
-# Compile defs for the library
+# Compile definitions for the library
 target_compile_definitions(Fx2Dlib PUBLIC
   NO_FONT_AWESOME
   YAML_CPP_STATIC_DEFINE
   $<$<CONFIG:Debug>:DEBUG>
 )
-
-# Warnings for the library
-if (FX2D_WARNINGS)
-  if (MSVC)
-    target_compile_options(Fx2Dlib PRIVATE /W4)
-    if (FX2D_WERROR)
-      target_compile_options(Fx2Dlib PRIVATE /WX)
-    endif()
-  else()
-    target_compile_options(Fx2Dlib PRIVATE -Wall -Wextra)
-    if (FX2D_WERROR)
-      target_compile_options(Fx2Dlib PRIVATE -Werror)
-    endif()
-  endif()
-endif()
 
 # ============================================================
 # Main executable
@@ -138,15 +124,83 @@ add_executable(${TARGET_NAME}
 )
 
 # Link the library to the executable
-target_link_libraries(${TARGET_NAME} PRIVATE
-  Fx2Dlib
-)
+target_link_libraries(${TARGET_NAME} PRIVATE Fx2Dlib)
 
-# Optimizations / Debug
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-set(CMAKE_CXX_FLAGS_DEBUG   "-g")
+# ============================================================
+# Build configuration options
+# ============================================================
+option(FX2D_WARNINGS   "Enable high warning levels" ON)
+option(FX2D_WERROR     "Treat warnings as errors"    OFF)
+option(FX2D_NATIVE     "Enable native CPU tuning (SIMD etc.)" ON)
+option(FX2D_IPO        "Enable interprocedural optimization (LTO/IPO) in Release" ON)
 
-# Nice status
+# ============================================================
+# Helper function to apply common compile options
+# ============================================================
+function(fx2d_tune_target tgt)
+  # --- Warnings ---
+  if(FX2D_WARNINGS)
+    if (MSVC)
+      target_compile_options(${tgt} PRIVATE /W4)
+      if (FX2D_WERROR) 
+        target_compile_options(${tgt} PRIVATE /WX) 
+      endif()
+    else()
+      target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wconversion -Wshadow -Wpedantic)
+      if (FX2D_WERROR) 
+        target_compile_options(${tgt} PRIVATE -Werror) 
+      endif()
+    endif()
+  endif()
+
+  # --- Optimization per-config (don't overwrite CMake defaults) ---
+  if (MSVC)
+    target_compile_options(${tgt} PRIVATE $<$<CONFIG:Release>:/O2>)
+  else()
+    target_compile_options(${tgt} PRIVATE $<$<CONFIG:Release>:-O3>)
+  endif()
+
+  # --- CPU features (auto-vectorization benefits) ---
+  if (FX2D_NATIVE)
+    if (MSVC)
+      # AVX2 is a solid baseline; bump to AVX512 if you know your CPUs
+      target_compile_options(${tgt} PRIVATE /arch:AVX2)
+    else()
+      target_compile_options(${tgt} PRIVATE -march=native -mtune=native)
+    endif()
+  endif()
+
+  # --- Sanitizers in Debug (helpful; skip on MSVC by default) ---
+  if (NOT MSVC)
+    target_compile_options(${tgt} PRIVATE $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
+    target_link_options(${tgt}    PRIVATE $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
+  endif()
+endfunction()
+
+# ============================================================
+# Apply tuning to targets
+# ============================================================
+fx2d_tune_target(Fx2Dlib)
+fx2d_tune_target(${TARGET_NAME})
+
+# ============================================================
+# Interprocedural Optimization (LTO/IPO)
+# ============================================================
+if (FX2D_IPO)
+  cmake_policy(SET CMP0069 NEW)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT ipo_ok OUTPUT ipo_msg)
+  if (ipo_ok)
+    set_property(TARGET Fx2Dlib       PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  else()
+    message(STATUS "IPO not supported: ${ipo_msg}")
+  endif()
+endif()
+
+# ============================================================
+# Build status messages
+# ============================================================
 message(STATUS "Raylib target: ${RAYLIB_TARGET}")
 message(STATUS "yaml-cpp target: ${YAMLCPP_TARGET}")
 message(STATUS "Executable will be: ${CMAKE_BINARY_DIR}/${TARGET_NAME}")

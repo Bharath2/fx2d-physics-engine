@@ -18,7 +18,7 @@
 
 class FxRylbRenderer {
   protected:
-	FxScene &scene;
+	FxScene &m_scene;
 	unsigned int m_scale;
 	unsigned int m_display_w, m_display_h;
 	// Fixed timestep variables

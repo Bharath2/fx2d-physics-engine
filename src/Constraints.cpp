@@ -6,7 +6,7 @@
 #include <cmath>
 
 // FxConstraint implementation
-void FxConstraint::resolve(float dt) {
+void FxConstraint::resolve(double dt) {
     if (!entity1 || !entity2) return;
 
     float C = 0;            // Constraint violation value
@@ -26,7 +26,7 @@ void FxConstraint::resolve(float dt) {
     const float I2 = entity2->inv_inertia();
 
     // Calculate compliance term (alpha = compliance / dt^2)
-    const float alpha = (compliance > 0.0f) ? (compliance / (dt * dt)) : 0.0f;
+    const float alpha = std::max(static_cast<float>(compliance / (dt * dt)),  0.0f);
     // Calculate denominator for XPBD solver (includes compliance for softness)
     float denom = w1 * g1.dot(g1) + w2 * g2.dot(g2)
                 + I1 * gth1 * gth1 + I2 * gth2 * gth2 + alpha;
@@ -44,7 +44,7 @@ void FxConstraint::resolve(float dt) {
 // FxAngleLockConstraint constructors
 FxAngleLockConstraint::FxAngleLockConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2, float tgt) {
     entity1 = e1; entity2 = e2; target = tgt;
-    name = e1->get_name() + "_" + e2->get_name() + "_AngleLock";
+    m_name = e1->get_name() + "_" + e2->get_name() + "_AngleLock";
 }
 
 // FxAngleLockConstraint implementation
@@ -61,7 +61,7 @@ void FxAngleLockConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
 // FxAngularLimitConstraint constructors
 FxAngularLimitConstraint::FxAngularLimitConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2) {
     entity1 = e1; entity2 = e2;
-    name = e1->get_name() + "_" + e2->get_name() + "_AngleLmt";
+    m_name = e1->get_name() + "_" + e2->get_name() + "_AngleLmt";
 }
 
 // FxAngularLimitConstraint implementation
@@ -69,7 +69,7 @@ void FxAngularLimitConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                                          float& gth1, float& gth2, bool& active) const {
     // Early exit if constraint is disabled
     if (!enabled) { return; }
-    // std::cout<<name<<std::endl;
+    // std::cout<<m_name<<std::endl;
     // Calculate relative angle between entities (wrapped to [-π, π])
     const float rel = FxAngleWrap(entity2->pose.theta() - entity1->pose.theta());
     // Check if relative angle violates lower or upper bounds
@@ -97,7 +97,7 @@ FxAnchorConstraint::FxAnchorConstraint(const std::shared_ptr<FxEntity>& e1, cons
         const auto anc2 = e1->to_world_frame(anchor); 
         m_anchor2 = e2->to_entity_frame(anc2);
     }
-    name = e1->get_name() + "_" + e2->get_name() + "_Anchor";
+    m_name = e1->get_name() + "_" + e2->get_name() + "_Anchor";
 }
 
 // FxAnchorConstraint implementation
@@ -141,13 +141,13 @@ FxSeparationConstraint::FxSeparationConstraint(const std::shared_ptr<FxEntity>& 
     const FxVec2f a2 = entity2->pose.xy();
     const FxVec2f d = a2 - a1;
     m_initial_projection = axw.dot(d);
-    name = e1->get_name() + "_" + e2->get_name() + "_LinearLmt";
+    m_name = e1->get_name() + "_" + e2->get_name() + "_LinearLmt";
 }
 
 // FxSeparationConstraint implementation
 void FxSeparationConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
                                         float& gth1, float& gth2, bool& active) const {
-            // std::cout << "FxSeparationConstraint initialized: " << name << std::endl;
+            // std::cout << "FxSeparationConstraint initialized: " << m_name << std::endl;
     if (!enabled) { return; }
     // Transform axis to world coordinates based on is_local flag
     FxVec2f axw = m_axis;
@@ -195,7 +195,7 @@ FxMotionAlongAxisConstraint::FxMotionAlongAxisConstraint(const std::shared_ptr<F
     const FxVec2f d = entity1->pose.xy() - entity2->pose.xy();
     m_initial_projection = daxw.dot(d);
     
-    name = e1->get_name() + "_" + e2->get_name() + "_MotionAlongAxis";
+    m_name = e1->get_name() + "_" + e2->get_name() + "_MotionAlongAxis";
 }
 
 // FxMotionAlongAxisConstraint implementation
@@ -223,7 +223,7 @@ void FxMotionAlongAxisConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
 
 
 namespace FxSolver {
-    void resolve_penetration(const FxContact& contact, float dt) {
+    void resolve_penetration(const FxContact& contact, double dt) {
         // Early exits for invalid contacts
         if (!contact.is_valid()) return;
         if (!contact.entity1 || !contact.entity2) return;
@@ -240,20 +240,23 @@ namespace FxSolver {
         const float wA = A.inv_mass(), wB = B.inv_mass();
         const float IA = A.inv_inertia(), IB = B.inv_inertia();
         
-        // Handle each contact point
+        // Resolve each contact point individually
         for (size_t i = 0; i < contact.count; i++) {
+            // Get contact point for this iteration
+            FxVec2f contact_point = contact.position[i];
+            
             // Contact point relative to each entity's center
-            FxVec2f rA = contact.position[i] - A.pose.xy();
-            FxVec2f rB = contact.position[i] - B.pose.xy();
+            FxVec2f rA = contact_point - A.pose.xy();
+            FxVec2f rB = contact_point - B.pose.xy();
             
             // --- Position Correction (Penetration Resolution) ---
             float ra_n = rA.cross(n), rb_n = rB.cross(n); 
             float K_n = wA + wB + IA * ra_n * ra_n + IB * rb_n * rb_n;
-            float compliance = 1e-7f; // tweak: 0 = rigid, higher = softer
-            K_n = K_n + compliance / (dt * dt);
+            double compliance = 1e-8f; // tweak: 0 = rigid, higher = softer
+            K_n = K_n + static_cast<float>(compliance / (dt * dt));
             
             if (K_n > 1e-8f) { 
-                float correction_depth = contact.penetration_depth/contact.count;
+                float correction_depth = (contact.penetration_depth - penetration_tolerance) / static_cast<float>(contact.count);
                 float lambdaP = correction_depth / K_n; 
                 FxVec2f dP = n * lambdaP; 
                 A.pose.xy() -= wA * dP; 
@@ -272,7 +275,7 @@ namespace FxSolver {
 
     // Post-constraint velocity impulses for restitution and dynamic friction
     void resolve_velocities(const FxContact& contact) {
-        if (!contact.is_valid() || contact.penetration_depth <= 1e-4f) return;
+        if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return;
         if (!contact.entity1 || !contact.entity2) return;
 
         // Get entity references
@@ -285,8 +288,8 @@ namespace FxSolver {
         const float wA = A.inv_mass(), wB = B.inv_mass();
         const float IA = A.inv_inertia(), IB = B.inv_inertia();
         const float e  = std::clamp(std::min(A.elasticity, B.elasticity), 0.0f, 1.0f);
-        const float mu_s = std::clamp(std::max(A.static_friction,  B.static_friction), 0.0f, 10.0f);
-        const float mu_k = std::clamp(std::max(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
+        const float mu_s = std::clamp(std::min(A.static_friction,  B.static_friction), 0.0f, 10.0f);
+        const float mu_k = std::clamp(std::min(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
     
         // Accumulate normal impulses for shared friction cone
         float jn_sum = 0.0f;

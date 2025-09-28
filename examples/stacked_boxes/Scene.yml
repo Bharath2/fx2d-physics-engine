@@ -63,8 +63,8 @@ entities:
         physics:
             mass: 1
             elasticity: 1.0
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.5           # used in calculation of contact forces
+            dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
@@ -79,8 +79,8 @@ entities:
         physics:
             mass: 1
             elasticity: 1.0
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.5           # used in calculation of contact forces
+            dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
@@ -95,8 +95,8 @@ entities:
         physics:
             mass: 1
             elasticity: 1.0
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.5           # used in calculation of contact forces
+            dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
@@ -111,8 +111,8 @@ entities:
         physics:
             mass: 1
             elasticity: 1.0
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.5           # used in calculation of contact forces
+            dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
@@ -127,8 +127,8 @@ entities:
         physics:
             mass: 1
             elasticity: 1.0
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.5           # used in calculation of contact forces
+            dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
@@ -143,8 +143,8 @@ entities:
         physics:
             mass: 1
             elasticity: 1.0
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.5           # used in calculation of contact forces
+            dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height

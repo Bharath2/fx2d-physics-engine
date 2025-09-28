@@ -1,6 +1,4 @@
 #include "Fx2D/Joints.h"
-
-#include <cmath>
 #include <stdexcept>
 
 // FxJoint base class implementation
@@ -11,7 +9,10 @@ FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1, c
     if (e1.get() == e2.get()) {
         throw std::invalid_argument("Joint cannot connect an entity to itself");
     }
-    this->name = name;
+    if (!is_valid_name(name)) {
+        throw std::invalid_argument("FxJoint: Joint name must be alphanumeric or underscore.");
+    }
+    this->m_name = name;
     entity1 = e1;
     entity2 = e2;
 }
@@ -64,10 +65,9 @@ void FxRevoluteJoint::set_omega(float omega) {
 }
 
 void FxRevoluteJoint::set_torque(float torque) {
-    // Apply torque as angular impulse to effective impulse moments
-    // This will be applied during the entity's step() method
-    entity1->m_eff_impulse_moment -= torque * entity1->inv_inertia();
-    entity2->m_eff_impulse_moment += torque * entity2->inv_inertia();
+    // Apply torque as angular impulse through public interface
+    entity1->apply_torque(-torque);
+    entity2->apply_torque(torque);
 }
 
 float FxRevoluteJoint::get_theta() const {
@@ -152,10 +152,10 @@ void FxPrismaticJoint::set_force(float force) {
     // Transform local axis to world coordinates
     FxVec2f world_axis = m_axis.rotate_rad(entity1->pose.theta());
     
-    // Apply force as impulse to effective force system
+    // Apply force as impulse through public interface
     FxVec2f force_vector = world_axis * force;
-    entity1->m_eff_impulse -= force_vector * entity1->inv_mass();
-    entity2->m_eff_impulse += force_vector * entity2->inv_mass();
+    entity1->apply_force(-force_vector);
+    entity2->apply_force(force_vector);
 }
 
 float FxPrismaticJoint::get_position() const {
