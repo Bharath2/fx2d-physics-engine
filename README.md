@@ -1,9 +1,9 @@
-# Fx2D
+# Fx2D — 2D Rigid Body Physics Engine
 
 A 2D physics simulator written in C++ (20).
 
 #### [Examples](./examples/)
-![image](./examples/stacked_boxes/play.gif)
+![2D rigid body stacking simulation](./examples/stacked_boxes/play.gif)
 
 ## Key Features
 - **SAT collision detection:** Efficient circle and polygon collision using the Separating Axis Theorem (SAT)
@@ -24,7 +24,7 @@ A 2D physics simulator written in C++ (20).
 - **ImGui** 1.92 - User interface framework
 - **rlImGui** - Raylib-ImGui integration
 
-## Building
+## Installation & Build
 
 ### Method 1: CMake
 
@@ -43,7 +43,7 @@ chmod +x fxmake       # Make executable
 ./fxmake clean        # Clean build artifacts
 ```
 
-## Quick Start
+## Getting Started
 
 ### Basic Usage
 ```cpp
@@ -87,7 +87,7 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 ./Fx2D.exe  # Windows
 ```
 
-![truck](./examples/truck/play.gif)
+![2D truck suspension physics simulation](./examples/truck/play.gif)
 
 ## License
 
