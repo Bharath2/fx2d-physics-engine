@@ -1,6 +1,6 @@
 # Fx2D — 2D Rigid Body Physics Engine
 
-A 2D physics simulator written in C++ (20).
+A fast, lightweight **2D rigid body physics engine and simulator** written in C++20 — featuring SAT collision detection, XPBD constraint solving, and raylib-based real-time rendering. Suitable for game physics, robotics prototyping, and educational simulations.
 
 #### [Examples](./examples/)
 ![2D rigid body stacking simulation](./examples/stacked_boxes/play.gif)
