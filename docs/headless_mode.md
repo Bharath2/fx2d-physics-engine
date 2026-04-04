@@ -77,7 +77,10 @@ scene.reset();  // resets all entities to their initial poses and velocities
 
 ## Step Constraints
 
-`FxScene::step(dt)` clamps `dt` internally to `[1e-3, 0.06]` seconds. Passing a value outside this range will be silently clamped to keep the simulation stable.
+`FxScene::step(dt)` clamps `dt` internally to `[1e-3, 0.06]` seconds:
+
+- `dt < 1e-3` — throws `std::invalid_argument` (too small, simulation would be unstable)
+- `dt > 0.06` — silently clamped down to `0.06`
 
 ---
 
@@ -115,9 +118,18 @@ scene.enable_collision("bodyA", "bodyB");   // re-enable
 ```cpp
 auto e = scene.get_entity("box");
 
-e->pose;        // FxVec3f: (x, y, theta_radians)
-e->velocity;    // FxVec3f: (vx, vy, omega)
-e->mass;
-e->inertia;
-e->is_static;
+e->pose;             // FxVec3f: (x, y, theta_radians)
+e->velocity;         // FxVec3f: (vx, vy, omega)
+e->prev_pose;        // FxVec3f: pose from previous step
+e->prev_velocity;    // FxVec3f: velocity from previous step
+e->mass();           // float — getter (not a field)
+e->inertia();        // float — getter (not a field)
+e->inv_mass();       // float
+e->inv_inertia();    // float
+e->enabled;          // bool — if false, entity is skipped in physics, collisions, and rendering
+e->elasticity;       // float
+e->vel_damping;      // float
+e->gravity_scale;    // float
+e->static_friction;  // float
+e->dynamic_friction; // float
 ```

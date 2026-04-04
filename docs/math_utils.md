@@ -133,20 +133,71 @@ FxMat3f Minv = M.inv_transform();  // computes M⁻¹ analytically
 A NumPy-style 1D array template with 32-byte aligned allocation for SIMD performance. Supports `float`, `double`, integer types, and `FxVec2f` / `FxVec3f` / `FxVec4f`.
 
 ```cpp
-FxArray<float> a(100);            // size-100 array, zero-initialized
-FxArray<float> b = {1.0f, 2.0f, 3.0f};  // from initializer list
-FxArray<float> c(std::vector<float>{...});
+FxArray<float> a(100);                       // size-100 array (NOT zero-initialized — raw allocation)
+FxArray<float> b = {1.0f, 2.0f, 3.0f};      // from initializer list
+FxArray<float> c(std::vector<float>{...});   // from std::vector
 
 a[i];           // unchecked access (fast, for hot loops)
 a.at(i);        // bounds-checked access (throws std::out_of_range)
 a.size();
 a.empty();
-
-// Cast to another numeric type
-FxArray<double> d = a.as<double>();
 ```
 
 Supports STL range-for:
 ```cpp
 for (float val : a) { ... }
+```
+
+### Arithmetic Operators
+
+All standard operators work element-wise or with a scalar:
+```cpp
+a + b;   a - b;   a * b;   a / b;   // element-wise (same size required)
+a + 2.0f;  3 * a;  a / 2;           // scalar broadcast
+a += b;  a -= 2.0f;                 // in-place variants
+-a;                                 // element-wise negate
+```
+
+### Aggregates (numeric types only)
+
+```cpp
+a.min();                          // minimum value
+a.max();                          // maximum value
+a.argmin();                       // {index, min_value}
+a.argmax();                       // {index, max_value}
+a.mean();                         // T, uses T's + and /
+a.meanf();                        // float mean (double accumulator)
+a.stddev();                       // float population standard deviation
+```
+
+### Type Conversion
+
+```cpp
+FxArray<double> d = a.as<double>();
+```
+
+---
+
+## FxVec2fArray
+
+`FxVec2fArray` is a type alias for `FxArray<FxVec2f>` — an aligned array of 2D float vectors.
+
+```cpp
+using FxVec2fArray = FxArray<FxVec2f>;
+```
+
+Extra operations available on `FxVec2fArray`:
+
+```cpp
+FxVec2fArray pts = { FxVec2f(1,0), FxVec2f(0,1) };
+
+pts.rotate_inplace(45.0f);       // rotate all vectors in-place (degrees)
+pts.rotate_inplace_rad(FxPif/4); // rotate all vectors in-place (radians)
+pts.rotate_rad(theta);           // returns rotated copy
+pts.perp_inplace();              // CCW perpendicular of each vector, in-place
+pts.perp();                      // returns perpendicular copy
+
+// dot product
+FxArray<float> d = pts.dot(FxVec2f(1,0));  // dot each vector with a fixed vector
+FxArray<float> d = pts.dot(other_pts);     // element-wise dot with another FxVec2fArray
 ```

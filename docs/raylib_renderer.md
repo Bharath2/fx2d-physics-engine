@@ -71,11 +71,11 @@ double get_real_time_factor() const;
 - `0.5` — half speed (slow motion)
 - `2.0` — double speed
 
+The value is clamped to `[0.01, 10.0]`; values outside this range are rejected with a warning and clamped.
+
 ```cpp
 renderer.set_real_time_factor(0.5);
 ```
-
-The renderer internally clamps the effective `dt` to `[1e-3, 0.06]` seconds per frame to keep the simulation stable regardless of frame rate.
 
 ---
 
@@ -92,8 +92,9 @@ While running, an ImGui overlay is displayed with:
 
 The renderer uses a **fixed-timestep accumulator** pattern:
 
-1. Wall-clock elapsed time × real-time factor is accumulated each frame.
-2. The scene's `step(dt)` is called in increments of `m_fixed_dt` (1/fps) until the accumulator is drained.
+1. Wall-clock elapsed time × real-time factor is accumulated each frame (raw frame time is capped at 0.2 s to prevent spiral-of-death).
+2. Each drain step uses `dt = clamp(m_fixed_dt × real_time_factor, 1e-3, 0.06)` — so the effective step size scales with the real-time factor.
+3. `scene.step(dt)` is called repeatedly until the accumulator is drained.
 
 This decouples rendering frame rate from physics stability.
 
