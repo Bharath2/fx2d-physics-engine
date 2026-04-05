@@ -77,6 +77,7 @@ void FxEntity::enable_external_forces(bool enable) {
 
 // Apply force at center of mass, affecting linear acceleration
 void FxEntity::apply_force(const FxVec2f& force) {
+    wake();
     if (_inv_mass > 0.0f) {
         m_eff_force += force; 
     }
@@ -84,6 +85,7 @@ void FxEntity::apply_force(const FxVec2f& force) {
 
 // Apply force at an arbitrary point, contributes linear and angular effects
 void FxEntity::apply_force(const FxVec2f& force, const FxVec2f& contact_point) {
+    wake();
     float torque = 0.0f;
     if (_inv_mass > 0.0f) {
         m_eff_force += force;
@@ -97,6 +99,7 @@ void FxEntity::apply_force(const FxVec2f& force, const FxVec2f& contact_point) {
 
 // Directly apply moment
 void FxEntity::apply_torque(float torque) {
+    wake();
     if (_inv_inertia > 0.0f) {
         m_eff_moment += torque;
     }
@@ -104,6 +107,7 @@ void FxEntity::apply_torque(float torque) {
 
 // For impulse applied at center of mass, accumulate for step application
 void FxEntity::apply_impulse(const FxVec2f& impulse) {
+    wake();
     if (_inv_mass > 0.0f) {
         m_eff_impulse += impulse;   // accumulate impulse for step application
     }
@@ -111,6 +115,7 @@ void FxEntity::apply_impulse(const FxVec2f& impulse) {
 
 // Apply impulse at an arbitrary point, accumulate for step application
 void FxEntity::apply_impulse(const FxVec2f& impulse, const FxVec2f& contact_point) {
+    wake();
     if (_inv_mass > 0.0f) {
         m_eff_impulse += impulse; // accumulate impulse for step application
     }
@@ -118,6 +123,18 @@ void FxEntity::apply_impulse(const FxVec2f& impulse, const FxVec2f& contact_poin
         FxVec2f r = contact_point - pose.xy(); // r is the vector from center of mass to contact point
         float torque = r.cross(impulse);
         m_eff_impulse_moment += torque; // accumulate impulse moment for step application
+    }
+}
+
+// Advance sleep timer; put entity to sleep when below threshold long enough
+void FxEntity::tick_sleep(float dt) {
+    float speed_lin = velocity.head<2>().norm();
+    float speed_ang = std::abs(velocity.theta());
+    if (speed_lin < sleep_threshold_linear && speed_ang < sleep_threshold_angular) {
+        m_sleep_timer += dt;
+        if (m_sleep_timer >= sleep_time_required) sleep();
+    } else {
+        m_sleep_timer = 0.0f;
     }
 }
 

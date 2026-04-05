@@ -5,6 +5,15 @@
 #include <algorithm>
 #include <cmath>
 
+// Entity name accessor methods for FxConstraint
+std::string FxConstraint::get_entity1_name() const {
+    return entity1 ? entity1->get_name() : "";
+}
+
+std::string FxConstraint::get_entity2_name() const {
+    return entity2 ? entity2->get_name() : "";
+}
+
 // FxConstraint implementation
 void FxConstraint::resolve(double dt) {
     if (!entity1 || !entity2) return;
@@ -109,6 +118,8 @@ void FxAnchorConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2,
     const FxVec2f a2 = entity2->to_world_frame(m_anchor2);
     // Calculate the separation vector between the two world anchor points
     const FxVec2f d  = a1 - a2;
+    // Guard: if anchors coincide the constraint is already satisfied
+    if (d.squaredNorm() < 1e-12f) { active = false; return; }
     // Constraint violation C: projection of separation onto the constraint direction
     // C = 0 means anchors are aligned along the constraint axis
     FxVec2f m_dirWorld = d.normalized();
@@ -273,8 +284,32 @@ namespace FxSolver {
         }
     }
 
+    void warm_start(FxContact& contact) {
+        if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return;
+        if (!contact.entity1 || !contact.entity2) return;
+
+        FxEntity& A = *contact.entity1;
+        FxEntity& B = *contact.entity2;
+        FxVec2f n = contact.normal;
+        FxVec2f t(-n.y(), n.x());
+
+        const float wA = A.inv_mass(), wB = B.inv_mass();
+        const float IA = A.inv_inertia(), IB = B.inv_inertia();
+
+        auto rA = contact.position - A.pose.get_xy();
+        auto rB = contact.position - B.pose.get_xy();
+
+        for (size_t i = 0; i < contact.count; ++i) {
+            FxVec2f impulse = n * contact.jn_accumulated[i] + t * contact.jt_accumulated[i];
+            A.velocity.xy() -= wA * impulse;
+            B.velocity.xy() += wB * impulse;
+            A.velocity.theta() -= IA * (contact.jn_accumulated[i] * rA[i].cross(n) + contact.jt_accumulated[i] * rA[i].cross(t));
+            B.velocity.theta() += IB * (contact.jn_accumulated[i] * rB[i].cross(n) + contact.jt_accumulated[i] * rB[i].cross(t));
+        }
+    }
+
     // Post-constraint velocity impulses for restitution and dynamic friction
-    void resolve_velocities(const FxContact& contact) {
+    void resolve_velocities(FxContact& contact) {
         if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return;
         if (!contact.entity1 || !contact.entity2) return;
 
@@ -311,18 +346,23 @@ namespace FxSolver {
                 float ra_n = rA[k].cross(n), rb_n = rB[k].cross(n); 
                 float K_n = wA + wB + IA * ra_n * ra_n + IB * rb_n * rb_n;
                 
-                float jn = 0.0f;
                 float bias = (vn < -1e-3f) ? e : 0.0f;
                 if (K_n > 1e-6f) {
-                    jn = -(1.0f + bias) * vn / K_n;
-                    if (jn > 0.0f) {
-                        FxVec2f Pn = n * jn;
+                    float fresh_jn = -(1.0f + bias) * vn / K_n;
+                    float old_jn = contact.jn_accumulated[k];
+                    float new_jn = std::max(0.0f, old_jn + fresh_jn);
+                    float delta_jn = new_jn - old_jn;
+                    contact.jn_accumulated[k] = new_jn;
+
+                    if (delta_jn > 0.0f) {
+                        FxVec2f Pn = n * delta_jn;
                         A.velocity.xy() -= wA * Pn;
                         B.velocity.xy() += wB * Pn;
-                        A.velocity.theta() -= IA * jn * ra_n;
-                        B.velocity.theta() += IB * jn * rb_n;
-                        jn_sum += jn;
+                        A.velocity.theta() -= IA * delta_jn * ra_n;
+                        B.velocity.theta() += IB * delta_jn * rb_n;
                     }
+
+                    jn_sum += contact.jn_accumulated[k];
                 }
             }
         }
@@ -337,18 +377,23 @@ namespace FxSolver {
             float Kt   = wA + wB + IA*ra_t*ra_t + IB*rb_t*rb_t;
             if (Kt <= 1e-8f) continue;
 
-            float jt = -vt / Kt;
-
+            float fresh_jt = -vt / Kt;
+            float old_jt = contact.jt_accumulated[i];
+            float new_jt = old_jt + fresh_jt;
             float max_static = mu_s * std::max(0.f, jn_sum);
-            if (std::fabs(jt) > max_static) {
-                jt = (jt >= 0.f ? 1.f : -1.f) * (mu_k * std::max(0.f, jn_sum));
+            if (std::fabs(new_jt) > max_static) {
+                float max_dynamic = mu_k * std::max(0.f, jn_sum);
+                new_jt = (new_jt >= 0.f ? 1.f : -1.f) * max_dynamic;
             }
 
-            FxVec2f Pt = t * jt;
+            contact.jt_accumulated[i] = new_jt;
+            float delta_jt = new_jt - old_jt;
+
+            FxVec2f Pt = t * delta_jt;
             A.velocity.xy() -= wA * Pt;  
             B.velocity.xy() += wB * Pt;
-            A.velocity.theta() -= IA * jt * ra_t;
-            B.velocity.theta() += IB * jt * rb_t;
+            A.velocity.theta() -= IA * delta_jt * ra_t;
+            B.velocity.theta() += IB * delta_jt * rb_t;
         }
     }
 }

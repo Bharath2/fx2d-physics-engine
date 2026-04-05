@@ -12,6 +12,7 @@ set(TARGET_NAME Fx2D)
 # Options
 option(FX2D_WARNINGS "Enable extra warnings" ON)
 option(FX2D_WERROR   "Treat warnings as errors" OFF)
+option(FX2D_BUILD_TESTS "Build unit tests" ON)
 
 # Helpful on MSYS2/MinGW users (optional): prefer common prefixes
 list(APPEND CMAKE_PREFIX_PATH
@@ -64,20 +65,33 @@ endif()
 find_package(Eigen3 3.3 REQUIRED)
 
 # ============================================================
-# Local third-party sources: imgui + rlImGui
-# Built as a static lib that the app links against.
+# ImGui + rlImGui
+# These folders are kept as placeholders in Git and should be populated locally.
 # ============================================================
+set(FX2D_IMGUI_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui"   CACHE PATH "Path to Dear ImGui sources")
+set(FX2D_RLIMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/rlImGui" CACHE PATH "Path to rlImGui sources")
+
+if (NOT EXISTS "${FX2D_IMGUI_DIR}/imgui.cpp")
+  message(FATAL_ERROR "Dear ImGui sources were not found. Populate lib/imgui/ locally before building.")
+endif()
+if (NOT EXISTS "${FX2D_RLIMGUI_DIR}/rlImGui.cpp")
+  message(FATAL_ERROR "rlImGui sources were not found. Populate lib/rlImGui/ locally before building.")
+endif()
+
+set(FX2D_IMGUI_SOURCE_DIR "${FX2D_IMGUI_DIR}")
+set(FX2D_RLIMGUI_SOURCE_DIR "${FX2D_RLIMGUI_DIR}")
+
 add_library(rlimgui_library STATIC
-  lib/imgui/imgui.cpp
-  lib/imgui/imgui_draw.cpp
-  lib/imgui/imgui_tables.cpp
-  lib/imgui/imgui_widgets.cpp
-  lib/rlImGui/rlImGui.cpp
+  "${FX2D_IMGUI_SOURCE_DIR}/imgui.cpp"
+  "${FX2D_IMGUI_SOURCE_DIR}/imgui_draw.cpp"
+  "${FX2D_IMGUI_SOURCE_DIR}/imgui_tables.cpp"
+  "${FX2D_IMGUI_SOURCE_DIR}/imgui_widgets.cpp"
+  "${FX2D_RLIMGUI_SOURCE_DIR}/rlImGui.cpp"
 )
 
 target_include_directories(rlimgui_library PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui"
-  "${CMAKE_CURRENT_SOURCE_DIR}/lib/rlImGui"
+  "${FX2D_IMGUI_SOURCE_DIR}"
+  "${FX2D_RLIMGUI_SOURCE_DIR}"
 )
 
 # rlImGui needs raylib headers/types
@@ -183,6 +197,19 @@ endfunction()
 fx2d_tune_target(Fx2Dlib)
 fx2d_tune_target(${TARGET_NAME})
 
+if (FX2D_BUILD_TESTS)
+  enable_testing()
+
+  add_executable(Fx2DTests
+    tests/test_aabb_tree.cpp
+    tests/test_joints.cpp
+  )
+
+  target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)
+  fx2d_tune_target(Fx2DTests)
+  add_test(NAME Fx2DTests COMMAND Fx2DTests)
+endif()
+
 # ============================================================
 # Interprocedural Optimization (LTO/IPO)
 # ============================================================
@@ -203,4 +230,6 @@ endif()
 # ============================================================
 message(STATUS "Raylib target: ${RAYLIB_TARGET}")
 message(STATUS "yaml-cpp target: ${YAMLCPP_TARGET}")
+message(STATUS "ImGui source dir: ${FX2D_IMGUI_SOURCE_DIR}")
+message(STATUS "rlImGui source dir: ${FX2D_RLIMGUI_SOURCE_DIR}")
 message(STATUS "Executable will be: ${CMAKE_BINARY_DIR}/${TARGET_NAME}")

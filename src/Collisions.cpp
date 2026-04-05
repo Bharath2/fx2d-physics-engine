@@ -200,7 +200,10 @@ namespace FxSolver {
             FxContact cAB = compute_contact_one_way(A, B);
             FxContact cBA = compute_contact_one_way(B, A);
             if (!cAB.is_valid(false) || !cBA.is_valid(false)) return FxContact(false);
-            contact = (cAB.penetration_depth <= cBA.penetration_depth) ? cAB : cBA;
+            // Bias toward cAB unless cBA is clearly shallower; prevents floating-point
+            // jitter from flipping the reference edge every frame and reversing the tangent.
+            float bias = 0.005f * cAB.penetration_depth + 1e-6f;
+            contact = (cBA.penetration_depth < cAB.penetration_depth - bias) ? cBA : cAB;
         }
 
         // Ensure normal points from entity1 -> entity2

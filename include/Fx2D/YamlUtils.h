@@ -34,6 +34,8 @@ namespace FxYAML {
     FxVisualShape buildVisualShape(const YAML::Node& config);
     FxCollisionShape buildCollisionShape(const YAML::Node& config);
     std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML::Node& config);
+    // Build a joint from a YAML node; looks up parent/child entities by name from scene.
+    std::shared_ptr<FxJoint> buildJoint(const std::string& joint_name, const YAML::Node& config, FxScene& scene);
 
     inline FxScene buildScene(const std::string& textOrPath){
         YAML::Node config = LoadSmart(textOrPath);

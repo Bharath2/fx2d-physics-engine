@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-APP="Fx2D" 
+APP="Fx2D"
 BUILD_DIR="build"
 
 CMD="${1:-build}"
-CFG="${2:-Release}" 
+CFG="${2:-Release}"
 EXTRA="${3:-}"
 
-GEN=(); EXT="" 
-case "$(uname -s)" in 
+GEN=(); EXT=""
+case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        GEN=(-G "MinGW Makefiles"); EXT=".exe" ;; 
+        GEN=(-G "MinGW Makefiles"); EXT=".exe" ;;
 esac
 
 copy_bin() {
@@ -22,11 +22,13 @@ copy_bin() {
 
 cfg() { cmake -S . -B "$BUILD_DIR" "${GEN[@]}" -DCMAKE_BUILD_TYPE="$CFG" $EXTRA; }
 build() { cmake --build "$BUILD_DIR" --config "$CFG" --parallel; copy_bin; }
+test_run() { cmake --build "$BUILD_DIR" --config "$CFG" --parallel; ctest --test-dir "$BUILD_DIR" -C "$CFG" --output-on-failure; }
 
 case "$CMD" in
   clean)   rm -rf "$BUILD_DIR" "./$APP$EXT" ;;
   debug)   CFG=Debug; rm -rf "$BUILD_DIR" "./$APP$EXT"; cfg; build ;;
   rebuild) rm -rf "$BUILD_DIR" "./$APP$EXT"; cfg; build ;;
+  test)    cfg; test_run ;;
   build|all) cfg; build ;;
-  *) echo "usage: $0 [build|rebuild|debug|clean] [Release|Debug] [\"-DOPT=VAL …\"]"; exit 1 ;;
+  *) echo "usage: $0 [build|rebuild|debug|test|clean] [Release|Debug] [\"-DOPT=VAL ...\"]"; exit 1 ;;
 esac
