@@ -10,7 +10,6 @@ A 2D rigid body physics engine written in C++20, using SAT collision detection, 
 - **XPBD constraint solver:** Position-based dynamics with compliance control
 - **Modern memory management:** Safe resource handling with `std::shared_ptr` / `std::unique_ptr`
 - **YAML based scene description:** Declarative setup of entities, textures, and physics parameters in `.yml` files
-- **Dynamic scene modification:** Runtime manipulation of entities and constraints
 - **FxArray & Math Utilities**: NumPy-style `FxArray` and comprehensive linear-algebra utilities in Fx2D/Math.h
 - **raylib-based rendering:** Lightweight, cross-platform renderer with raylib and ImGui integration
 
@@ -25,6 +24,8 @@ A 2D rigid body physics engine written in C++20, using SAT collision detection, 
 - **rlImGui** - Raylib-ImGui integration
 
 ## Installation & Build
+
+The repository keeps `lib/imgui` and `lib/rlImGui` as placeholder folders in Git, but it does not commit the third-party sources. Populate those folders locally before building.
 
 ### Method 1: CMake
 
@@ -89,16 +90,24 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 
 ![2D truck suspension physics simulation](./examples/truck/play.gif)
 
+## Documentation
+
+| Doc | Description |
+|---|---|
+| [scene_yml.md](./docs/scene_yml.md) | Full reference for writing `Scene.yml` files — scene block, entities, geometry types, physics fields |
+| [xpbd_solver.md](./docs/xpbd_solver.md) | How the XPBD solver works — per-substep pipeline, constraint kernel equations, constraint types |
+| [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |
+| [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |
+| [headless_mode.md](./docs/headless_mode.md) | Running the simulation without a renderer for testing and data collection |
+| [math_utils.md](./docs/math_utils.md) | `FxArray`, vector/matrix math utilities, and helper functions |
+
+## Roadmap
+
+See [ToDo.md](./ToDo.md) for the current feature and robustness roadmap.
+
 ## License
 
 BSD-3-Clause License
-
-## Todo
-
-- Controllable joints
-- Dynamic AABB tree
-- Improve velocity resolution in collisions  
-- and More.
 
 ## Contributing
 

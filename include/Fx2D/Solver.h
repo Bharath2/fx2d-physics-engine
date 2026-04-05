@@ -20,6 +20,10 @@ struct FxContact {
 
     std::shared_ptr<FxEntity> entity1 = nullptr;  // First entity in collision
     std::shared_ptr<FxEntity> entity2 = nullptr;  // Second entity in collision
+
+    // Cached impulses reused on the next frame to reduce jitter in persistent contacts.
+    float jn_accumulated[2] = {0.0f, 0.0f};
+    float jt_accumulated[2] = {0.0f, 0.0f};
     
     // Constructor overloads
     FxContact() = default;
@@ -39,10 +43,10 @@ class FxConstraint {
   protected:
     std::string m_name;                 // "id1_id2_constraint-name"
     double compliance = 1e-7;           // XPBD alpha = compliance / dt^2
-  public:
-    // bool entities_collide = false;     // Whether connected entities should collide
     std::shared_ptr<FxEntity> entity1;
     std::shared_ptr<FxEntity> entity2;
+  public:
+    // bool entities_collide = false;     // Whether connected entities should collide
     // Set stiffness (converts to compliance internally)
     void set_stiffness(double k) {
         if (k <= 0.0) return;
@@ -58,6 +62,15 @@ class FxConstraint {
     void resolve(double dt);
     // Accessor method for name (required by FxNamedRegistry)
     const std::string& get_name() const { return m_name; }
+    
+    // Entity accessor methods (read-only)
+    const std::shared_ptr<FxEntity>& get_entity1() const { return entity1; }
+    const std::shared_ptr<FxEntity>& get_entity2() const { return entity2; }
+    
+    // Entity name accessor methods
+    std::string get_entity1_name() const;
+    std::string get_entity2_name() const;
+    
     virtual ~FxConstraint() = default;
 };
 
@@ -142,6 +155,8 @@ namespace FxSolver {
     // Main collision resolution method 
     void resolve_penetration(const FxContact& contact, double dt = 0.016f);
     // Velocity-level solver: restitution and dynamic friction impulses
-    void resolve_velocities(const FxContact& contact);
+    void resolve_velocities(FxContact& contact);
+    // Re-apply cached impulses from the previous solve before computing new ones.
+    void warm_start(FxContact& contact);
 
 } // namespace FxSolver

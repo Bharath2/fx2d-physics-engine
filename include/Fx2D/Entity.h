@@ -56,8 +56,8 @@ class FxEntity {
     // mass and inertia
     float _mass = 1.0f;     
     float _inertia = 1.0f;   // around center of mass
-    float _inv_mass = 0.125f;
-    float _inv_inertia = 8.0f;
+    float _inv_mass = 1.0f;
+    float _inv_inertia = 1.0f;
     
     // store initial state for reset
     FxVec3f _init_pose {0, 0, 0};
@@ -78,6 +78,10 @@ class FxEntity {
 
     // axis aligned bounding box in world coordinates
     FxArray<float> m_bounding_box {-1.0f, -1.0f, -1.0f, -1.0f}; 
+
+    // sleep state tracking
+    float m_sleep_timer = 0.0f;
+    bool  m_sleeping    = false;
 
     //update pose from velocity
     void __update_pose(const double& step_dt);
@@ -101,6 +105,15 @@ class FxEntity {
     
     // entity state
     bool enabled = true;  // If false, entity is skipped in physics updates, collisions, and rendering
+
+    // sleep configuration
+    float sleep_threshold_linear  = 0.01f;  // linear speed below which entity may sleep
+    float sleep_threshold_angular = 0.05f;  // angular speed below which entity may sleep
+    float sleep_time_required     = 0.5f;   // seconds of low motion before sleeping
+    bool is_sleeping() const { return m_sleeping; }
+    void wake()  { m_sleeping = false; m_sleep_timer = 0.0f; }
+    void sleep() { m_sleeping = true; }
+    void tick_sleep(float dt);  // advance sleep timer; called by FxScene each step
 
     // contructor with name validation
     explicit FxEntity(const std::string& entityName);

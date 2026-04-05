@@ -22,9 +22,9 @@ static constexpr double FxPid = std::numbers::pi_v<double>;
 
 // Helper function for angle wrapping
 static inline float FxAngleWrap(float angle) {
-    while (angle >= FxPif) angle -= 2.0f * FxPif;
-    while (angle < -FxPif) angle += 2.0f * FxPif;
-    return angle;
+    angle = std::fmod(angle + FxPif, 2.0f * FxPif);
+    if (angle < 0.0f) angle += 2.0f * FxPif;
+    return angle - FxPif;
 }
 
 
@@ -470,6 +470,27 @@ public:
     void set_y(uint8_t val) { (*this)(1) = val; }
     void set_z(uint8_t val) { (*this)(2) = val; }
     void set_a(uint8_t val) { (*this)(3) = val; }
+};
+
+
+// Axis-aligned bounding box in 2D world coordinates
+struct FxAABB {
+    float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
+    FxAABB() = default;
+    FxAABB(float mnX, float mnY, float mxX, float mxY)
+        : minX(mnX), minY(mnY), maxX(mxX), maxY(mxY) {}
+    static FxAABB combine(const FxAABB& a, const FxAABB& b) {
+        return { std::min(a.minX,b.minX), std::min(a.minY,b.minY),
+                 std::max(a.maxX,b.maxX), std::max(a.maxY,b.maxY) };
+    }
+    FxAABB fatten(float margin) const { return {minX-margin,minY-margin,maxX+margin,maxY+margin}; }
+    float perimeter() const { return (maxX-minX)+(maxY-minY); }
+    bool overlaps(const FxAABB& o) const {
+        return maxX>=o.minX && o.maxX>=minX && maxY>=o.minY && o.maxY>=minY;
+    }
+    bool contains(const FxAABB& inner) const {
+        return minX<=inner.minX && minY<=inner.minY && maxX>=inner.maxX && maxY>=inner.maxY;
+    }
 };
 
 

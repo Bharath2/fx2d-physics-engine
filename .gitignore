@@ -2,7 +2,9 @@ build
 assets
 bin
 lib/imgui/*
+!lib/imgui/.gitkeep
 lib/rlImGui/*
+!lib/rlImGui/.gitkeep
 imgui.ini
 *.exe
 .vscode
