@@ -63,6 +63,28 @@ namespace FxSolver {
         return std::make_pair(p1_projected, q1_projected);
     }
 
+    // tests A's edge normals against B; early-exits on first sep axis, else tracks min-penetration axis
+    static FxSatResult sat_query(const FxShape* A_shape, const FxShape* B_shape) {
+        const auto &A_vertices = A_shape->vertices();
+        FxSatResult result;
+        for (size_t i=0, n = A_vertices.size(); i < n; ++i) {
+            const FxVec2f &s = A_vertices[i];
+            const FxVec2f &e = A_vertices[(i+1)%n];
+            FxVec2f dir = (e - s).normalized();
+            FxVec2f axis = dir.perp();
+            auto [B_min_idx, B_min_val] = B_shape->project_onto(axis, s).argmin();
+            if (B_min_val > 0.f) { result.has_sep = true; return result; } // separating axis
+            if (B_min_val > result.gap) {
+                result.normal           = axis;
+                result.gap              = B_min_val;
+                result.ref_edge_dir     = dir;
+                result.ref_edge_index   = i;
+                result.pen_vertex_index = B_min_idx;
+            }
+        }
+        return result;
+    }
+
     FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape) {
         auto contact = FxContact(true); 
         contact.penetration_depth = 0.0f;
@@ -132,38 +154,21 @@ namespace FxSolver {
         // Polygon vs Polygon
         const auto &A_vertices = A_shape->vertices(); 
         const auto &B_vertices = B_shape->vertices();
-        std::size_t A_ref_edge_index=0, B_pen_vertex_index=0; 
-        FxVec2f A_ref_edge_dir{0, 0};
-        float best_penetration = FxInfinityf;
-        for (size_t i=0, n = A_vertices.size(); i < n; ++i) {
-            const FxVec2f &s = A_vertices[i];
-            const FxVec2f &e = A_vertices[(i+1)%n];
-            FxVec2f dir = (e - s).normalized();
-            FxVec2f axis = dir.perp();
-            auto B_proj = B_shape->project_onto(axis, s);
-            auto [B_min_idx, B_min_val] = B_proj.argmin();
-            if (B_min_val > 0.f) { // separating axis
-                contact.set_valid(false); return contact; 
-            } 
-            float pen = std::abs(B_min_val);
-            if (pen < best_penetration) {
-                contact.normal = axis; best_penetration = pen; 
-                A_ref_edge_dir = dir; A_ref_edge_index = i; 
-                B_pen_vertex_index = B_min_idx; 
-            }
-        }
-        contact.penetration_depth = best_penetration;
+        FxSatResult sat = sat_query(A_shape, B_shape);
+        if (sat.has_sep) { contact.set_valid(false); return contact; } // separating axis found
+        contact.normal            = sat.normal;
+        contact.penetration_depth = std::abs(sat.gap);
     
         if (!B_vertices.empty()) {
             const size_t B_N = B_vertices.size();
-            const size_t ifwd = (B_pen_vertex_index + 1)%B_N;
-            const size_t ibwd = (B_pen_vertex_index + B_N - 1)%B_N;
-            const FxVec2f B_edge_start = B_vertices[B_pen_vertex_index];
-            const float dot_fwd = std::abs((B_vertices[ifwd] - B_edge_start).normalized().dot(A_ref_edge_dir));
-            const float dot_bwd = std::abs((B_edge_start - B_vertices[ibwd]).normalized().dot(A_ref_edge_dir));
+            const size_t ifwd = (sat.pen_vertex_index + 1)%B_N;
+            const size_t ibwd = (sat.pen_vertex_index + B_N - 1)%B_N;
+            const FxVec2f B_edge_start = B_vertices[sat.pen_vertex_index];
+            const float dot_fwd = std::abs((B_vertices[ifwd] - B_edge_start).normalized().dot(sat.ref_edge_dir));
+            const float dot_bwd = std::abs((B_edge_start - B_vertices[ibwd]).normalized().dot(sat.ref_edge_dir));
             const FxVec2f B_edge_end = dot_bwd > dot_fwd ? B_vertices[ibwd] : B_vertices[ifwd];
-            const FxVec2f &A_edge_start = A_vertices[A_ref_edge_index]; 
-            const FxVec2f &A_edge_end = A_vertices[(A_ref_edge_index+1)%A_vertices.size()];
+            const FxVec2f &A_edge_start = A_vertices[sat.ref_edge_index]; 
+            const FxVec2f &A_edge_end = A_vertices[(sat.ref_edge_index+1)%A_vertices.size()];
             const auto contact_points = clip_edge(B_edge_start, B_edge_end, A_edge_start, A_edge_end);
             contact.position[0] = contact_points.first;
             contact.position[1] = contact_points.second;
@@ -185,7 +190,6 @@ namespace FxSolver {
         // Check if bounding boxes overlap first
         if (!aabb_overlap_check(*entity1, *entity2)) return FxContact(false);
         
-        // // Returns contact normal and penetration depth  
         auto contact = FxContact(true);
         
         // the shapes are considered to be intersecting if they are not separated along any axis.
@@ -200,8 +204,7 @@ namespace FxSolver {
             FxContact cAB = compute_contact_one_way(A, B);
             FxContact cBA = compute_contact_one_way(B, A);
             if (!cAB.is_valid(false) || !cBA.is_valid(false)) return FxContact(false);
-            // Bias toward cAB unless cBA is clearly shallower; prevents floating-point
-            // jitter from flipping the reference edge every frame and reversing the tangent.
+            // bias toward cAB: prevents jitter from flipping the reference edge each frame
             float bias = 0.005f * cAB.penetration_depth + 1e-6f;
             contact = (cBA.penetration_depth < cAB.penetration_depth - bias) ? cBA : cAB;
         }
@@ -215,6 +218,97 @@ namespace FxSolver {
             contact.normal  = contact.normal.normalized();
         }
         return contact;
+    }
+
+    // no-early-exit SAT: returns the axis of minimum signed separation for speculative contact
+    static std::pair<FxVec2f, float> sat_gap_query(const FxShape* A_shape, const FxShape* B_shape) {
+        const auto &A_vertices = A_shape->vertices();
+        FxVec2f best_normal{1.0f, 0.0f};
+        float   best_val = FxInfinityf;
+        for (size_t i=0, n = A_vertices.size(); i < n; ++i) {
+            const FxVec2f &s = A_vertices[i];
+            const FxVec2f &e = A_vertices[(i+1)%n];
+            FxVec2f axis = (e - s).normalized().perp();
+            auto [B_min_idx, B_min_val] = B_shape->project_onto(axis, s).argmin();
+            if (B_min_val < best_val) { best_val = B_min_val; best_normal = axis; }
+        }
+        return {best_normal, best_val};
+    }
+
+    // speculative contact for CCD: returns pre-contact (gap < 0) when bodies will collide this substep
+    FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
+                                        const std::shared_ptr<FxEntity>& entity2,
+                                        float substep_dt) {
+        if (!entity1 || !entity2) return FxContact(false);
+        if (!entity1->collision_geometry() || !entity2->collision_geometry()) return FxContact(false);
+        if (substep_dt <= 0.0f) return FxContact(false);
+
+        const FxShape* A = entity1->collision_geometry().get();
+        const FxShape* B = entity2->collision_geometry().get();
+        FxVec2f rel_vel = entity2->velocity.head<2>() - entity1->velocity.head<2>();
+
+        FxVec2f normal;
+        float   gap;
+
+        if (A->is_circle() && B->is_circle()) {
+            // Exact axis for circle-circle
+            FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
+            float dist = delta.norm();
+            if (dist < 1e-6f) return FxContact(false);
+            normal = delta / dist;
+            gap    = dist - A->radius() - B->radius();
+        } else if (A->is_circle() || B->is_circle()) {
+            // Closest point on the polygon edge to the circle center
+            const FxShape* circle  = A->is_circle() ? A : B;
+            const FxShape* polygon = A->is_circle() ? B : A;
+            FxVec2f cC = circle->centroid();
+            const auto& verts = polygon->vertices();
+            float   min_dist = FxInfinityf;
+            FxVec2f closest{};
+            for (size_t i = 0, n = verts.size(); i < n; ++i) {
+                const FxVec2f& s = verts[i];
+                const FxVec2f& e = verts[(i + 1) % n];
+                FxVec2f dir = e - s;
+                float   len2 = dir.dot(dir);
+                if (len2 < 1e-6f) continue;
+                float t = std::clamp((cC - s).dot(dir) / len2, 0.f, 1.f);
+                FxVec2f p = s + t * dir;
+                float d = (cC - p).norm();
+                if (d < min_dist) { min_dist = d; closest = p; }
+            }
+            if (min_dist == FxInfinityf) return FxContact(false);
+            // Normal from circle surface → polygon (direction from circle center to closest point)
+            FxVec2f raw = (min_dist > 1e-6f) ? (closest - cC) / min_dist : FxVec2f{1.f, 0.f};
+            normal = A->is_circle() ? raw : -raw;  // keep entity1 → entity2 convention
+            gap    = min_dist - circle->radius();
+        } else {
+            // Polygon-polygon: run gap queries both ways, pick the axis with the smallest gap
+            auto [nAB, gAB] = sat_gap_query(A, B);
+            auto [nBA, gBA] = sat_gap_query(B, A);
+            if (gAB <= gBA) { normal = nAB;  gap = gAB; }
+            else            { normal = -nBA; gap = gBA; } // flip B->A to A->B convention
+        }
+
+        // Ensure normal points from entity1 → entity2
+        FxVec2f c2c = entity2->pose.xy() - entity1->pose.xy();
+        if (c2c.dot(normal) < 0.0f) normal = -normal;
+
+        // Closing speed along the contact normal (positive = approaching)
+        float v_closing = -rel_vel.dot(normal);
+        if (v_closing <= 0.0f) return FxContact(false);  // separating
+
+        // Pre-contact depth: negative means the gap will close this substep
+        float spec_depth = gap - v_closing * substep_dt;
+        if (spec_depth >= 0.0f) return FxContact(false);
+
+        FxContact c(true);
+        c.count             = 1;
+        c.normal            = normal;
+        c.penetration_depth = spec_depth;
+        c.position[0]       = entity1->pose.xy() + normal * A->radius();
+        c.entity1           = entity1;
+        c.entity2           = entity2;
+        return c;
     }
 
 } // namespace FxSolver

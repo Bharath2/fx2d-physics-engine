@@ -132,6 +132,7 @@ Controls how the entity responds to forces, gravity, and collisions.
 | `static_friction` | float | `0.0` | Static friction coefficient used in contact force calculation |
 | `dynamic_friction` | float | `0.0` | Kinetic friction coefficient used in contact force calculation |
 | `external_forces_enabled` | bool | `true` | If `false`, the entity ignores external forces and collisions (gravity still applies) |
+| `ccd` | bool | `false` | If `true`, enables speculative contacts for this entity to prevent tunneling at high speeds |
 
 ```yaml
 physics:
@@ -142,6 +143,7 @@ physics:
     static_friction: 0.4
     dynamic_friction: 0.3
     external_forces_enabled: true
+    ccd: false
 ```
 
 > **Static bodies:** set `mass: 0` (which sets `inv_mass = 0`) and `gravity_scale: 0.0`. The body will participate in collision detection but receive no correction from the solver.

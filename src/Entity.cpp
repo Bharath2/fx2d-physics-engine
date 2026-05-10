@@ -128,6 +128,7 @@ void FxEntity::apply_impulse(const FxVec2f& impulse, const FxVec2f& contact_poin
 
 // Advance sleep timer; put entity to sleep when below threshold long enough
 void FxEntity::tick_sleep(float dt) {
+    if (_inv_mass == 0.0f) { m_sleeping = false; m_sleep_timer = 0.0f; return; } // static bodies never sleep
     float speed_lin = velocity.head<2>().norm();
     float speed_ang = std::abs(velocity.theta());
     if (speed_lin < sleep_threshold_linear && speed_ang < sleep_threshold_angular) {

@@ -21,16 +21,19 @@ This file tracks the next feature and robustness targets for Fx2D.
 
 3. Add continuous collision support.
    Reduce tunneling for fast movers with:
+   - ~~speculative contacts~~ ✅ Done
+     - `FxEntity::enable_ccd` flag (default `false`, zero overhead when off)
+     - `FxSolver::speculative_contact_check()` generates a pre-contact (negative depth) when gap closes within the substep
+     - Sleep filter in `Registry::get_broad_phase_pairs()` bypassed for CCD bodies
+     - YAML `ccd:` key supported under the `physics:` block
    - time-of-impact style sweeps
-   - speculative contacts
    - fast-body or bullet-style handling for selected entities
 
-4. Harden broad-phase and collision robustness.
-   Continue the registry-backed dynamic AABB tree cleanup and tighten collision stability for:
-   - stacking
-   - restitution edge cases
-   - friction stability
-   - sleeping / waking interactions
+4. ~~Harden broad-phase and collision robustness.~~ ✅ Done
+   - Fixed fragile AABB sentinel check in `Registry::get_broad_phase_pairs()` using `FxAABB::is_valid()`
+   - Static bodies (`inv_mass == 0`) no longer enter sleep state
+   - Constrained entities are excluded from sleep-tick to prevent mid-joint drift
+   - Restitution slop raised to `2e-2f` to suppress micro-bounce during stacking
 
 5. Expand test coverage and regression coverage.
    Add more automated checks for:

@@ -179,6 +179,7 @@ namespace FxYAML {
             entity->static_friction = physics["static_friction"].as<float>(0.0f); // default to 0.0 if not specified
             entity->dynamic_friction = physics["dynamic_friction"].as<float>(0.0f); // default to 0.2 if not specified
             entity->enable_external_forces(physics["external_forces_enabled"].as<bool>(true)); // default to true if not specified
+            entity->enable_ccd = physics["ccd"].as<bool>(false); // default to false if not specified
         }
 
         // Read visual properties

@@ -491,6 +491,7 @@ struct FxAABB {
     bool contains(const FxAABB& inner) const {
         return minX<=inner.minX && minY<=inner.minY && maxX>=inner.maxX && maxY>=inner.maxY;
     }
+    bool is_valid() const { return maxX > minX && maxY > minY; }
 };
 
 
