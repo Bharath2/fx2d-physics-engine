@@ -273,7 +273,9 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
     }
 
     // Get broad phase pairs for collision detection using the dynamic AABB tree.
-    std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs() const {
+    // substep_dt > 0: CCD-enabled entities get a swept AABB (union of current + displaced by v*dt)
+    // so fast movers are paired even when the tight AABB doesn't yet overlap the target's fat AABB.
+    std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs(float substep_dt = 0.0f) const {
         // First sync the tree with the latest entity transforms and enable/disable state.
         for (size_t i = 0; i < m_items_vec.size(); ++i) {
             const auto& e = m_items_vec[i];
@@ -289,15 +291,25 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             }
 
             const auto& bb = e->bounding_box();
-            if (bb[0] < 0.0f && bb[1] < 0.0f && bb[2] < 0.0f) continue;
-
             FxAABB tight { bb[0], bb[1], bb[2], bb[3] };
+            if (!tight.is_valid()) continue;
+
+            // For CCD bodies, extend the insertion AABB to cover the swept path this substep.
+            FxAABB query_aabb = tight;
+            if (e->enable_ccd && substep_dt > 0.0f) {
+                float dx = e->velocity.x() * substep_dt;
+                float dy = e->velocity.y() * substep_dt;
+                FxAABB swept { tight.minX + dx, tight.minY + dy,
+                               tight.maxX + dx, tight.maxY + dy };
+                query_aabb = FxAABB::combine(tight, swept);
+            }
+
             if (!in_tree) {
                 // New or re-enabled entities lazily create their tree leaf on demand.
-                int32_t node = m_aabb_tree.insert(static_cast<int32_t>(eid), tight);
+                int32_t node = m_aabb_tree.insert(static_cast<int32_t>(eid), query_aabb);
                 m_entity_node_map[eid] = node;
             } else {
-                m_aabb_tree.update(m_entity_node_map.at(eid), tight);
+                m_aabb_tree.update(m_entity_node_map.at(eid), query_aabb);
             }
         }
 
@@ -316,7 +328,8 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             size_t i = ia->second;
             size_t j = ib->second;
 
-            if (m_items_vec[i]->is_sleeping() && m_items_vec[j]->is_sleeping()) continue;
+            if (m_items_vec[i]->is_sleeping() && m_items_vec[j]->is_sleeping() &&
+                !m_items_vec[i]->enable_ccd && !m_items_vec[j]->enable_ccd) continue;
             if (!is_collision_pair(static_cast<uint32_t>(eid_a), static_cast<uint32_t>(eid_b))) continue;
             if (!m_items_vec[i]->collision_geometry() || !m_items_vec[j]->collision_geometry()) continue;
 

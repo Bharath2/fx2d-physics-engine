@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cmath>
 
+// Minimum closing speed (m/s) to trigger restitution; prevents micro-bounce during stacking
+static constexpr float kRestitutionSlop = 2e-2f;
+
 // Entity name accessor methods for FxConstraint
 std::string FxConstraint::get_entity1_name() const {
     return entity1 ? entity1->get_name() : "";
@@ -346,7 +349,7 @@ namespace FxSolver {
                 float ra_n = rA[k].cross(n), rb_n = rB[k].cross(n); 
                 float K_n = wA + wB + IA * ra_n * ra_n + IB * rb_n * rb_n;
                 
-                float bias = (vn < -1e-3f) ? e : 0.0f;
+                float bias = (vn < -kRestitutionSlop) ? e : 0.0f;
                 if (K_n > 1e-6f) {
                     float fresh_jn = -(1.0f + bias) * vn / K_n;
                     float old_jn = contact.jn_accumulated[k];

@@ -104,7 +104,8 @@ class FxEntity {
     float dynamic_friction = 0.0f;
     
     // entity state
-    bool enabled = true;  // If false, entity is skipped in physics updates, collisions, and rendering
+    bool enabled     = true;   // If false, entity is skipped in physics updates, collisions, and rendering
+    bool enable_ccd  = false;  // If true, speculative contacts are generated for this entity to prevent tunneling
 
     // sleep configuration
     float sleep_threshold_linear  = 0.01f;  // linear speed below which entity may sleep

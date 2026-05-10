@@ -100,11 +100,6 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 | [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |
 | [headless_mode.md](./docs/headless_mode.md) | Running the simulation without a renderer for testing and data collection |
 | [math_utils.md](./docs/math_utils.md) | `FxArray`, vector/matrix math utilities, and helper functions |
-| [ToDo.md](./docs/ToDo.md) | Current feature and robustness roadmap for Fx2D |
-
-## Roadmap
-
-See [ToDo.md](./docs/ToDo.md) for the current feature and robustness roadmap.
 
 ## License
 

@@ -181,9 +181,11 @@ void FxScene::step(double step_dt) {
 
         // compute contacts - skip disabled entities
         contacts.clear();
-        auto broad_phase_pairs = m_entities.get_broad_phase_pairs();
+        auto broad_phase_pairs = m_entities.get_broad_phase_pairs(static_cast<float>(substep_dt));
         for (const auto& pair : broad_phase_pairs) {
             FxContact c = FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
+            if (!c.is_valid() && (entities_vec[pair.first]->enable_ccd || entities_vec[pair.second]->enable_ccd))
+                c = FxSolver::speculative_contact_check(entities_vec[pair.first], entities_vec[pair.second], static_cast<float>(substep_dt));
             if (c.is_valid()) {
                 // Wake any sleeping entity involved in an actual contact
                 if (c.entity1 && c.entity1->is_sleeping()) c.entity1->wake();
@@ -252,10 +254,16 @@ void FxScene::step(double step_dt) {
     // Update total elapsed time
     m_time_elapsed += clamped_dt;
 
-    // Advance sleep timers for all awake, enabled entities
+    // Advance sleep timers for all awake, enabled entities that aren't held by a constraint
+    std::unordered_set<uint32_t> constrained_ids;
+    for (const auto& c : m_constraints.items()) {
+        if (c->get_entity1()) constrained_ids.insert(c->get_entity1()->get_entity_id());
+        if (c->get_entity2()) constrained_ids.insert(c->get_entity2()->get_entity_id());
+    }
     const float sleep_dt = static_cast<float>(clamped_dt);
     m_entities.for_each(std::execution::seq, [&](auto entity) {
-        if (entity->enabled && !entity->is_sleeping()) {
+        if (entity->enabled && !entity->is_sleeping() &&
+            constrained_ids.find(entity->get_entity_id()) == constrained_ids.end()) {
             entity->tick_sleep(sleep_dt);
         }
     });

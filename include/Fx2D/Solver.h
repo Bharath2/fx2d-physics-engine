@@ -9,6 +9,18 @@
 // Forward declaration
 class FxEntity;
 
+// Result of a single-sided SAT overlap query (A's edges tested against B).
+// gap < 0: bodies overlapping, |gap| = penetration depth on that axis.
+// has_sep: true if a separating axis was found (no overlap from A's side).
+struct FxSatResult {
+    FxVec2f normal           = {1.0f, 0.0f}; // edge normal of the min-penetration axis
+    float   gap              = -FxInfinityf;  // maximum B_min_val seen (signed separation)
+    bool    has_sep          = false;          // true if any edge gave gap > 0
+    size_t  ref_edge_index   = 0;             // index of that edge in A's vertex list
+    FxVec2f ref_edge_dir     = {0.0f, 0.0f};  // normalized direction along that edge
+    size_t  pen_vertex_index = 0;             // index of B's deepest vertex on that edge
+};
+
 struct FxContact {
   private:
     bool m_is_valid = false;  
@@ -151,6 +163,12 @@ namespace FxSolver {
     // Main collision detection method using SAT
     const FxContact collision_check(const FxEntity& entity1, const FxEntity& entity2);
     const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1, const std::shared_ptr<FxEntity>& entity2);
+
+    // Speculative contact for CCD bodies: generates a pre-contact when bodies are separated but
+    // approaching fast enough to close the gap within this substep.
+    FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
+                                        const std::shared_ptr<FxEntity>& entity2,
+                                        float substep_dt);
 
     // Main collision resolution method 
     void resolve_penetration(const FxContact& contact, double dt = 0.016f);
