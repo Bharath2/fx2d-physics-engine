@@ -30,34 +30,59 @@ A successful collision check produces an `FxContact`:
 
 `FxSolver::collision_check(entity1, entity2)` dispatches to `compute_contact_one_way()` based on the shape types of the two entities.
 
+#### Unified shape model
+
+All shapes are stored as `vertices[] + skin_radius`:
+
+| Shape   | Vertex count | Skin radius |
+|---------|--------------|-------------|
+| Circle  | 0            | radius      |
+| Capsule | 2 (segment endpoints) | end-cap radius |
+| Polygon | ≥ 3          | 0 (sharp) or > 0 (rounded corners) |
+
+Every contact computation works in two steps: find the closest features between the two raw cores (point, segment, or polygon), then subtract `rA + rB` from the resulting gap. The contact point lies on the skin surface of B (i.e. shifted by `-rB` along the normal from the raw core contact).
+
 #### Circle–Circle
 
 ```
 d     = center2 − center1
 dist  = ‖d‖
 depth = rA + rB − dist
-
-normal = d / dist
-contact_point = center1 + normal * rA
 ```
 
-Active when `depth > 0`.
+Active when `depth > 0`. `normal = d / dist`; `contact_point = center1 + normal * (rA - depth/2)`.
 
 #### Circle–Polygon
 
-The nearest point on any polygon edge to the circle centre is found. The penetration depth is `r − dist_to_nearest_point`. The contact normal points **from the circle centre toward the nearest polygon edge point** (i.e. in the A → B direction, from circle toward polygon).
+The nearest point on any polygon edge to the circle centre is found. The penetration depth is `(rA + rB) − dist`. The contact normal points **from the circle centre toward the nearest polygon edge point** (i.e. in the A → B direction, from circle toward polygon). For rounded polygons, the contact point is shifted by `-rB · normal` to lie on the polygon's skin surface.
 
 #### Polygon–Circle
 
 Internally flips to Circle–Polygon and negates the resulting normal so the convention (`entity1 → entity2`) is preserved.
 
-#### Polygon–Polygon (SAT)
+#### Capsule–X
+
+Capsule collisions reduce to "virtual circle at closest segment point" vs the other shape:
+
+| Other shape | Reduction |
+|-------------|-----------|
+| Circle      | closest point on capsule segment to circle centre → circle–circle |
+| Capsule     | closest pair between the two segments (`seg_seg_closest`) → circle–circle |
+| Polygon     | closest segment-to-edge pair across all polygon edges → circle–polygon |
+
+The capsule's `skin_radius` plays the role of the virtual circle's radius. A zero-length capsule reduces exactly to a circle; a zero-radius capsule is a bare line segment.
+
+#### Polygon–Polygon (SAT, skin-aware)
 
 The **Separating Axis Theorem** is applied using every edge normal of shape A as a candidate separating axis:
 
 1. For each edge normal `n̂` of shape A, project all vertices of shape B onto `n̂`.
-2. If the minimum projection of B is greater than the maximum projection of A on `n̂`, a separating axis exists → no collision, return early.
-3. Track the axis with the **minimum overlap** — this becomes the contact normal and penetration depth.
+2. Compute the skin-inclusive gap as `min_B_projection − (rA + rB)`. If positive on any axis, a separating axis exists → no collision, return early.
+3. Track the axis with the **minimum (most-negative) gap** — this becomes the contact normal and `−gap` is the penetration depth.
+
+Contact-point clipping (`clip_edge`, Sutherland–Hodgman style) operates on the raw vertices, then the resulting points are shifted by `-rB · normal` to land on B's skin surface. This unifies sharp-corner polygons (`rB = 0`) and rounded ones with a single code path.
+
+The final normal is re-oriented so it always points **entity1 → entity2**.
 
 Once the reference edge (on A) and incident edge (on B) are identified, up to **2 contact points** are computed via `clip_edge()` — a Sutherland–Hodgman-style clipping of the incident edge against the side planes of the reference edge. This gives stable multi-point contacts for flat-face collisions (e.g. a box resting on a plane).
 

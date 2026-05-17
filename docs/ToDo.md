@@ -6,10 +6,15 @@ This file tracks the next feature and robustness targets for Fx2D.
 
 1. Add more collision shapes.
    Start with a few high-value shapes that unlock better level geometry and character collision:
-   - capsules
-   - line segments / edges
+   - ~~capsules~~ ✅ Done
+   - ~~line segments / edges~~ ✅ Done (zero-radius capsule)
    - chain or polyline colliders
-   - rounded boxes or other rounded convex variants
+   - ~~rounded boxes or other rounded convex variants~~ ✅ Done (skin radius on any polygon)
+
+   All shapes now share a unified `vertices[] + skin_radius` storage. `FxShape` recognises three
+   types: `Circle` (0 vertices), `Capsule` (2 vertices), and `Polygon` (>=3 vertices); any of the
+   latter two can carry a Minkowski-sum skin radius. YAML adds a `capsule:` key and an optional
+   `radius:` modifier on `rectangle:` / `polygon:` for rounded variants.
 
 2. Add higher-level query and event systems.
    Build public scene/world APIs for:

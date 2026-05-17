@@ -65,19 +65,38 @@ namespace FxYAML {
             throw std::runtime_error("Expected geometry:{…} block.");
         }
         FxShape shape;
+        // Optional uniform Minkowski-sum skin radius for rectangles/polygons (rounded corners).
+        const float skin_radius = geom["radius"] ? geom["radius"].as<float>() : 0.0f;
+
         // 1) Circle?
         if (auto circle_node = geom["circle"]) {
             float radius = circle_node.as<float>();
             shape = FxShape(radius);
         }
-        // 2) Rectangle?
+        // 2) Capsule? Either {capsule: [length, radius]} or {capsule: {length: L, radius: R}}.
+        else if (auto cap_node = geom["capsule"]) {
+            float length = 0.0f, radius = 0.0f;
+            if (cap_node.IsSequence() && cap_node.size() == 2) {
+                length = cap_node[0].as<float>();
+                radius = cap_node[1].as<float>();
+            } else if (cap_node.IsMap()) {
+                if (!cap_node["length"] || !cap_node["radius"])
+                    throw std::runtime_error("capsule map requires 'length' and 'radius'.");
+                length = cap_node["length"].as<float>();
+                radius = cap_node["radius"].as<float>();
+            } else {
+                throw std::runtime_error("capsule must be a 2-sequence [length, radius] or a map.");
+            }
+            shape = FxShape(length, radius);
+        }
+        // 3) Rectangle? (optionally rounded if `radius:` is supplied)
         else if (auto rect_node = geom["rectangle"]) {
             if (!rect_node.IsSequence() || rect_node.size() != 2)
                 throw std::runtime_error("rectangle must be a 2-sequence.");
             auto sz = parseArray<2>(rect_node);
-            shape = FxShape({ sz[0], sz[1] });
+            shape = FxShape(FxVec2f{ sz[0], sz[1] }, skin_radius);
         }
-        // 3) Polygon?
+        // 4) Polygon? (optionally rounded if `radius:` is supplied)
         else if (auto poly_node = geom["polygon"]) {
             if (!poly_node.IsSequence())
                 throw std::runtime_error("polygon must be a sequence.");
@@ -88,10 +107,10 @@ namespace FxYAML {
                 auto pt_ = parseArray<2>(pt);
                 verts.push_back(FxVec2f({pt_[0], pt_[1]}));
             }
-            shape = FxShape(verts);
+            shape = FxShape(verts, skin_radius);
         }
         else { throw std::runtime_error("Unknown geometry type in shape config."); }
-        // 4) Set the offset pose
+        // 5) Set the offset pose
         shape.set_offset_pose({pose_offset[0], pose_offset[1], pose_offset[2]});
         return shape;
     }
