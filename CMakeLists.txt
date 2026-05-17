@@ -204,6 +204,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_aabb_tree.cpp
     tests/test_joints.cpp
     tests/test_ccd.cpp
+    tests/test_capsule_collision.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

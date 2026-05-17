@@ -146,11 +146,45 @@ entities:
             static_friction: 0.5           # used in calculation of contact forces
             dynamic_friction: 0.3          # used in calculation of contact forces
         visual:
-            geometry: 
+            geometry:
                 rectangle: [0.75, 0.75]      # width, height
             texture: ./assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
-            geometry: 
+            geometry:
                 rectangle: [0.75, 0.75]      # width, height
+    capsule_demo:
+        pose: [2.5, 6.0, 0.5]                    # x, y, theta (radians)
+        physics:
+            mass: 1
+            elasticity: 0.5
+            static_friction: 0.4
+            dynamic_friction: 0.25
+        visual:
+            geometry:
+                capsule: [1.2, 0.25]              # [segment_length, end_cap_radius]
+            texture: [80, 160, 220, 255]
+            border_color: [0, 0, 0, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                capsule: [1.2, 0.25]
+    rounded_box_demo:
+        pose: [9.5, 6.5, 0]
+        physics:
+            mass: 1
+            elasticity: 0.6
+            static_friction: 0.4
+            dynamic_friction: 0.25
+        visual:
+            geometry:
+                rectangle: [0.9, 0.9]
+                radius: 0.15                      # Minkowski-sum skin -> rounded corners
+            texture: [220, 140, 80, 255]
+            border_color: [0, 0, 0, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                rectangle: [0.9, 0.9]
+                radius: 0.15

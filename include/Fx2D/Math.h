@@ -1152,20 +1152,31 @@ inline std::ostream& operator<<(std::ostream& os, FxVec3f const& a) {
 
 //---------------------------------------------
 // Shape Definition
+//
+// All shapes share a unified storage model:
+//   * m_vertices   — local core feature points (empty for circle, 2 for capsule, N>=3 for polygon)
+//   * m_skin_radius — Minkowski-sum "skin" radius added uniformly around the core feature
+//
+// Circle           = no vertices,    skin_radius = r
+// Capsule          = 2 endpoints,    skin_radius = r  (zero skin => bare line segment)
+// Polygon          = N>=3 vertices,  skin_radius = 0
+// Rounded polygon  = N>=3 vertices,  skin_radius > 0 (covers rounded rectangles)
 //---------------------------------------------
 enum class FxShapeType {
     Circle,
+    Capsule,
     Polygon
 };
 
 struct FxShape {
   protected:
-    FxShapeType    m_shape_type;                     // "Circle" or "Polygon"
-    float          m_radius;                         // bounding radius 
-    FxVec2fArray   m_vertices;                       // only used for polygons relative to centroid
+    FxShapeType    m_shape_type;                     // Circle, Capsule, or Polygon
+    float          m_radius;                         // bounding radius from centroid (skin-inclusive)
+    float          m_skin_radius = 0.0f;             // Minkowski-sum skin (rounding) radius
+    FxVec2fArray   m_vertices;                       // local vertices: 0 (circle), 2 (capsule), or >=3 (polygon)
     FxVec3f        m_offset_pose {0.0f, 0.0f, 0.0f}; // initial offset pose in world coordinates
     FxVec3f        m_world_pose {0.0f, 0.0f, 0.0f};  // current pose in the world
-    FxVec2f        m_centroid {0.0f, 0.0f};          // 
+    FxVec2f        m_centroid {0.0f, 0.0f};          //
     FxVec2fArray   m_world_vertices;
 
     // 1) Compute the bounding radius from (0,0)
@@ -1211,21 +1222,41 @@ struct FxShape {
 
   public:
     // default ctor
-    FxShape() : m_shape_type(FxShapeType::Circle), m_radius(0.5f) {}
+    FxShape() : m_shape_type(FxShapeType::Circle), m_radius(0.5f), m_skin_radius(0.5f) {}
 
-    //–– Circle ctor
+    //–– Circle ctor: unified as a 0-vertex shape with skin_radius = radius
     FxShape(float radius) {
         if (radius <= 1e-6f)
             throw std::invalid_argument("FxShape: radius must be > 0");
-        m_shape_type = FxShapeType::Circle;
-        m_radius     = radius;
+        m_shape_type  = FxShapeType::Circle;
+        m_radius      = radius;
+        m_skin_radius = radius;
     }
 
-    //–– Polygon from arbitrary vertices
-    FxShape(const FxVec2fArray& vertices) {
+    //–– Capsule ctor: segment of given length (along x in local frame) with end-cap radius.
+    //   length == 0 collapses to a circle of the same radius. radius == 0 yields a bare segment.
+    FxShape(float length, float radius) {
+        if (radius < 0.0f)
+            throw std::invalid_argument("FxShape: capsule radius must be >= 0");
+        if (length < 0.0f)
+            throw std::invalid_argument("FxShape: capsule length must be >= 0");
+        if (length <= 1e-6f && radius <= 1e-6f)
+            throw std::invalid_argument("FxShape: degenerate capsule (zero length and radius)");
+        const float hl = length * 0.5f;
+        m_shape_type     = FxShapeType::Capsule;
+        m_vertices       = { { -hl, 0.0f }, {  hl, 0.0f } };
+        m_skin_radius    = radius;
+        m_radius         = hl + radius;
+        m_world_vertices = m_vertices;
+    }
+
+    //–– Polygon from arbitrary vertices, with optional uniform skin (rounding) radius
+    FxShape(const FxVec2fArray& vertices, float skin_radius = 0.0f) {
         constexpr float minArea = 1e-6f;
         if (vertices.size() < 3)
             throw std::invalid_argument("FxShape: less than 3 vertices");
+        if (skin_radius < 0.0f)
+            throw std::invalid_argument("FxShape: skin radius must be >= 0");
         float area = polygon_area(vertices);
         if (std::fabs(area) <= minArea)
             throw std::invalid_argument("FxShape: area ≤ 2e-6");
@@ -1237,30 +1268,35 @@ struct FxShape {
         if (area > 0.0f) { // saved in CCW order only
             std::reverse(verts.begin(), verts.end());
         }
-        m_vertices   = verts - verts.mean();
-        m_radius     = calc_radius(m_vertices);
+        m_vertices       = verts - verts.mean();
+        m_skin_radius    = skin_radius;
+        m_radius         = calc_radius(m_vertices) + skin_radius;
         m_world_vertices = m_vertices;
     }
 
-    //–– Rectangle centered at origin, width=size.x(), height=size.y()
-    FxShape(const FxVec2f& size) {
+    //–– Rectangle centered at origin, width=size.x(), height=size.y(); optional rounded corners
+    FxShape(const FxVec2f& size, float skin_radius = 0.0f) {
         if (size.x() <= 0.0f || size.y() <= 0.0f)
             throw std::invalid_argument("FxShape: dimensions must be > 0");
+        if (skin_radius < 0.0f)
+            throw std::invalid_argument("FxShape: skin radius must be >= 0");
         float hx = size.x() * 0.5f;
         float hy = size.y() * 0.5f;
         // Check for valid area
         if (hx*hy <= 1e-6f)
             throw std::runtime_error("FxShape: degenerate rectangle");
          // build CCW rectangle around (0, 0)
-        m_vertices = { { -hx, -hy }, {  -hx, hy }, {  hx,  hy }, { hx,  -hy }};
-        m_shape_type = FxShapeType::Polygon;
-        m_radius     = std::sqrt(hx*hx + hy*hy);
+        m_vertices       = { { -hx, -hy }, {  -hx, hy }, {  hx,  hy }, { hx,  -hy }};
+        m_shape_type     = FxShapeType::Polygon;
+        m_skin_radius    = skin_radius;
+        m_radius         = std::sqrt(hx*hx + hy*hy) + skin_radius;
         m_world_vertices = m_vertices;
     }
 
     // getters for shape properties
     FxShapeType shape_type() const { return m_shape_type; }
     float radius() const { return m_radius; }
+    float skin_radius() const { return m_skin_radius; }
     FxVec2fArray vertices() const { return m_world_vertices; }
     FxVec2fArray __vertices() const { return m_vertices; } // native coordinates of vertices with centroid as (0,0)
     FxVec2f centroid() const {  return m_centroid;}
@@ -1270,43 +1306,87 @@ struct FxShape {
         return m_shape_type == FxShapeType::Circle;
     }
 
+    bool is_capsule() const {
+        return m_shape_type == FxShapeType::Capsule;
+    }
+
     bool is_polygon() const {
         return m_shape_type == FxShapeType::Polygon;
     }
 
-    // Get area of the shape (handles both circle and polygon)
+    // Get area of the shape (handles circle, capsule, and polygon — skin radius included)
     float area() const {
         if (is_circle()) {
-            return FxPif * m_radius * m_radius;
-        } else {
-            return std::abs(polygon_area(m_world_vertices));
+            return FxPif * m_skin_radius * m_skin_radius;
         }
+        if (is_capsule()) {
+            // Minkowski sum of segment (length L) with disc (radius r):
+            // area = pi r^2 (two end caps form one full disc) + 2 r L (central rectangle)
+            const float L = (m_vertices[1] - m_vertices[0]).norm();
+            return FxPif * m_skin_radius * m_skin_radius + 2.0f * m_skin_radius * L;
+        }
+        // Polygon: raw polygon area + (skin contribution if rounded)
+        const float core = std::abs(polygon_area(m_world_vertices));
+        if (m_skin_radius <= 0.0f) return core;
+        // Skin contribution = perimeter * r + pi r^2 (full disc from summing exterior corner angles)
+        float perim = 0.0f;
+        const auto& V = m_vertices;
+        for (std::size_t i = 0, n = V.size(); i < n; ++i) {
+            perim += (V[(i + 1) % n] - V[i]).norm();
+        }
+        return core + perim * m_skin_radius + FxPif * m_skin_radius * m_skin_radius;
     }
 
-    // Calculate moment of inertia for given mass
+    // Calculate moment of inertia for given mass (uniform density)
     float calc_inertia(float mass) const {
         if (is_circle()) {
-            return 0.5f * mass * m_radius * m_radius;
-        } else {
-            const std::size_t n = m_vertices.size();
-            float signed_twice_area = 0.0f;
-            float accum = 0.0f;
-            for (std::size_t i = 0; i < n; ++i) {
-                const FxVec2f& a = m_vertices[i];
-                const FxVec2f& b = m_vertices[(i + 1) % n];
-                const float cross = a.x() * b.y() - b.x() * a.y();
-                signed_twice_area += cross;
-                const float x2 = a.x() * a.x() + a.x() * b.x() + b.x() * b.x();
-                const float y2 = a.y() * a.y() + a.y() * b.y() + b.y() * b.y();
-                accum += cross * (x2 + y2);
-            }
+            return 0.5f * mass * m_skin_radius * m_skin_radius;
+        }
+        if (is_capsule()) {
+            // Uniform-density capsule: rectangle (L x 2r) + full disc (radius r) split between caps.
+            const float L = (m_vertices[1] - m_vertices[0]).norm();
+            const float r = m_skin_radius;
+            const float A_rect = 2.0f * r * L;
+            const float A_caps = FxPif * r * r;
+            const float A_tot  = A_rect + A_caps;
+            if (A_tot < 1e-6f) return 0.0f;
+            const float m_rect = mass * (A_rect / A_tot);
+            const float m_caps = mass * (A_caps / A_tot);
+            // Rectangle about its centroid (capsule center): I = m * (L^2 + (2r)^2) / 12
+            const float I_rect = m_rect * (L * L + 4.0f * r * r) / 12.0f;
+            // Two half-discs offset by L/2 from capsule center; parallel-axis theorem.
+            const float I_caps = 0.5f * m_caps * r * r + m_caps * (L * 0.5f) * (L * 0.5f);
+            return I_rect + I_caps;
+        }
+        // Polygon (with optional skin):
+        const std::size_t n = m_vertices.size();
+        float signed_twice_area = 0.0f;
+        float accum = 0.0f;
+        for (std::size_t i = 0; i < n; ++i) {
+            const FxVec2f& a = m_vertices[i];
+            const FxVec2f& b = m_vertices[(i + 1) % n];
+            const float cross = a.x() * b.y() - b.x() * a.y();
+            signed_twice_area += cross;
+            const float x2 = a.x() * a.x() + a.x() * b.x() + b.x() * b.x();
+            const float y2 = a.y() * a.y() + a.y() * b.y() + b.y() * b.y();
+            accum += cross * (x2 + y2);
+        }
+        float core_area = std::abs(signed_twice_area * 0.5f);
+        if (core_area < 1e-6f) return 0.0f;
 
-            float area = std::abs(signed_twice_area * 0.5f);
-            if (area < 1e-6f) return 0.0f;
-
-            float density = mass / area;
+        if (m_skin_radius <= 0.0f) {
+            const float density = mass / core_area;
             return (density / 12.0f) * std::abs(accum);
         }
+        // Rounded polygon: keep the bare polygon inertia and add a uniform skin ring approximation.
+        // The skin contributes mass roughly at the average vertex radius + skin_radius.
+        const float total_area = area();
+        const float density    = mass / total_area;
+        const float I_core     = (density / 12.0f) * std::abs(accum);
+        // Skin mass approximated as a ring at the bounding radius.
+        const float m_skin   = mass - density * core_area;
+        const float r_eff_sq = m_radius * m_radius - m_skin_radius * m_skin_radius * 0.5f;
+        return I_core + m_skin * std::max(0.0f, r_eff_sq);
     }
 
     // offset pose setter and getter 
@@ -1320,13 +1400,18 @@ struct FxShape {
         if (is_circle()) {
             float pX = m_centroid.x();
             float pY = m_centroid.y();
-            return {pX - m_radius, pY - m_radius, pX + m_radius, pY + m_radius}; // AABB for circle
-        } else {
-            // rotate vertices by offset and world pose theta
-            m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta()); 
-            m_world_vertices += m_centroid;
-            return m_world_vertices.bounds();
+            float r  = m_skin_radius;
+            return {pX - r, pY - r, pX + r, pY + r}; // AABB for circle
         }
+        // Capsule and polygon: rotate local vertices into world frame, then inflate AABB by skin.
+        m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta());
+        m_world_vertices += m_centroid;
+        FxArray<float> bb = m_world_vertices.bounds();
+        if (m_skin_radius > 0.0f) {
+            bb[0] -= m_skin_radius; bb[1] -= m_skin_radius;
+            bb[2] += m_skin_radius; bb[3] += m_skin_radius;
+        }
+        return bb;
     }
 
     // Getter for the current world pose of the shape
@@ -1356,40 +1441,60 @@ struct FxShape {
         set_world_pose(m_world_pose);
     }
 
-    // project the shape onto an axis
+    // Skin-inclusive projection interval [min, max] of the shape along an axis.
     FxArray<float> project_onto(const FxVec2f& axis) const {
         if (is_circle()) {
             float p = m_centroid.dot(axis);
-            return {p - m_radius, p + m_radius};
-        } else {
-            return (m_world_vertices).dot(axis);
+            return {p - m_skin_radius, p + m_skin_radius};
         }
+        FxArray<float> raw = m_world_vertices.dot(axis);
+        float lo = raw[0], hi = raw[0];
+        for (std::size_t i = 1; i < raw.size(); ++i) {
+            if (raw[i] < lo) lo = raw[i];
+            if (raw[i] > hi) hi = raw[i];
+        }
+        return {lo - m_skin_radius, hi + m_skin_radius};
     }
 
-    // project the shape onto a line segment
+    // Per-vertex raw projection along axis with origin shifted (no skin applied).
+    // SAT routines subtract the sum of both shapes' skin radii explicitly.
     FxArray<float> project_onto(const FxVec2f& axis, const FxVec2f& origin) const {
         if (is_circle()) {
-            float p = (m_centroid  - origin).dot(axis);
-            return {p - m_radius, p + m_radius};
-        } else {
-            return (m_world_vertices - origin).dot(axis);
+            float p = (m_centroid - origin).dot(axis);
+            // For circles, treat the centroid as a single "vertex" so argmin works uniformly.
+            return {p, p};
         }
+        return (m_world_vertices - origin).dot(axis);
     }
 
-    //get the closest vertex of the shape from a point
+    //get the closest vertex of the shape from a point (returns surface point, skin-inclusive)
     FxVec2f get_closest_vertex(const FxVec2f& point) const {
         if (is_circle()) {
             FxVec2f v = point - m_centroid;     // vector from center to query point
             FxVec2f dir;
             if (v.dot(v) < 1e-6f) dir = FxVec2f(1.0f, 0.0f);      // arbitrary unit vector
             else dir = v.normalized();                         // safe to normalize
-            return m_centroid + dir * m_radius;
-        } else {
-            auto shifted = (m_world_vertices - point);
-            auto dist = (shifted).dot(shifted);
-            auto [min_ind, min_value] = dist.argmin();
-            return m_world_vertices[min_ind];
+            return m_centroid + dir * m_skin_radius;
         }
-    } 
+        if (is_capsule()) {
+            // Closest point on the capsule's central segment, then pushed out by skin radius.
+            const FxVec2f& a = m_world_vertices[0];
+            const FxVec2f& b = m_world_vertices[1];
+            FxVec2f ab = b - a;
+            float len2 = ab.dot(ab);
+            FxVec2f q = (len2 < 1e-6f)
+                        ? a
+                        : a + std::clamp((point - a).dot(ab) / len2, 0.0f, 1.0f) * ab;
+            FxVec2f v = point - q;
+            float vlen = v.norm();
+            FxVec2f dir = (vlen > 1e-6f) ? v / vlen : FxVec2f(1.0f, 0.0f);
+            return q + dir * m_skin_radius;
+        }
+        // Polygon
+        auto shifted = (m_world_vertices - point);
+        auto dist = (shifted).dot(shifted);
+        auto [min_ind, min_value] = dist.argmin();
+        return m_world_vertices[min_ind];
+    }
 
 };
