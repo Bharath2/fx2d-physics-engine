@@ -173,6 +173,22 @@ void FxRylbRenderer::draw_scene() {
                 DrawRing(Vector2{x, y}, inner, outer, 0.0f, 360.0f,
                          ring_segments(r), to_rl_color(visual->outlineColor()));
             }
+		} else if (visual->is_edge()) {
+			const FxVec2fArray& local = visual->__vertices();
+			const float c = cosf(pose.theta()), s = sinf(pose.theta());
+			const FxVec2f C = pose.get_xy();
+			float wx0 = C.x() + c * local[0].x() - s * local[0].y();
+			float wy0 = C.y() + s * local[0].x() + c * local[0].y();
+			float wx1 = C.x() + c * local[1].x() - s * local[1].y();
+			float wy1 = C.y() + s * local[1].x() + c * local[1].y();
+			Vector2 p0{ sx(wx0), sy(wy0) };
+			Vector2 p1{ sx(wx1), sy(wy1) };
+			const float thickness = (visual->outlineThickness() > 0.0f) ? visual->outlineThickness() : 2.0f;
+			DrawLineEx(p0, p1, thickness, to_rl_color(visual->outlineColor()));
+			// rounded end caps (cosmetic, matches polygon outline style)
+			const float cap_r = 0.5f * thickness;
+			DrawCircleV(p0, cap_r, to_rl_color(visual->outlineColor()));
+			DrawCircleV(p1, cap_r, to_rl_color(visual->outlineColor()));
 		} else {
 			const FxVec2fArray& local = visual->__vertices();
 			const size_t n = local.size();
