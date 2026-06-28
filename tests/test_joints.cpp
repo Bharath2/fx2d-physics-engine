@@ -241,10 +241,12 @@ void test_entity_registry_remove_keeps_broad_phase_consistent() {
 
 void run_aabb_tree_tests(); // defined in test_aabb_tree.cpp
 void run_ccd_tests();       // defined in test_ccd.cpp
+void run_edge_tests();      // defined in test_collisions_edge.cpp
 
 int main() {
     run_aabb_tree_tests();
     run_ccd_tests();
+    run_edge_tests();
     test_pid_round_trip();
     test_effort_aliases();
     test_effort_mode_applies_direct_effort();

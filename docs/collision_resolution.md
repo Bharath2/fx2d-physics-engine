@@ -63,6 +63,20 @@ Once the reference edge (on A) and incident edge (on B) are identified, up to **
 
 The final normal is re-oriented so it always points **entity1 → entity2**.
 
+#### Edge (line-segment) Collider
+
+`FxShapeType::Edge` is a zero-thickness segment with `radius = 0`. It reuses existing segment helpers for the circle and capsule cases (both are correct at `rCap = 0`) and uses a dedicated path for the polygon case.
+
+**Edge–Circle** → `capsule_circle_contact`: finds the closest point `Q` on the segment to the circle centre; penetration = `rCircle − ‖centre − Q‖`; normal from `Q` toward the circle centre.
+
+**Edge–Capsule** → `capsule_capsule_contact`: uses the segment–segment closest-point pair; penetration = `rCapsule − dist`.
+
+**Edge–Polygon** → dedicated `edge_polygon_contact`: the capsule–polygon helper early-bails at `rCap = 0`, so a purpose-built path is used. It computes each polygon vertex's signed distance to the edge's supporting line (normal oriented toward the polygon centroid), finds the deepest penetrating vertices within the segment span `[0, L]`, and generates up to 2 contact points.
+
+**Edge–Edge** → always returns no contact. Both shapes are intended to be static, so resolving two zero-area static colliders has no physical effect.
+
+Edges are excluded from the speculative/CCD path (`speculative_contact_check` returns no contact when either shape is an edge).
+
 ---
 
 ## Position Correction — `resolve_penetration`
