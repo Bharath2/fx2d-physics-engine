@@ -90,8 +90,16 @@ namespace FxYAML {
             }
             shape = FxShape(verts);
         }
+        // 4) Edge?
+        else if (auto edge_node = geom["edge"]) {
+            if (!edge_node.IsSequence() || edge_node.size() != 2)
+                throw std::runtime_error("edge must be a 2-sequence of [x,y] points.");
+            auto p0 = parseArray<2>(edge_node[0]);
+            auto p1 = parseArray<2>(edge_node[1]);
+            shape = FxShape(FxVec2f{p0[0], p0[1]}, FxVec2f{p1[0], p1[1]});
+        }
         else { throw std::runtime_error("Unknown geometry type in shape config."); }
-        // 4) Set the offset pose
+        // 5) Set the offset pose
         shape.set_offset_pose({pose_offset[0], pose_offset[1], pose_offset[2]});
         return shape;
     }
