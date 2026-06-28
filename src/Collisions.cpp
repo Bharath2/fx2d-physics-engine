@@ -63,6 +63,168 @@ namespace FxSolver {
         return std::make_pair(p1_projected, q1_projected);
     }
 
+    // Closest point on segment [A,B] to point P.
+    static FxVec2f closest_pt_on_seg(const FxVec2f& P, const FxVec2f& A, const FxVec2f& B) {
+        FxVec2f AB = B - A;
+        float len2 = AB.dot(AB);
+        if (len2 < 1e-6f) return A;
+        float t = std::clamp((P - A).dot(AB) / len2, 0.f, 1.f);
+        return A + t * AB;
+    }
+
+    // Closest point pair between segments [A0,A1] and [B0,B1].
+    static std::pair<FxVec2f, FxVec2f> closest_pts_seg_seg(
+        const FxVec2f& A0, const FxVec2f& A1,
+        const FxVec2f& B0, const FxVec2f& B1)
+    {
+        FxVec2f d1 = A1 - A0, d2 = B1 - B0, r = A0 - B0;
+        float a = d1.dot(d1), e = d2.dot(d2), f = d2.dot(r);
+        float s, t;
+        if (a < 1e-6f && e < 1e-6f) return {A0, B0};
+        if (a < 1e-6f) {
+            s = 0.f; t = std::clamp(f / e, 0.f, 1.f);
+        } else {
+            float c = d1.dot(r);
+            if (e < 1e-6f) {
+                t = 0.f; s = std::clamp(-c / a, 0.f, 1.f);
+            } else {
+                float b = d1.dot(d2);
+                float denom = a * e - b * b;
+                s = (std::abs(denom) > 1e-6f) ? std::clamp((b * f - c * e) / denom, 0.f, 1.f) : 0.f;
+                t = (b * s + f) / e;
+                if (t < 0.f) { t = 0.f; s = std::clamp(-c / a, 0.f, 1.f); }
+                else if (t > 1.f) { t = 1.f; s = std::clamp((b - c) / a, 0.f, 1.f); }
+            }
+        }
+        return {A0 + s * d1, B0 + t * d2};
+    }
+
+    // Edge (or capsule) vs circle contact. Normal: segment surface → circle center.
+    static FxContact capsule_circle_contact(const FxShape* cap, const FxShape* circ) {
+        const auto& verts = cap->vertices();
+        FxVec2f Q = closest_pt_on_seg(circ->centroid(), verts[0], verts[1]);
+        FxVec2f d = circ->centroid() - Q;
+        float dist = d.norm();
+        float pen  = cap->radius() + circ->radius() - dist;
+        FxContact c(true);
+        if (pen > 0.f) {
+            FxVec2f n = (dist > 1e-6f) ? d / dist : FxVec2f{0.f, 1.f};
+            c.normal = n;
+            c.penetration_depth = pen;
+            c.position[0] = Q + n * cap->radius();
+            c.count = 1;
+        } else { c.set_valid(false); }
+        return c;
+    }
+
+    // Capsule (or edge) vs capsule (or edge) contact. Normal: segment-A surface → segment-B.
+    static FxContact capsule_capsule_contact(const FxShape* capA, const FxShape* capB) {
+        const auto& va = capA->vertices();
+        const auto& vb = capB->vertices();
+        auto [pA, pB] = closest_pts_seg_seg(va[0], va[1], vb[0], vb[1]);
+        FxVec2f d = pB - pA;
+        float dist = d.norm();
+        float pen  = capA->radius() + capB->radius() - dist;
+        FxContact c(true);
+        if (pen > 0.f) {
+            FxVec2f n = (dist > 1e-6f) ? d / dist : FxVec2f{0.f, 1.f};
+            c.normal = n;
+            c.penetration_depth = pen;
+            c.position[0] = pA + n * capA->radius();
+            c.count = 1;
+        } else { c.set_valid(false); }
+        return c;
+    }
+
+    // Capsule vs polygon contact: minimum distance between core segment and polygon boundary.
+    static FxContact capsule_polygon_contact(const FxShape* cap, const FxShape* poly) {
+        const auto& cv = cap->vertices();
+        const auto& pv = poly->vertices();
+        size_t nP = pv.size();
+        if (nP < 2) return FxContact(false);
+        float   rCap     = cap->radius();
+        float   min_dist = FxInfinityf;
+        FxVec2f best_cap_pt{0.f, 0.f}, best_poly_pt{0.f, 0.f};
+        for (size_t i = 0; i < nP; ++i) {
+            auto [pc, pp] = closest_pts_seg_seg(cv[0], cv[1], pv[i], pv[(i+1)%nP]);
+            float d = (pc - pp).norm();
+            if (d < min_dist) { min_dist = d; best_cap_pt = pc; best_poly_pt = pp; }
+        }
+        float pen = rCap - min_dist;
+        FxContact c(true);
+        if (pen > 0.f) {
+            FxVec2f dv = best_poly_pt - best_cap_pt;
+            FxVec2f n  = (min_dist > 1e-6f) ? dv / min_dist : FxVec2f{0.f, 1.f};
+            c.normal = n;
+            c.penetration_depth = pen;
+            c.position[0] = best_cap_pt + n * rCap;
+            c.count = 1;
+        } else { c.set_valid(false); }
+        return c;
+    }
+
+    // Dedicated edge↔polygon contact (capsule_polygon_contact early-bails at rCap=0 — D2/D10).
+    // Normal points from the edge toward the polygon; collision_check re-orients to entity1→entity2.
+    static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) {
+        const auto& ev = edge->vertices();
+        FxVec2f E0 = ev[0], E1 = ev[1];
+        FxVec2f eu = E1 - E0;
+        float L = eu.norm();
+        if (L < 1e-6f) return FxContact(false);
+        eu /= L;
+
+        FxVec2f n = eu.perp();
+        if ((poly->centroid() - E0).dot(n) < 0.f) n = -n;  // orient toward polygon
+
+        const auto& pv = poly->vertices();
+        size_t nP = pv.size();
+        if (nP == 0) return FxContact(false);
+
+        float deepest_sd = FxInfinityf;
+        float poly_min_t = FxInfinityf, poly_max_t = -FxInfinityf;
+        for (size_t i = 0; i < nP; ++i) {
+            float sd = (pv[i] - E0).dot(n);
+            if (sd < deepest_sd) deepest_sd = sd;
+            float t = (pv[i] - E0).dot(eu);
+            if (t < poly_min_t) poly_min_t = t;
+            if (t > poly_max_t) poly_max_t = t;
+        }
+        if (deepest_sd >= 0.f) return FxContact(false);
+        if (poly_max_t < 0.f || poly_min_t > L) return FxContact(false);
+
+        // Collect up to 2 deepest penetrating vertices within segment span [0, L]
+        FxVec2f best[2] = {FxVec2f{0.f, 0.f}, FxVec2f{0.f, 0.f}};
+        float   bsd[2]  = {0.f, 0.f};
+        int     nb = 0;
+        for (size_t i = 0; i < nP; ++i) {
+            float sd = (pv[i] - E0).dot(n);
+            if (sd >= 0.f) continue;
+            float t = (pv[i] - E0).dot(eu);
+            if (t < 0.f || t > L) continue;
+            FxVec2f cpt = E0 + t * eu;
+            if (nb < 2) {
+                best[nb] = cpt; bsd[nb] = sd; ++nb;
+            } else {
+                int sh = (bsd[0] > bsd[1]) ? 0 : 1;  // index of shallowest stored
+                if (sd < bsd[sh]) { best[sh] = cpt; bsd[sh] = sd; }
+            }
+        }
+        if (nb == 0) return FxContact(false);
+
+        FxContact c(true);
+        c.normal = n;
+        c.penetration_depth = -bsd[0];
+        c.position[0] = best[0];
+        if (nb == 2) {
+            float dist = (best[1] - best[0]).norm();
+            if (dist >= 0.01f) { c.position[1] = best[1]; c.count = 2; }
+            else               { c.count = 1; }
+        } else {
+            c.count = 1;
+        }
+        return c;
+    }
+
     // tests A's edge normals against B; early-exits on first sep axis, else tracks min-penetration axis
     static FxSatResult sat_query(const FxShape* A_shape, const FxShape* B_shape) {
         const auto &A_vertices = A_shape->vertices();
@@ -86,9 +248,14 @@ namespace FxSolver {
     }
 
     FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape) {
-        auto contact = FxContact(true); 
+        auto contact = FxContact(true);
         contact.penetration_depth = 0.0f;
-    
+
+        // Segment shapes (capsule/edge) are handled by dedicated helpers in collision_check.
+        if (A_shape->has_core_segment() || B_shape->has_core_segment()) {
+            contact.set_valid(false); return contact;
+        }
+
         // Circle vs Circle
         if (A_shape->is_circle() && B_shape->is_circle()) {
             FxVec2f cA = A_shape->centroid(); 
@@ -196,7 +363,27 @@ namespace FxSolver {
         const FxShape* A = entity1->collision_geometry().get();
         const FxShape* B = entity2->collision_geometry().get();
         
-        if (A->is_circle()) {
+        // Segment-shape dispatch (capsule or edge via has_core_segment())
+        auto seg = [](const FxShape* s) { return s->has_core_segment(); };
+        if (seg(A) || seg(B)) {
+            if (seg(A) && seg(B)) {
+                if (A->is_edge() && B->is_edge()) {
+                    // lean: no edge-edge contact — ceiling: dynamic edge-edge — upgrade: when edge-edge physics needed
+                    return FxContact(false);
+                }
+                contact = capsule_capsule_contact(A, B);
+            } else {
+                const FxShape* seg_s = seg(A) ? A : B;
+                const FxShape* other = seg(A) ? B : A;
+                if (other->is_circle()) {
+                    contact = capsule_circle_contact(seg_s, other);
+                } else if (seg_s->is_edge()) {
+                    contact = edge_polygon_contact(seg_s, other);
+                } else {
+                    contact = capsule_polygon_contact(seg_s, other);
+                }
+            }
+        } else if (A->is_circle()) {
             contact = compute_contact_one_way(A, B);
         } else if (B->is_circle()) {
             contact = compute_contact_one_way(B, A);
@@ -245,6 +432,8 @@ namespace FxSolver {
 
         const FxShape* A = entity1->collision_geometry().get();
         const FxShape* B = entity2->collision_geometry().get();
+        // Edges are static; CCD not needed for segment shapes (D5).
+        if (A->has_core_segment() || B->has_core_segment()) return FxContact(false);
         FxVec2f rel_vel = entity2->velocity.head<2>() - entity1->velocity.head<2>();
 
         FxVec2f normal;
