@@ -229,6 +229,19 @@ geometry:
 
 Each entry is a 2D vertex `[x, y]` in local space. Vertices are specified in order (clockwise or counter-clockwise). For collision, convex polygons give the most reliable SAT results.
 
+### Edge
+
+An edge is a zero-thickness line segment defined by two endpoints in local (body) space. Edges are designed for **static level geometry** (floors, walls, ramps) and have zero area and zero inertia.
+
+```yaml
+geometry:
+    edge: [[-2.0, 0.0], [2.0, 0.0]]   # [endpoint_a, endpoint_b]
+```
+
+Each endpoint is `[x, y]` in local space. The two endpoints must be distinct (non-zero length).
+
+> **Static bodies:** pair an edge with `mass: 0` and `gravity_scale: 0.0`. A dynamic body given an edge collision shape has zero inertia and may behave unexpectedly.
+
 ---
 
 ## Complete Entity Example
