@@ -1155,7 +1155,9 @@ inline std::ostream& operator<<(std::ostream& os, FxVec3f const& a) {
 //---------------------------------------------
 enum class FxShapeType {
     Circle,
-    Polygon
+    Polygon,
+    Capsule,
+    Edge
 };
 
 struct FxShape {
@@ -1258,6 +1260,30 @@ struct FxShape {
         m_world_vertices = m_vertices;
     }
 
+    //–– Capsule: length = centre-to-centre distance (core), radius = skin radius.
+    // Core endpoints sit at ±length/2 along local +x; centroid at origin.
+    FxShape(float length, float radius) {
+        if (length <= 0.0f)
+            throw std::invalid_argument("FxShape capsule: length must be > 0");
+        if (radius <= 0.0f)
+            throw std::invalid_argument("FxShape capsule: radius must be > 0");
+        m_shape_type = FxShapeType::Capsule;
+        m_radius     = radius;
+        float half   = length * 0.5f;
+        m_vertices   = { FxVec2f{-half, 0.0f}, FxVec2f{half, 0.0f} };
+        m_world_vertices = m_vertices;
+    }
+
+    //–– Edge: line-segment defined by two endpoints in local/body frame; m_radius = 0.
+    FxShape(const FxVec2f& a, const FxVec2f& b) {
+        if ((b - a).norm() <= 1e-6f)
+            throw std::invalid_argument("FxShape edge: endpoints must be distinct");
+        m_shape_type = FxShapeType::Edge;
+        m_radius     = 0.0f;
+        m_vertices   = { a, b };
+        m_world_vertices = m_vertices;
+    }
+
     // getters for shape properties
     FxShapeType shape_type() const { return m_shape_type; }
     float radius() const { return m_radius; }
@@ -1274,10 +1300,27 @@ struct FxShape {
         return m_shape_type == FxShapeType::Polygon;
     }
 
-    // Get area of the shape (handles both circle and polygon)
+    bool is_capsule() const {
+        return m_shape_type == FxShapeType::Capsule;
+    }
+
+    bool is_edge() const {
+        return m_shape_type == FxShapeType::Edge;
+    }
+
+    // Capsule and Edge both use a two-endpoint core segment stored in m_vertices.
+    bool has_core_segment() const { return is_capsule() || is_edge(); }
+
+    // Get area of the shape (handles circle, polygon, capsule, and edge)
     float area() const {
         if (is_circle()) {
             return FxPif * m_radius * m_radius;
+        } else if (is_edge()) {
+            return 0.0f; // zero-thickness segment
+        } else if (is_capsule()) {
+            // Rectangle (length × 2r) + full-circle caps (πr²)
+            float length = m_vertices[1].x() * 2.0f;
+            return 2.0f * length * m_radius + FxPif * m_radius * m_radius;
         } else {
             return std::abs(polygon_area(m_world_vertices));
         }
@@ -1287,6 +1330,19 @@ struct FxShape {
     float calc_inertia(float mass) const {
         if (is_circle()) {
             return 0.5f * mass * m_radius * m_radius;
+        } else if (is_edge()) {
+            return 0.0f; // zero-thickness, intended for static bodies
+        } else if (is_capsule()) {
+            // Capsule = rectangle (length × 2r) + two half-disk caps at ±length/2.
+            float length   = m_vertices[1].x() * 2.0f;
+            float r        = m_radius;
+            float A_total  = 2.0f * r * length + FxPif * r * r;
+            if (A_total < 1e-12f) return 0.0f;
+            float m_rect   = mass * (2.0f * r * length) / A_total;
+            float m_caps   = mass * (FxPif * r * r) / A_total;
+            float I_rect   = m_rect * (length * length + 4.0f * r * r) / 12.0f;
+            float I_caps   = m_caps * (r * r * 0.5f + length * length * 0.25f);
+            return I_rect + I_caps;
         } else {
             const std::size_t n = m_vertices.size();
             float signed_twice_area = 0.0f;
@@ -1321,9 +1377,17 @@ struct FxShape {
             float pX = m_centroid.x();
             float pY = m_centroid.y();
             return {pX - m_radius, pY - m_radius, pX + m_radius, pY + m_radius}; // AABB for circle
+        } else if (has_core_segment()) {
+            // Rotate the two core endpoints then translate; expand AABB by skin radius.
+            // For Edge, m_radius == 0 so the expansion vanishes (exact-endpoint AABB).
+            m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta());
+            m_world_vertices += m_centroid;
+            auto core_bounds = m_world_vertices.bounds(); // [minX, minY, maxX, maxY]
+            return { core_bounds[0] - m_radius, core_bounds[1] - m_radius,
+                     core_bounds[2] + m_radius, core_bounds[3] + m_radius };
         } else {
             // rotate vertices by offset and world pose theta
-            m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta()); 
+            m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta());
             m_world_vertices += m_centroid;
             return m_world_vertices.bounds();
         }
@@ -1361,6 +1425,11 @@ struct FxShape {
         if (is_circle()) {
             float p = m_centroid.dot(axis);
             return {p - m_radius, p + m_radius};
+        } else if (has_core_segment()) {
+            // Project both core endpoints, expand by skin radius.
+            // For Edge, m_radius == 0 so the expansion vanishes.
+            auto ps = m_world_vertices.dot(axis);
+            return {ps.min() - m_radius, ps.max() + m_radius};
         } else {
             return (m_world_vertices).dot(axis);
         }
@@ -1371,6 +1440,9 @@ struct FxShape {
         if (is_circle()) {
             float p = (m_centroid  - origin).dot(axis);
             return {p - m_radius, p + m_radius};
+        } else if (has_core_segment()) {
+            auto ps = (m_world_vertices - origin).dot(axis);
+            return {ps.min() - m_radius, ps.max() + m_radius};
         } else {
             return (m_world_vertices - origin).dot(axis);
         }
