@@ -1,0 +1,82 @@
+scene:
+    size: [16, 8]
+    gravity: [0, 0]
+    background: [240, 240, 240, 255]
+
+entities:
+    base:
+        pose: [5, 5, 0]
+        physics:
+            mass: 0
+            gravity_scale: 0
+            external_forces_enabled: false
+        visual:
+            geometry:
+                rectangle: [1.0, 0.5]
+            texture: [80, 80, 80, 255]
+        collision:
+            geometry:
+                rectangle: [1.0, 0.5]
+
+    arm:
+        pose: [5.5, 5, 0]
+        physics:
+            mass: 1
+        visual:
+            geometry:
+                rectangle: [2.0, 0.3]
+            texture: [60, 140, 200, 255]
+        collision:
+            geometry:
+                rectangle: [2.0, 0.3]
+
+    rail:
+        pose: [10, 5, 0]
+        physics:
+            mass: 0
+            gravity_scale: 0
+            external_forces_enabled: false
+        visual:
+            geometry:
+                rectangle: [5.0, 0.4]
+            texture: [80, 80, 80, 255]
+        collision:
+            geometry:
+                rectangle: [5.0, 0.4]
+
+    slider:
+        pose: [11.5, 5, 0]
+        physics:
+            mass: 1
+        visual:
+            geometry:
+                rectangle: [0.8, 0.8]
+            texture: [60, 200, 140, 255]
+        collision:
+            geometry:
+                rectangle: [0.8, 0.8]
+
+joints:
+    arm_motor:
+        type: revolute
+        parent: base
+        child: arm
+        anchor: [0.5, 0]
+        angle_min: -3.14
+        angle_max: 3.14
+        control_mode: position
+        target: 0
+        pid: [6, 0.2, 0.05]
+        max_effort: 12
+
+    slider_motor:
+        type: prismatic
+        parent: rail
+        child: slider
+        axis: [1, 0]
+        position_min: -0.5
+        position_max: 6.0
+        control_mode: velocity
+        target: 0
+        pid: [8, 0.2, 0.05]
+        max_effort: 12
