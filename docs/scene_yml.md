@@ -368,3 +368,21 @@ joints:
 **Field defaults** — all `physics` fields are optional; the parser substitutes sensible defaults if missing. Missing `visual` or `collision` blocks mean the entity has no visual/collision geometry respectively.
 
 **Unit system** — positions and sizes are in physics units as defined by `scene.size`. Angles are in **degrees** in YAML (converted internally to radians). Velocities are in units/s and degrees/s.
+
+---
+
+## Complete Joints Example
+
+[`../examples/joint_motor/Scene.yml`](../examples/joint_motor/Scene.yml)
+is a full scene file that uses the `joints:` block in practice. It declares:
+
+- `arm_motor` — `type: revolute`, `parent: base`, `child: arm`, with `anchor`,
+  `angle_min`/`angle_max`, `pid`, `control_mode: position`, `target`, and
+  `max_effort`.
+- `slider_motor` — `type: prismatic`, `parent: rail`, `child: slider`, with
+  `axis`, `position_min`/`position_max`, `pid`, `control_mode: velocity`,
+  `target`, and `max_effort`.
+
+The companion [`main.cpp`](../examples/joint_motor/main.cpp) drives both joints
+through all three control modes. See [joint_control.md](joint_control.md) for
+the motor API reference.
