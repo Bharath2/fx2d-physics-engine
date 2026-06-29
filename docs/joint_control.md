@@ -210,3 +210,15 @@ scene->add_joint(slider);
 ```
 
 For YAML-based joint configuration see [scene_yml.md](scene_yml.md).
+
+---
+
+## Runnable Example
+
+[`../examples/joint_motor/`](../examples/joint_motor/) is a complete, headless
+demo that declares an `arm_motor` (revolute) and a `slider_motor` (prismatic)
+joint in YAML, then drives both through `POSITION`, `VELOCITY`, and `EFFORT`
+phases — printing start state, commanded target, and end state for each joint on
+every phase. Run it from the `examples/joint_motor/` directory (so `./Scene.yml`
+resolves) after copying `main.cpp` to `src/` and building. Add
+`FxRylbRenderer` to `main.cpp` to render the simulation instead.

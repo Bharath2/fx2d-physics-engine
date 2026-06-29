@@ -5,6 +5,10 @@ A 2D rigid body physics engine written in C++20, using SAT collision detection, 
 #### [Examples](./examples/)
 ![2D rigid body stacking simulation](./examples/stacked_boxes/play.gif)
 
+- **[stacked_boxes](./examples/stacked_boxes/)** — rigid body stacking and collision
+- **[truck](./examples/truck/)** — vehicle suspension with distance constraints
+- **[joint_motor](./examples/joint_motor/)** — joint motor control (position / velocity / effort) with YAML-declared joints
+
 ## Key Features
 - **SAT collision detection:** Efficient circle and polygon collision using the Separating Axis Theorem (SAT)
 - **XPBD constraint solver:** Position-based dynamics with compliance control
@@ -94,6 +98,7 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 
 | Doc | Description |
 |---|---|
+| [joint_control.md](./docs/joint_control.md) | Joint motor API — control modes (position / velocity / effort), PID tuning, revolute and prismatic joints |
 | [scene_yml.md](./docs/scene_yml.md) | Full reference for writing `Scene.yml` files — scene block, entities, geometry types, physics fields |
 | [xpbd_solver.md](./docs/xpbd_solver.md) | How the XPBD solver works — per-substep pipeline, constraint kernel equations, constraint types |
 | [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |

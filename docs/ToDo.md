@@ -45,9 +45,9 @@ This file tracks the next feature and robustness targets for Fx2D.
 
 6. Add more examples and docs around newer features.
    Prioritize:
-   - joint control examples for position, velocity, and effort
-   - scene YAML examples that include joints
-   - query/event examples once those APIs exist
+   - ~~joint control examples for position, velocity, and effort~~ ✅ Done (`examples/joint_motor/`)
+   - ~~scene YAML examples that include joints~~ ✅ Done (`examples/joint_motor/Scene.yml`)
+   - query/event examples — pending item 2 (query/event APIs not yet implemented)
 
 ## Why These Matter
 
