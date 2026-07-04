@@ -15,7 +15,7 @@ Include via:
 Joints are looked up by name from a scene:
 
 ```cpp
-auto joint = scene->get_joint("wheel_hinge");              // returns shared_ptr<FxJoint>, nullptr if missing
+auto joint = scene.get_joint("wheel_hinge");              // returns shared_ptr<FxJoint>, nullptr if missing
 auto rev   = std::dynamic_pointer_cast<FxRevoluteJoint>(joint);
 auto pri   = std::dynamic_pointer_cast<FxPrismaticJoint>(joint);
 ```
@@ -23,9 +23,9 @@ auto pri   = std::dynamic_pointer_cast<FxPrismaticJoint>(joint);
 Other scene-level helpers:
 
 ```cpp
-scene->joint_exists("wheel_hinge");   // bool
-scene->joint_count();                 // size_t
-scene->delete_joint("wheel_hinge");   // bool – removes joint and its constraints
+scene.joint_exists("wheel_hinge");   // bool
+scene.joint_count();                 // size_t
+scene.delete_joint("wheel_hinge");   // bool – removes joint and its constraints
 ```
 
 ---
@@ -179,8 +179,8 @@ joint->is_prismatic();                    // bool
 Joints can be created directly without YAML:
 
 ```cpp
-auto chassis = scene->get_entity("chassis");
-auto wheel   = scene->get_entity("wheel");
+auto chassis = scene.get_entity("chassis");
+auto wheel   = scene.get_entity("wheel");
 
 // Revolute: anchor in chassis local frame, limits ±0.6 rad
 auto hinge = std::make_shared<FxRevoluteJoint>(
@@ -192,11 +192,11 @@ hinge->set_pid({5.0f, 0.2f, 0.1f});
 hinge->set_max_torque(20.0f);
 hinge->set_control_mode(ControlMode::EFFORT);
 hinge->set_torque(12.0f);
-scene->add_joint(hinge);
+scene.add_joint(hinge);
 
 // Prismatic: slide along X axis, limits −2 to +2
-auto rail     = scene->get_entity("rail");
-auto carriage = scene->get_entity("carriage");
+auto rail     = scene.get_entity("rail");
+auto carriage = scene.get_entity("carriage");
 auto slider = std::make_shared<FxPrismaticJoint>(
     "slider", rail, carriage,
     FxVec2f{1.0f, 0.0f},    // axis
@@ -206,7 +206,7 @@ slider->set_pid({4.0f, 0.0f, 0.2f});
 slider->set_max_force(8.0f);
 slider->set_control_mode(ControlMode::VELOCITY);
 slider->set_velocity(1.5f);
-scene->add_joint(slider);
+scene.add_joint(slider);
 ```
 
 For YAML-based joint configuration see [scene_yml.md](scene_yml.md).

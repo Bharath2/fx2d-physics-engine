@@ -90,6 +90,8 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 
 ![2D truck suspension physics simulation](./examples/truck/play.gif)
 
+**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute joint motor control (position, velocity, and effort modes)
+
 ## Documentation
 
 | Doc | Description |
@@ -99,6 +101,7 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 | [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |
 | [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |
 | [headless_mode.md](./docs/headless_mode.md) | Running the simulation without a renderer for testing and data collection |
+| [joint_control.md](./docs/joint_control.md) | Joint motor API — revolute and prismatic joints, control modes (position/velocity/effort), PID tuning |
 | [math_utils.md](./docs/math_utils.md) | `FxArray`, vector/matrix math utilities, and helper functions |
 
 ## License
