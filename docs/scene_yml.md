@@ -357,6 +357,8 @@ joints:
         pid: [4.0, 0.0, 0.2]
 ```
 
+For a runnable scene that uses a `joints:` block, see [`examples/joint_control_demo/Scene.yml`](../examples/joint_control_demo/Scene.yml).
+
 ---
 
 ## Notes
