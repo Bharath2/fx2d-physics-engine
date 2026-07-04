@@ -23,6 +23,7 @@ entities:
         physics:
             mass: 1.0
             inertia: 0.5        # explicit: required for angular response (see docs/joint_control.md)
+            gravity_scale: 0.0  # prevent gravity (10 N*m) from overpowering the P=6.0 motor (6 N*m)
         visual:
             geometry:
                 rectangle: [2.0, 0.25]
