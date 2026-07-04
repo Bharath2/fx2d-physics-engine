@@ -7,8 +7,10 @@
 //
 // Run procedure:
 //   1. Copy this file to src/main.cpp (replacing the existing placeholder)
-//   2. Copy Scene.yml next to the built executable
-//   3. Build with CMake per the README and run ./build/Fx2Dapp
+//   2. Build with CMake per the README (from the repo root)
+//   3. Run ./build/Fx2D from the repo root — Scene.yml is loaded by path
+//      relative to the working directory, so run from the repo root, not
+//      from the build/ directory.
 //
 // Visual version: replace the step loops below with
 //   FxRylbRenderer(scene, 60).run()
@@ -19,7 +21,7 @@
 #include <memory>
 
 int main() {
-    FxScene scene = FxYAML::buildScene("./Scene.yml");
+    FxScene scene = FxYAML::buildScene("examples/joint_control_demo/Scene.yml");
 
     std::shared_ptr<FxJoint> j = scene.get_joint("arm_motor");
     if (!j) {
