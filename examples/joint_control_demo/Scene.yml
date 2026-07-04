@@ -1,0 +1,45 @@
+scene:
+    size: [12, 8]
+    gravity: [0, -10]
+    background: [230, 230, 230, 255]
+
+entities:
+    base:                       # static anchor (motor's parent)
+        pose: [6.0, 4.0, 0.0]
+        physics:
+            mass: 0.0           # static: inv_mass = 0
+            gravity_scale: 0.0
+            external_forces_enabled: false
+        visual:
+            geometry:
+                rectangle: [0.4, 0.4]
+            texture: [60, 60, 60, 255]
+        collision:
+            geometry:
+                rectangle: [0.4, 0.4]
+
+    arm:                        # dynamic link driven by the motor
+        pose: [7.0, 4.0, 0.0]
+        physics:
+            mass: 1.0
+            inertia: 0.5        # explicit: required for angular response (see docs/joint_control.md)
+        visual:
+            geometry:
+                rectangle: [2.0, 0.25]
+            texture: [200, 80, 40, 255]
+        collision:
+            geometry:
+                rectangle: [2.0, 0.25]
+
+joints:
+    arm_motor:
+        type: revolute
+        parent: base
+        child: arm
+        anchor: [0.0, 0.0]      # parent local frame (base centre)
+        angle_min: -3.14159
+        angle_max: 3.14159
+        control_mode: position  # initial mode; main.cpp switches it
+        target: 1.0             # radians (revolute position target)
+        max_effort: 25.0
+        pid: [6.0, 0.05, 0.4]
