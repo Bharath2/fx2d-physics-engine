@@ -2,8 +2,8 @@ build
 build-headless
 build-lint
 # Example textures live under examples/*/assets/ (committed, downscaled).
-# Ignore any leftover root assets/ folder used for local extras.
-assets/
+# Ignore only a leftover root-level assets/ folder used for local extras.
+/assets/
 bin
 lib/imgui/*
 !lib/imgui/.gitkeep
