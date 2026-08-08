@@ -153,7 +153,7 @@ void FxRylbRenderer::draw_scene() {
         const float y = sy(pose.y());
 
         if (visual->is_circle()) {
-            const float r = static_cast<float>(m_scale) * visual->radius();
+            const float r = static_cast<float>(m_scale) * visual->skin_radius();
             if (!visual->fillTexture().empty()) {
                 Texture2D tex = get_or_load_texture(visual->fillTexture());
                 if (tex.id != 0) {
@@ -173,11 +173,64 @@ void FxRylbRenderer::draw_scene() {
                 DrawRing(Vector2{x, y}, inner, outer, 0.0f, 360.0f,
                          ring_segments(r), to_rl_color(visual->outlineColor()));
             }
+		} else if (visual->is_capsule()) {
+			// Capsule = central rectangle (length x 2r) + two end-cap discs at the segment endpoints.
+			const FxVec2fArray& local = visual->__vertices();
+			const float skin_w = static_cast<float>(m_scale) * visual->skin_radius();
+			const float cosT = cosf(pose.theta()), sinT = sinf(pose.theta());
+			const FxVec2f C = pose.get_xy();
+			auto to_screen = [&](const FxVec2f& v) {
+				float wx = C.x() + cosT * v.x() - sinT * v.y();
+				float wy = C.y() + sinT * v.x() + cosT * v.y();
+				return Vector2{ sx(wx), sy(wy) };
+			};
+			const Vector2 p0 = to_screen(local[0]);
+			const Vector2 p1 = to_screen(local[1]);
+			const Color fill = to_rl_color(visual->fillColor());
+			// Body: line segment of thickness 2*skin_w covers the central rectangle exactly.
+			if (skin_w > 0.0f) DrawLineEx(p0, p1, 2.0f * skin_w, fill);
+			// End caps: discs at each segment endpoint.
+			if (skin_w > 0.0f) {
+				DrawCircleV(p0, skin_w, fill);
+				DrawCircleV(p1, skin_w, fill);
+			}
+			// Outline: offset edges along the segment normal + arcs at each end.
+			const float outline_px = std::max(0.0f, visual->outlineThickness());
+			if (outline_px > 0.0f) {
+				const Color oc = to_rl_color(visual->outlineColor());
+				// Direction along the segment in screen space (note y is flipped).
+				float dx = p1.x - p0.x, dy = p1.y - p0.y;
+				float len = std::sqrt(dx * dx + dy * dy);
+				if (len > 1e-6f) {
+					float ux = dx / len, uy = dy / len;
+					float nx = -uy, ny = ux; // CCW perpendicular in screen space
+					Vector2 a0{ p0.x + nx * skin_w, p0.y + ny * skin_w };
+					Vector2 a1{ p1.x + nx * skin_w, p1.y + ny * skin_w };
+					Vector2 b0{ p0.x - nx * skin_w, p0.y - ny * skin_w };
+					Vector2 b1{ p1.x - nx * skin_w, p1.y - ny * skin_w };
+					DrawLineEx(a0, a1, outline_px, oc);
+					DrawLineEx(b0, b1, outline_px, oc);
+					// End-cap rings
+					const float inner = std::max(0.0f, skin_w - 0.5f * outline_px);
+					const float outer = skin_w + 0.5f * outline_px;
+					// atan2 returns [-pi, pi]; raylib DrawRing uses degrees, sweep CW.
+					const float ang0_deg = atan2f(ny, nx) * 180.0f / PI;
+					DrawRing(p0, inner, outer, ang0_deg, ang0_deg + 180.0f,
+					         ring_segments(skin_w), oc);
+					DrawRing(p1, inner, outer, ang0_deg + 180.0f, ang0_deg + 360.0f,
+					         ring_segments(skin_w), oc);
+				} else {
+					// Degenerate (zero-length) capsule: just draw a ring like a circle.
+					const float inner = std::max(0.0f, skin_w - 0.5f * outline_px);
+					const float outer = skin_w + 0.5f * outline_px;
+					DrawRing(p0, inner, outer, 0.0f, 360.0f, ring_segments(skin_w), oc);
+				}
+			}
 		} else {
 			const FxVec2fArray& local = visual->__vertices();
 			const size_t n = local.size();
 			if (n < 3) return; // A polygon needs at least 3 vertices.
-		
+
 			//  build screen-space vertices by applying pose (T·R) to LOCAL verts ---
 			std::vector<Vector2> pts;
 			pts.reserve(n);
@@ -188,7 +241,10 @@ void FxRylbRenderer::draw_scene() {
 				float wy = C.y() + s * local[i].x() + c * local[i].y();
 				pts.push_back(Vector2{ sx(wx), sy(wy) });
 			}
-		
+
+			const float skin_w = static_cast<float>(m_scale) * visual->skin_radius();
+			const Color fill = to_rl_color(visual->fillColor());
+
 			// textured fill
 			rlDisableBackfaceCulling();
             if (!visual->fillTexture().empty()) {
@@ -215,20 +271,60 @@ void FxRylbRenderer::draw_scene() {
 					rlSetTexture(0);
 				}
 			} else {
-				DrawTriangleFan(pts.data(), (int)n, to_rl_color(visual->fillColor()));
+				DrawTriangleFan(pts.data(), (int)n, fill);
 			}
+
+			// Rounded-polygon skin: thick edges (2*skin_w wide) + corner discs cover the Minkowski-sum band.
+			if (skin_w > 0.0f) {
+				for (size_t i = 0; i < n; ++i) {
+					DrawLineEx(pts[i], pts[(i + 1) % n], 2.0f * skin_w, fill);
+				}
+				for (const Vector2& p : pts) {
+					DrawCircleV(p, skin_w, fill);
+				}
+			}
+
 			// outline (thickness with rounded joins)
 			const float outline_px = std::max(0.0f, visual->outlineThickness());
 			if (outline_px > 0.0f) {
-				for (size_t i = 0; i < n; ++i) {
-					const Vector2 a = pts[i];
-					const Vector2 b = pts[(i + 1) % n];
-					DrawLineEx(a, b, outline_px, to_rl_color(visual->outlineColor()));
-				}
-				// rounded joins
-				const float jr = 0.5f * outline_px;
-				for (const Vector2& p : pts) {
-					DrawCircleV(p, jr, to_rl_color(visual->outlineColor()));
+				const Color oc = to_rl_color(visual->outlineColor());
+				if (skin_w > 0.0f) {
+					// Rounded-polygon outline: offset each edge outward by skin and stitch with arcs.
+					std::vector<Vector2> oA(n), oB(n);
+					for (size_t i = 0; i < n; ++i) {
+						Vector2 a = pts[i];
+						Vector2 b = pts[(i + 1) % n];
+						float dx = b.x - a.x, dy = b.y - a.y;
+						float len = std::sqrt(dx * dx + dy * dy);
+						if (len < 1e-6f) { oA[i] = a; oB[i] = b; continue; }
+						// Outward normal (polygon stored CCW in world but screen-space y is flipped,
+						// so the outward direction in screen space is the CW perpendicular of edge dir).
+						float nx =  dy / len, ny = -dx / len;
+						oA[i] = Vector2{ a.x + nx * skin_w, a.y + ny * skin_w };
+						oB[i] = Vector2{ b.x + nx * skin_w, b.y + ny * skin_w };
+					}
+					const float inner = std::max(0.0f, skin_w - 0.5f * outline_px);
+					const float outer = skin_w + 0.5f * outline_px;
+					for (size_t i = 0; i < n; ++i) {
+						DrawLineEx(oA[i], oB[i], outline_px, oc);
+						// Corner arc at pts[i] joining edge (i-1) end to edge i start.
+						const size_t i_prev = (i + n - 1) % n;
+						float ang0 = atan2f(oB[i_prev].y - pts[i].y, oB[i_prev].x - pts[i].x) * 180.0f / PI;
+						float ang1 = atan2f(oA[i].y      - pts[i].y, oA[i].x      - pts[i].x) * 180.0f / PI;
+						while (ang1 < ang0) ang1 += 360.0f;
+						DrawRing(pts[i], inner, outer, ang0, ang1, ring_segments(skin_w), oc);
+					}
+				} else {
+					for (size_t i = 0; i < n; ++i) {
+						const Vector2 a = pts[i];
+						const Vector2 b = pts[(i + 1) % n];
+						DrawLineEx(a, b, outline_px, oc);
+					}
+					// rounded joins
+					const float jr = 0.5f * outline_px;
+					for (const Vector2& p : pts) {
+						DrawCircleV(p, jr, oc);
+					}
 				}
 			}
 		}
