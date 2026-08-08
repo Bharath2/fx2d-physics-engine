@@ -28,8 +28,11 @@ namespace FxYAML {
 
     YAML::Node LoadSmart(const std::string& textOrPath) {
         try {
-            // Treat as file if it exists
-            if (fs::exists(textOrPath) && fs::is_regular_file(textOrPath)){
+            // Inline YAML is never a path, and probing it as one throws ENAMETOOLONG on Linux.
+            const bool looks_like_text = textOrPath.find('\n') != std::string::npos;
+            // Treat as file if it exists (error_code overloads stay quiet on invalid paths)
+            std::error_code ec;
+            if (!looks_like_text && fs::exists(textOrPath, ec) && fs::is_regular_file(textOrPath, ec)){
                 return YAML::LoadFile(textOrPath);
             } else {
                 auto text_ = deIndent(textOrPath);
@@ -109,8 +112,16 @@ namespace FxYAML {
             }
             shape = FxShape(verts, skin_radius);
         }
+        // 5) Edge? Zero-thickness segment between two local-frame endpoints.
+        else if (auto edge_node = geom["edge"]) {
+            if (!edge_node.IsSequence() || edge_node.size() != 2)
+                throw std::runtime_error("edge must be a 2-sequence of [x,y] endpoints.");
+            auto p0 = parseArray<2>(edge_node[0]);
+            auto p1 = parseArray<2>(edge_node[1]);
+            shape = FxShape(FxVec2f{p0[0], p0[1]}, FxVec2f{p1[0], p1[1]});
+        }
         else { throw std::runtime_error("Unknown geometry type in shape config."); }
-        // 5) Set the offset pose
+        // 6) Set the offset pose
         shape.set_offset_pose({pose_offset[0], pose_offset[1], pose_offset[2]});
         return shape;
     }

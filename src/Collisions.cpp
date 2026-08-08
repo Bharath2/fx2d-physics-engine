@@ -135,6 +135,72 @@ namespace FxSolver {
         return {best_p1, best_p2};
     }
 
+    // Edge (zero-skin capsule) vs polygon. The generic capsule reduction measures distance to the
+    // polygon boundary, which stays positive once the segment is inside the polygon, so a bare
+    // segment needs its own query: treat the segment's line as the reference axis and collect the
+    // polygon vertices that fall behind it, within the segment's span.
+    static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) {
+        const auto& ev = edge->vertices();
+        const FxVec2f E0 = ev[0];
+        FxVec2f eu = ev[1] - E0;
+        const float L = eu.norm();
+        if (L < 1e-6f) return FxContact(false);
+        eu /= L;
+
+        FxVec2f n = eu.perp();
+        if ((poly->centroid() - E0).dot(n) < 0.0f) n = -n; // orient from edge toward polygon
+
+        const auto& pv = poly->vertices();
+        const size_t nP = pv.size();
+        if (nP == 0) return FxContact(false);
+
+        // The polygon's own skin extends its surface toward the edge.
+        const float rB = poly->skin_radius();
+
+        float deepest_sd = FxInfinityf;
+        float span_min_t = FxInfinityf, span_max_t = -FxInfinityf;
+        for (size_t i = 0; i < nP; ++i) {
+            const FxVec2f d = pv[i] - E0;
+            deepest_sd = std::min(deepest_sd, d.dot(n) - rB);
+            const float t = d.dot(eu);
+            span_min_t = std::min(span_min_t, t);
+            span_max_t = std::max(span_max_t, t);
+        }
+        if (deepest_sd >= 0.0f) return FxContact(false);
+        if (span_max_t < -rB || span_min_t > L + rB) return FxContact(false);
+
+        // Keep the two deepest penetrating vertices that project onto the segment span.
+        FxVec2f best[2] = { FxVec2f{0.0f, 0.0f}, FxVec2f{0.0f, 0.0f} };
+        float   bsd[2]  = { 0.0f, 0.0f };
+        int     nb = 0;
+        for (size_t i = 0; i < nP; ++i) {
+            const FxVec2f d = pv[i] - E0;
+            const float sd = d.dot(n) - rB;
+            if (sd >= 0.0f) continue;
+            const float t = d.dot(eu);
+            if (t < 0.0f || t > L) continue;
+            const FxVec2f cpt = E0 + t * eu;
+            if (nb < 2) {
+                best[nb] = cpt; bsd[nb] = sd; ++nb;
+            } else {
+                const int shallowest = (bsd[0] > bsd[1]) ? 0 : 1;
+                if (sd < bsd[shallowest]) { best[shallowest] = cpt; bsd[shallowest] = sd; }
+            }
+        }
+        if (nb == 0) return FxContact(false);
+
+        FxContact c(true);
+        c.normal            = n;
+        c.penetration_depth = -std::min(bsd[0], (nb == 2) ? bsd[1] : bsd[0]);
+        c.position[0]       = best[0];
+        c.count             = 1;
+        if (nb == 2 && (best[1] - best[0]).norm() >= 0.01f) {
+            c.position[1] = best[1];
+            c.count       = 2;
+        }
+        return c;
+    }
+
     // tests A's edge normals against B; early-exits on first sep axis, else tracks min-penetration axis.
     // Returned `gap` is skin-inclusive (raw B_min_val - rA - rB), so gap > 0 means full separation.
     static FxSatResult sat_query(const FxShape* A_shape, const FxShape* B_shape) {
@@ -203,6 +269,11 @@ namespace FxSolver {
         // the capsule's skin_radius as the effective circle radius.
         if (A_shape->is_capsule()) {
             const float rA = A_shape->skin_radius();
+            // Two zero-thickness segments have no volume to resolve.
+            if (A_shape->is_edge() && B_shape->is_edge()) {
+                contact.set_valid(false);
+                return contact;
+            }
             if (B_shape->is_circle()) {
                 FxVec2f vc_A = closest_on_capsule_segment(A_shape, B_shape->centroid());
                 FxVec2f cB   = B_shape->centroid();
@@ -236,6 +307,8 @@ namespace FxSolver {
                 } else contact.set_valid(false);
                 return contact;
             }
+            // Bare segment vs polygon needs the line-reference query, not the circle reduction.
+            if (A_shape->is_edge()) return edge_polygon_contact(A_shape, B_shape);
             // Capsule vs polygon: closest seg-vs-polygon point, then circle-vs-polygon.
             auto [pCap, pPoly] = closest_capsule_to_polygon(A_shape, B_shape);
             return circle_vs_polygon_contact(pCap, rA, B_shape);
@@ -383,6 +456,9 @@ namespace FxSolver {
 
         const FxShape* A = entity1->collision_geometry().get();
         const FxShape* B = entity2->collision_geometry().get();
+        // Bare segments carry no skin, so the distance-minus-radii gap math degenerates for them.
+        // Edges are static level geometry, where discrete contacts are sufficient.
+        if (A->is_edge() || B->is_edge()) return FxContact(false);
         FxVec2f rel_vel = entity2->velocity.head<2>() - entity1->velocity.head<2>();
 
         FxVec2f normal;

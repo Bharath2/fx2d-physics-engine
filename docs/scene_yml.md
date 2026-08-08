@@ -234,6 +234,17 @@ geometry:
         radius: 0.3
 ```
 
+### Edge
+
+```yaml
+geometry:
+    edge: [[-2.0, 0.0], [2.0, 0.0]]   # [endpoint_a, endpoint_b]
+```
+
+An edge is a zero-thickness line segment defined by two endpoints in local (body) space, intended for **static level geometry** such as floors, walls, and ramps. It has zero area and zero inertia, so pair it with `mass: 0` and `gravity_scale: 0.0`; a dynamic body given an edge shape has no inertia and may behave unexpectedly.
+
+Internally an edge is a capsule with a zero skin radius, and unlike other shapes its endpoints are kept exactly as authored rather than recentred on the centroid. Edge-vs-edge pairs never generate contacts, and edges are skipped by CCD.
+
 ### Polygon
 
 ```yaml

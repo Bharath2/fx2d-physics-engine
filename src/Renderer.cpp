@@ -187,6 +187,15 @@ void FxRylbRenderer::draw_scene() {
 			const Vector2 p0 = to_screen(local[0]);
 			const Vector2 p1 = to_screen(local[1]);
 			const Color fill = to_rl_color(visual->fillColor());
+			if (visual->is_edge()) {
+				// Zero-thickness segment: nothing to fill, so draw the outline as the shape itself.
+				const float thickness = (visual->outlineThickness() > 0.0f) ? visual->outlineThickness() : 2.0f;
+				const Color oc = to_rl_color(visual->outlineColor());
+				DrawLineEx(p0, p1, thickness, oc);
+				DrawCircleV(p0, 0.5f * thickness, oc);
+				DrawCircleV(p1, 0.5f * thickness, oc);
+				return;
+			}
 			// Body: line segment of thickness 2*skin_w covers the central rectangle exactly.
 			if (skin_w > 0.0f) DrawLineEx(p0, p1, 2.0f * skin_w, fill);
 			// End caps: discs at each segment endpoint.
