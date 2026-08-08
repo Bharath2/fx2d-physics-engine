@@ -1,7 +1,7 @@
 scene:
     size: [12, 8]  
     gravity: [0, -10]
-    background: [255, 255, 255, 255]  #./assets/bricks.png
+    background: [255, 255, 255, 255]  #./examples/stacked_boxes/assets/bricks.png
 
 entities:
     ground:
@@ -31,7 +31,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [6, 0.75]      # width, height
-            texture: ./assets/wood.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/wood.png  # color(RGBA) or image path
         collision:
             geometry: 
                 rectangle: [6, 0.75]      # width, height
@@ -51,7 +51,7 @@ entities:
             pose: [0, 0, 0]             # relative to body frame
             geometry: 
                 circle: 0.5             # circle, rectangle, polygon
-            texture: ./assets/ball.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/ball.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255] 
             border_thickness: 5.0
         collision:
@@ -68,7 +68,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-            texture: ./assets/rock.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
@@ -84,7 +84,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-            texture: ./assets/rock.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
@@ -100,7 +100,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-            texture: ./assets/rock.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
@@ -116,7 +116,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-            texture: ./assets/rock.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
@@ -132,7 +132,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-            texture: ./assets/rock.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
@@ -148,7 +148,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [0.75, 0.75]      # width, height
-            texture: ./assets/rock.png  # color(RGBA) or image path
+            texture: ./examples/stacked_boxes/assets/rock.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:

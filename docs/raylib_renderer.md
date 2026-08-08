@@ -53,7 +53,7 @@ void set_background(const std::string& filepath);  // image/texture file
 
 ```cpp
 renderer.set_background(FxVec4ui8(30, 30, 30, 255));   // dark grey
-renderer.set_background("./assets/background.png");
+renderer.set_background("./examples/truck/assets/bricks.png");
 ```
 
 ---

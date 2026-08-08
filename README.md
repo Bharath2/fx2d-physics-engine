@@ -83,14 +83,18 @@ int main() {
 
 ### Running Examples
 
-To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, build the project, and ensure `Scene.yml` and assets are accessible to the executable.
+Build the visual examples from the repo root (textures live next to each example under `examples/*/assets/`):
 
 ```bash
-./Fx2D      # Linux/macOS
-./Fx2D.exe  # Windows
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFX2D_BUILD_EXAMPLES=ON
+cmake --build build -j --target example_truck example_stacked_boxes example_joint_control
+# run from the repo root so Scene.yml texture paths resolve
+./build/example_stacked_boxes
+./build/example_truck
+./build/example_joint_control
 ```
 
-Headless examples skip CMake and the graphics stack entirely:
+Headless examples skip the graphics stack entirely:
 
 ```bash
 ./scripts/build_headless.sh

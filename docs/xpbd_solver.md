@@ -174,7 +174,7 @@ All gradients are evaluated in world space each substep, keeping the solver geom
 
 **No lambda accumulation (structural constraints).** Unlike some XPBD formulations that track `λ` across substeps for warm-starting, structural constraint solving resets each substep. This avoids drift artefacts from stale lambda values when constraint topology changes (e.g. contact arrival/departure).
 
-**Contact warm starting.** At the start of the first substep of each frame, `FxSolver::warm_start()` re-applies the accumulated normal and tangential impulses (`jn_accumulated`, `jt_accumulated`) from the previous frame to the current velocities. This seeds the velocity-level solver with a good initial guess, reducing the number of iterations needed for stable stacking and resting contacts. Warm starting is skipped on substeps 2–N to avoid double-counting the impulse already integrated through `entity->step()`.
+**Contact warm starting.** Cached impulses from the previous frame are loaded into `jn_warm` / `jt_warm`. At the start of the first substep only, `FxSolver::warm_start()` applies those guesses and seeds `jn_accumulated` / `jt_accumulated` for the current substep. Substeps 2–N leave accumulation at zero so warm impulses are not double-counted after `entity->step()`.
 
 **Static and kinematic bodies.** Any entity with `inv_mass = 0` (set via zero mass in the YAML or API) participates in collision detection but receives zero correction. The same applies to rotational DOF when `inv_inertia = 0`.
 
