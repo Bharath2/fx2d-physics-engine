@@ -216,6 +216,24 @@ geometry:
 
 The rectangle is axis-aligned in local space and centred at the shape's pose offset.
 
+### Capsule
+
+```yaml
+geometry:
+    capsule: [2.0, 0.3]     # [segment_length, end_cap_radius]
+```
+
+A capsule is a line segment of the given length (oriented along the local x-axis) inflated uniformly by the end-cap radius — a rectangle with two semicircular caps. Use capsules for characters, wheels, projectiles, and other rounded primitives. A length of `0` degenerates to a circle; a radius of `0` degenerates to a line segment.
+
+The map form is also accepted:
+
+```yaml
+geometry:
+    capsule:
+        length: 2.0
+        radius: 0.3
+```
+
 ### Polygon
 
 ```yaml
@@ -228,6 +246,28 @@ geometry:
 ```
 
 Each entry is a 2D vertex `[x, y]` in local space. Vertices are specified in order (clockwise or counter-clockwise). For collision, convex polygons give the most reliable SAT results.
+
+### Rounded rectangles and polygons (skin radius)
+
+Both `rectangle` and `polygon` accept an optional `radius:` modifier that adds a uniform rounding/skin radius around the shape's boundary (Minkowski sum of the polygon with a disc of that radius):
+
+```yaml
+geometry:
+    rectangle: [2.0, 2.0]
+    radius: 0.25            # rounded corners
+```
+
+```yaml
+geometry:
+    polygon:
+        - [-1.0, -0.5]
+        - [ 1.0, -0.5]
+        - [ 1.0,  0.5]
+        - [-1.0,  0.5]
+    radius: 0.1
+```
+
+A `radius: 0` (or omitted) is the legacy sharp-corner behaviour. Internally, circle / capsule / rounded-polygon all share the same skin-radius mechanism, so contact normals, AABBs, and inertia are computed consistently.
 
 ---
 

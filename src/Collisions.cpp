@@ -4,7 +4,7 @@
 #include <iostream>
 
 namespace FxSolver {
-    
+
     // AABB overlap check
     bool aabb_overlap_check(const FxEntity& entity1, const FxEntity& entity2) {
         auto aabb1 = entity1.bounding_box();
@@ -51,7 +51,7 @@ namespace FxSolver {
         // Project points onto edge p2-q2
         float t1 = (p1 - p2).dot(edge_unit);
         float t2 = (clipped_q1 - p2).dot(edge_unit);
-        
+
         // Clamp projections to edge
         t1 = std::clamp(t1, 0.0f, edge_length);
         t2 = std::clamp(t2, 0.0f, edge_length);
@@ -63,9 +63,83 @@ namespace FxSolver {
         return std::make_pair(p1_projected, q1_projected);
     }
 
-    // tests A's edge normals against B; early-exits on first sep axis, else tracks min-penetration axis
+    // ----------------------------------------------------------------------
+    // Geometric helpers used by capsule reductions
+    // ----------------------------------------------------------------------
+
+    // Closest point on segment [a,b] to query point p.
+    static FxVec2f closest_on_segment(const FxVec2f& a, const FxVec2f& b, const FxVec2f& p) {
+        FxVec2f ab = b - a;
+        float len2 = ab.dot(ab);
+        if (len2 < 1e-12f) return a;
+        float t = std::clamp((p - a).dot(ab) / len2, 0.0f, 1.0f);
+        return a + t * ab;
+    }
+
+    // Closest pair of points between two segments [a1,b1] and [a2,b2].
+    // Returns {point on seg1, point on seg2}. Handles parallel and degenerate cases.
+    static std::pair<FxVec2f, FxVec2f> seg_seg_closest(
+        const FxVec2f& a1, const FxVec2f& b1,
+        const FxVec2f& a2, const FxVec2f& b2)
+    {
+        FxVec2f d1 = b1 - a1;
+        FxVec2f d2 = b2 - a2;
+        FxVec2f r  = a1 - a2;
+        float la = d1.dot(d1);
+        float lb = d2.dot(d2);
+        float f  = d2.dot(r);
+        float s, t;
+        if (la <= 1e-12f && lb <= 1e-12f) return {a1, a2};      // both degenerate
+        if (la <= 1e-12f) {
+            s = 0.0f;
+            t = std::clamp(f / lb, 0.0f, 1.0f);
+        } else {
+            float c = d1.dot(r);
+            if (lb <= 1e-12f) {
+                t = 0.0f;
+                s = std::clamp(-c / la, 0.0f, 1.0f);
+            } else {
+                float b = d1.dot(d2);
+                float denom = la * lb - b * b;
+                s = (denom != 0.0f) ? std::clamp((b * f - c * lb) / denom, 0.0f, 1.0f) : 0.0f;
+                t = (b * s + f) / lb;
+                if (t < 0.0f) { t = 0.0f; s = std::clamp(-c / la, 0.0f, 1.0f); }
+                else if (t > 1.0f) { t = 1.0f; s = std::clamp((b - c) / la, 0.0f, 1.0f); }
+            }
+        }
+        return {a1 + s * d1, a2 + t * d2};
+    }
+
+    // Closest point on a capsule's central segment to a query world point.
+    static FxVec2f closest_on_capsule_segment(const FxShape* capsule, const FxVec2f& p) {
+        const auto& v = capsule->vertices();
+        return closest_on_segment(v[0], v[1], p);
+    }
+
+    // Closest pair of points between a capsule's segment and a polygon's boundary.
+    // Returns {capsule-segment point, polygon-boundary point}.
+    static std::pair<FxVec2f, FxVec2f> closest_capsule_to_polygon(
+        const FxShape* capsule, const FxShape* polygon)
+    {
+        const auto& cv = capsule->vertices();
+        const auto& pv = polygon->vertices();
+        float best_d2 = FxInfinityf;
+        FxVec2f best_p1{0.f, 0.f}, best_p2{0.f, 0.f};
+        for (size_t i = 0, n = pv.size(); i < n; ++i) {
+            const FxVec2f& s = pv[i];
+            const FxVec2f& e = pv[(i + 1) % n];
+            auto [p1, p2] = seg_seg_closest(cv[0], cv[1], s, e);
+            float d2 = (p2 - p1).dot(p2 - p1);
+            if (d2 < best_d2) { best_d2 = d2; best_p1 = p1; best_p2 = p2; }
+        }
+        return {best_p1, best_p2};
+    }
+
+    // tests A's edge normals against B; early-exits on first sep axis, else tracks min-penetration axis.
+    // Returned `gap` is skin-inclusive (raw B_min_val - rA - rB), so gap > 0 means full separation.
     static FxSatResult sat_query(const FxShape* A_shape, const FxShape* B_shape) {
         const auto &A_vertices = A_shape->vertices();
+        const float skin_sum = A_shape->skin_radius() + B_shape->skin_radius();
         FxSatResult result;
         for (size_t i=0, n = A_vertices.size(); i < n; ++i) {
             const FxVec2f &s = A_vertices[i];
@@ -73,10 +147,11 @@ namespace FxSolver {
             FxVec2f dir = (e - s).normalized();
             FxVec2f axis = dir.perp();
             auto [B_min_idx, B_min_val] = B_shape->project_onto(axis, s).argmin();
-            if (B_min_val > 0.f) { result.has_sep = true; return result; } // separating axis
-            if (B_min_val > result.gap) {
+            float gap_val = B_min_val - skin_sum;
+            if (gap_val > 0.f) { result.has_sep = true; return result; } // separating axis
+            if (gap_val > result.gap) {
                 result.normal           = axis;
-                result.gap              = B_min_val;
+                result.gap              = gap_val;
                 result.ref_edge_dir     = dir;
                 result.ref_edge_index   = i;
                 result.pen_vertex_index = B_min_idx;
@@ -85,17 +160,102 @@ namespace FxSolver {
         return result;
     }
 
+    // Build a contact between a circle (centered at virtual position vc, radius vrA) and a polygon.
+    // vrA is the effective skin radius; the polygon's own skin is added internally.
+    static FxContact circle_vs_polygon_contact(const FxVec2f& vc, float vrA,
+                                               const FxShape* B_polygon) {
+        FxContact contact(true);
+        const auto& Bv = B_polygon->vertices();
+        if (Bv.empty()) { contact.set_valid(false); return contact; }
+        const float rB = B_polygon->skin_radius();
+        float min_dist = FxInfinityf;
+        FxVec2f closest(0.0f, 0.0f);
+        for (size_t i = 0, n = Bv.size(); i < n; ++i) {
+            const FxVec2f& s = Bv[i];
+            const FxVec2f& e = Bv[(i + 1) % n];
+            FxVec2f dir = e - s;
+            float edge_length = dir.dot(dir);
+            if (edge_length < 1e-6f) continue;
+            float t = std::clamp((vc - s).dot(dir) / edge_length, 0.f, 1.f);
+            FxVec2f p = s + t * dir;
+            float d = (vc - p).norm();
+            if (d < min_dist) { min_dist = d; closest = p; }
+        }
+        if (min_dist == FxInfinityf) { contact.set_valid(false); return contact; }
+        float penetration = vrA + rB - min_dist;
+        if (penetration > 0.f) {
+            FxVec2f n = (min_dist > 1e-6f) ? (closest - vc) / min_dist : FxVec2f{1.f, 0.f}; // from circle -> polygon
+            contact.normal = n;
+            contact.penetration_depth = penetration;
+            // Contact lies on the polygon's skin surface facing the circle.
+            contact.position[0] = closest - n * rB;
+            contact.count = 1;
+        } else contact.set_valid(false);
+        return contact;
+    }
+
     FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape) {
-        auto contact = FxContact(true); 
+        auto contact = FxContact(true);
         contact.penetration_depth = 0.0f;
-    
+
+        // ----------- CAPSULE REDUCTIONS -----------
+        // Reduce capsule-vs-X to "virtual circle at closest segment point vs X" using
+        // the capsule's skin_radius as the effective circle radius.
+        if (A_shape->is_capsule()) {
+            const float rA = A_shape->skin_radius();
+            if (B_shape->is_circle()) {
+                FxVec2f vc_A = closest_on_capsule_segment(A_shape, B_shape->centroid());
+                FxVec2f cB   = B_shape->centroid();
+                float rB = B_shape->skin_radius();
+                FxVec2f d  = cB - vc_A;
+                float dist = d.norm();
+                float pen  = (rA + rB) - dist;
+                if (pen > 0.0f) {
+                    FxVec2f n = (dist > 1e-6f) ? d / dist : FxVec2f{1.f, 0.f};
+                    contact.normal            = n;
+                    contact.penetration_depth = pen;
+                    contact.position[0]       = vc_A + n * (rA - 0.5f * pen);
+                    contact.count             = 1;
+                } else contact.set_valid(false);
+                return contact;
+            }
+            if (B_shape->is_capsule()) {
+                const auto& av = A_shape->vertices();
+                const auto& bv = B_shape->vertices();
+                auto [pA, pB] = seg_seg_closest(av[0], av[1], bv[0], bv[1]);
+                float rB = B_shape->skin_radius();
+                FxVec2f d = pB - pA;
+                float dist = d.norm();
+                float pen = (rA + rB) - dist;
+                if (pen > 0.0f) {
+                    FxVec2f n = (dist > 1e-6f) ? d / dist : FxVec2f{1.f, 0.f};
+                    contact.normal            = n;
+                    contact.penetration_depth = pen;
+                    contact.position[0]       = pA + n * (rA - 0.5f * pen);
+                    contact.count             = 1;
+                } else contact.set_valid(false);
+                return contact;
+            }
+            // Capsule vs polygon: closest seg-vs-polygon point, then circle-vs-polygon.
+            auto [pCap, pPoly] = closest_capsule_to_polygon(A_shape, B_shape);
+            return circle_vs_polygon_contact(pCap, rA, B_shape);
+        }
+        if (B_shape->is_capsule()) {
+            // Symmetric: swap and flip normal so it stays A->B.
+            contact = compute_contact_one_way(B_shape, A_shape);
+            if (contact.is_valid(false)) contact.normal = -contact.normal;
+            return contact;
+        }
+
+        // ----------- CIRCLE/POLYGON -----------
+
         // Circle vs Circle
         if (A_shape->is_circle() && B_shape->is_circle()) {
-            FxVec2f cA = A_shape->centroid(); 
-            FxVec2f cB = B_shape->centroid(); 
+            FxVec2f cA = A_shape->centroid();
+            FxVec2f cB = B_shape->centroid();
             FxVec2f d = cB - cA;
             float dist = d.norm();
-            float rA = A_shape->radius(), rB = B_shape->radius();
+            float rA = A_shape->skin_radius(), rB = B_shape->skin_radius();
             float penetration = (rA + rB) - dist;
             if (penetration > 0.f) {
                 FxVec2f n = (dist > 1e-6f) ? d / dist : FxVec2f{1.f,0.f};
@@ -106,59 +266,28 @@ namespace FxSolver {
             } else contact.set_valid(false);
             return contact;
         }
-    
+
         // Circle vs Polygon
-        if (A_shape->is_circle() && !B_shape->is_circle()) {
-            const auto& B_vertices = B_shape->vertices();
-            if (B_vertices.empty()) { 
-                contact.set_valid(false); return contact; 
-            }
-            FxVec2f cA = A_shape->centroid();
-            float rA = A_shape->radius();
-            float min_dist = FxInfinityf; 
-            FxVec2f closest(0.0f, 0.0f);
-            for (size_t i=0, n = B_vertices.size(); i < n; ++i) {
-                const FxVec2f &s = B_vertices[i]; 
-                const FxVec2f &e = B_vertices[(i+1)%n];
-                FxVec2f dir = e - s; 
-                float edge_length = dir.dot(dir); 
-                if (edge_length < 1e-6f) continue;
-                float t = std::clamp((cA - s).dot(dir) / edge_length, 0.f, 1.f);
-                FxVec2f p = s + t * dir; 
-                float d = (cA - p).norm();
-                if (d < min_dist) { 
-                    min_dist = d; 
-                    closest = p; }
-            }
-            if (min_dist == FxInfinityf) { 
-                contact.set_valid(false); return contact; 
-            }
-            float penetration = rA - min_dist;
-            if (penetration > 0.f) {
-                FxVec2f n = (min_dist > 1e-6f) ? (closest - cA) / min_dist : FxVec2f{1.f,0.f}; // from circle -> polygon
-                contact.normal = n;
-                contact.penetration_depth = penetration;
-                contact.position[0] = closest;
-                contact.count = 1;
-            } else contact.set_valid(false);
-            return contact;
+        if (A_shape->is_circle() && B_shape->is_polygon()) {
+            return circle_vs_polygon_contact(A_shape->centroid(), A_shape->skin_radius(), B_shape);
         }
-    
+
         // Polygon vs Circle (reuse, flip normal so it stays A->B)
-        if (!A_shape->is_circle() && B_shape->is_circle()) {
+        if (A_shape->is_polygon() && B_shape->is_circle()) {
             contact = compute_contact_one_way(B_shape, A_shape);
             if (contact.is_valid(false)) { contact.normal = -contact.normal; } // now from polygon(A) -> circle(B)
             return contact;
         }
-    
-        // Polygon vs Polygon
-        const auto &A_vertices = A_shape->vertices(); 
+
+        // Polygon vs Polygon (skin-aware via sat_query — `sat.gap` already includes both skins)
+        const auto &A_vertices = A_shape->vertices();
         const auto &B_vertices = B_shape->vertices();
+        const float rB = B_shape->skin_radius();
         FxSatResult sat = sat_query(A_shape, B_shape);
-        if (sat.has_sep) { contact.set_valid(false); return contact; } // separating axis found
+        if (sat.has_sep) { contact.set_valid(false); return contact; }
         contact.normal            = sat.normal;
-        contact.penetration_depth = std::abs(sat.gap);
-    
+        contact.penetration_depth = -sat.gap;   // positive when overlapping (gap <= 0)
+
         if (!B_vertices.empty()) {
             const size_t B_N = B_vertices.size();
             const size_t ifwd = (sat.pen_vertex_index + 1)%B_N;
@@ -167,11 +296,13 @@ namespace FxSolver {
             const float dot_fwd = std::abs((B_vertices[ifwd] - B_edge_start).normalized().dot(sat.ref_edge_dir));
             const float dot_bwd = std::abs((B_edge_start - B_vertices[ibwd]).normalized().dot(sat.ref_edge_dir));
             const FxVec2f B_edge_end = dot_bwd > dot_fwd ? B_vertices[ibwd] : B_vertices[ifwd];
-            const FxVec2f &A_edge_start = A_vertices[sat.ref_edge_index]; 
+            const FxVec2f &A_edge_start = A_vertices[sat.ref_edge_index];
             const FxVec2f &A_edge_end = A_vertices[(sat.ref_edge_index+1)%A_vertices.size()];
             const auto contact_points = clip_edge(B_edge_start, B_edge_end, A_edge_start, A_edge_end);
-            contact.position[0] = contact_points.first;
-            contact.position[1] = contact_points.second;
+            // Shift onto B's skin surface (which faces A along -normal).
+            const FxVec2f skin_shift = -rB * sat.normal;
+            contact.position[0] = contact_points.first  + skin_shift;
+            contact.position[1] = contact_points.second + skin_shift;
             // Check if points are too close and resolve to one point if needed
             float dist = (contact.position[1] - contact.position[0]).norm();
             contact.count = (dist < 0.01f) ? 1 : 2;
@@ -186,20 +317,23 @@ namespace FxSolver {
         if (!entity1->collision_geometry() || !entity2->collision_geometry()) {
             return FxContact(false);
         }
-        
+
         // Check if bounding boxes overlap first
         if (!aabb_overlap_check(*entity1, *entity2)) return FxContact(false);
-        
+
         auto contact = FxContact(true);
-        
+
         // the shapes are considered to be intersecting if they are not separated along any axis.
         const FxShape* A = entity1->collision_geometry().get();
         const FxShape* B = entity2->collision_geometry().get();
-        
-        if (A->is_circle()) {
+
+        // Circle and capsule paths produce a definitive single-direction contact; polygon-vs-polygon
+        // runs both directions and biases toward A for jitter stability.
+        if (A->is_circle() || A->is_capsule()) {
             contact = compute_contact_one_way(A, B);
-        } else if (B->is_circle()) {
+        } else if (B->is_circle() || B->is_capsule()) {
             contact = compute_contact_one_way(B, A);
+            if (contact.is_valid(false)) contact.normal = -contact.normal; // restore A->B convention
         } else {
             FxContact cAB = compute_contact_one_way(A, B);
             FxContact cBA = compute_contact_one_way(B, A);
@@ -220,17 +354,21 @@ namespace FxSolver {
         return contact;
     }
 
-    // no-early-exit SAT: returns the axis of minimum signed separation for speculative contact
+    // no-early-exit SAT: returns the axis of minimum signed separation for speculative contact.
+    // Returned gap is skin-inclusive (raw B_min_val - rA - rB).
     static std::pair<FxVec2f, float> sat_gap_query(const FxShape* A_shape, const FxShape* B_shape) {
         const auto &A_vertices = A_shape->vertices();
+        const float skin_sum = A_shape->skin_radius() + B_shape->skin_radius();
         FxVec2f best_normal{1.0f, 0.0f};
         float   best_val = FxInfinityf;
         for (size_t i=0, n = A_vertices.size(); i < n; ++i) {
             const FxVec2f &s = A_vertices[i];
             const FxVec2f &e = A_vertices[(i+1)%n];
-            FxVec2f axis = (e - s).normalized().perp();
+            FxVec2f dir = (e - s).normalized();
+            FxVec2f axis = dir.perp();
             auto [B_min_idx, B_min_val] = B_shape->project_onto(axis, s).argmin();
-            if (B_min_val < best_val) { best_val = B_min_val; best_normal = axis; }
+            float gap_val = B_min_val - skin_sum;
+            if (gap_val < best_val) { best_val = gap_val; best_normal = axis; }
         }
         return {best_normal, best_val};
     }
@@ -249,44 +387,81 @@ namespace FxSolver {
 
         FxVec2f normal;
         float   gap;
+        FxVec2f contact_anchor = entity1->pose.xy(); // overridden below for non-circle A
 
-        if (A->is_circle() && B->is_circle()) {
-            // Exact axis for circle-circle
-            FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
+        // Reduce capsule to "virtual circle at closest segment pt to the other shape's reference"
+        // so the speculative gap math stays a simple distance - radii subtraction.
+        auto cap_reduce = [](const FxShape* cap, const FxVec2f& other_ref) -> std::pair<FxVec2f, float> {
+            return { closest_on_capsule_segment(cap, other_ref), cap->skin_radius() };
+        };
+
+        if ((A->is_circle() || A->is_capsule()) && (B->is_circle() || B->is_capsule())) {
+            FxVec2f cA, cB;
+            float rA, rB;
+            if (A->is_capsule() && B->is_capsule()) {
+                const auto& av = A->vertices();
+                const auto& bv = B->vertices();
+                auto [pA, pB] = seg_seg_closest(av[0], av[1], bv[0], bv[1]);
+                cA = pA; cB = pB;
+                rA = A->skin_radius(); rB = B->skin_radius();
+            } else if (A->is_capsule()) {
+                cB = B->centroid();
+                std::tie(cA, rA) = cap_reduce(A, cB);
+                rB = B->skin_radius();
+            } else if (B->is_capsule()) {
+                cA = A->centroid();
+                std::tie(cB, rB) = cap_reduce(B, cA);
+                rA = A->skin_radius();
+            } else {
+                cA = A->centroid(); cB = B->centroid();
+                rA = A->skin_radius(); rB = B->skin_radius();
+            }
+            FxVec2f delta = cB - cA;
             float dist = delta.norm();
             if (dist < 1e-6f) return FxContact(false);
             normal = delta / dist;
-            gap    = dist - A->radius() - B->radius();
-        } else if (A->is_circle() || B->is_circle()) {
-            // Closest point on the polygon edge to the circle center
-            const FxShape* circle  = A->is_circle() ? A : B;
-            const FxShape* polygon = A->is_circle() ? B : A;
-            FxVec2f cC = circle->centroid();
+            gap    = dist - rA - rB;
+            contact_anchor = cA;
+        } else if (A->is_circle() || A->is_capsule() || B->is_circle() || B->is_capsule()) {
+            // Mixed: one is point/segment (rounded), the other is polygon.
+            const FxShape* round_shape = (A->is_circle() || A->is_capsule()) ? A : B;
+            const FxShape* polygon     = (round_shape == A) ? B : A;
+            FxVec2f vc; float rR;
+            if (round_shape->is_capsule()) {
+                auto [pCap, pPoly] = closest_capsule_to_polygon(round_shape, polygon);
+                vc = pCap; rR = round_shape->skin_radius();
+            } else {
+                vc = round_shape->centroid();
+                rR = round_shape->skin_radius();
+            }
+            // Closest point on the polygon boundary to vc.
             const auto& verts = polygon->vertices();
             float   min_dist = FxInfinityf;
-            FxVec2f closest{};
+            FxVec2f closest{0.0f, 0.0f};
             for (size_t i = 0, n = verts.size(); i < n; ++i) {
                 const FxVec2f& s = verts[i];
                 const FxVec2f& e = verts[(i + 1) % n];
                 FxVec2f dir = e - s;
                 float   len2 = dir.dot(dir);
                 if (len2 < 1e-6f) continue;
-                float t = std::clamp((cC - s).dot(dir) / len2, 0.f, 1.f);
+                float t = std::clamp((vc - s).dot(dir) / len2, 0.f, 1.f);
                 FxVec2f p = s + t * dir;
-                float d = (cC - p).norm();
+                float d = (vc - p).norm();
                 if (d < min_dist) { min_dist = d; closest = p; }
             }
             if (min_dist == FxInfinityf) return FxContact(false);
-            // Normal from circle surface → polygon (direction from circle center to closest point)
-            FxVec2f raw = (min_dist > 1e-6f) ? (closest - cC) / min_dist : FxVec2f{1.f, 0.f};
-            normal = A->is_circle() ? raw : -raw;  // keep entity1 → entity2 convention
-            gap    = min_dist - circle->radius();
+            FxVec2f raw = (min_dist > 1e-6f) ? (closest - vc) / min_dist : FxVec2f{1.f, 0.f};
+            normal = (round_shape == A) ? raw : -raw;  // keep entity1 → entity2 convention
+            gap    = min_dist - rR - polygon->skin_radius();
+            contact_anchor = vc;
         } else {
-            // Polygon-polygon: run gap queries both ways, pick the axis with the smallest gap
+            // Polygon-polygon: run gap queries both ways, pick the axis with the smallest gap.
+            // sat_gap_query already returns skin-inclusive gaps.
             auto [nAB, gAB] = sat_gap_query(A, B);
             auto [nBA, gBA] = sat_gap_query(B, A);
             if (gAB <= gBA) { normal = nAB;  gap = gAB; }
             else            { normal = -nBA; gap = gBA; } // flip B->A to A->B convention
+            contact_anchor = entity1->pose.xy();
         }
 
         // Ensure normal points from entity1 → entity2
@@ -305,7 +480,8 @@ namespace FxSolver {
         c.count             = 1;
         c.normal            = normal;
         c.penetration_depth = spec_depth;
-        c.position[0]       = entity1->pose.xy() + normal * A->radius();
+        // Anchor at the deepest feature of A; falls back to A's centroid for polygons.
+        c.position[0]       = contact_anchor + normal * A->skin_radius();
         c.entity1           = entity1;
         c.entity2           = entity2;
         return c;
