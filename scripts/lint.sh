@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-# Run Fx2D's light static analysis gate:
-#   1. clang-format --check
-#   2. cppcheck
-#   3. clang-tidy (physics / tests / headless examples)
-#
-# Usage:
-#   ./scripts/lint.sh
-#   ./scripts/lint.sh --no-tidy     # skip clang-tidy
-#   ./scripts/lint.sh --no-format   # skip format check
+# Lint gate: clang-format --check, cppcheck, clang-tidy.
+# Flags: --no-tidy, --no-format
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,7 +11,7 @@ for arg in "$@"; do
     --no-tidy) DO_TIDY=0 ;;
     --no-format) DO_FORMAT=0 ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,4p' "$0"
       exit 0
       ;;
     *)
@@ -49,7 +42,7 @@ else
       --std=c++20 \
       --language=c++ \
       --inline-suppr \
-      --suppressions-list=cppcheck-suppressions.txt \
+      --suppressions-list=scripts/cppcheck-suppressions.txt \
       --error-exitcode=1 \
       --quiet \
       -I include \

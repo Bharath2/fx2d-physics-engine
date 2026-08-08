@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Echo the Fx2D first-party sources that participate in format/lint.
-# Excludes vendored code under lib/ and generated build trees.
+# List first-party sources for format/lint (excludes lib/ and build*).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

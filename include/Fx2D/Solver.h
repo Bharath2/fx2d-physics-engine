@@ -35,18 +35,15 @@ struct FxContact {
     std::shared_ptr<FxEntity> entity1 = nullptr; // First entity in collision
     std::shared_ptr<FxEntity> entity2 = nullptr; // Second entity in collision
 
-    // Impulse actually applied to the bodies during the current substep. Starts at
-    // zero every substep (or at the warm-start guess, once that guess has been
-    // applied) so the solver may only ever take back impulse it really added.
+    // Impulse applied this substep (may be released; never exceeds what was applied).
     float jn_accumulated[2] = {0.0f, 0.0f};
     float jt_accumulated[2] = {0.0f, 0.0f};
 
-    // Previous substep's impulse, used purely as the warm-start guess.
+    // Previous substep impulse used as the warm-start guess.
     float jn_warm[2] = {0.0f, 0.0f};
     float jt_warm[2] = {0.0f, 0.0f};
 
-    // Closing speed per contact point at the start of the substep, which fixes the
-    // restitution target for every velocity sweep in that substep.
+    // Closing speed at substep start — fixes restitution target for every sweep.
     float vn_pre[2] = {0.0f, 0.0f};
 
     // Constructor overloads
@@ -187,10 +184,7 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
 
 // Main collision resolution method
 void resolve_penetration(const FxContact& contact, double dt = 0.016f);
-// Capture the closing speed at each contact point, once per substep, before any
-// impulse is applied. resolve_velocities may be swept several times per substep
-// and every sweep must aim at the same restitution target, or the later sweeps
-// would cancel the bounce produced by the first.
+// Capture closing speeds once per substep before impulses (shared restitution target).
 void init_velocity_pass(FxContact& contact);
 // Velocity-level solver: restitution and dynamic friction impulses
 void resolve_velocities(FxContact& contact);

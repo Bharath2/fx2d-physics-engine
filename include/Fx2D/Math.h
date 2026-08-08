@@ -20,12 +20,7 @@ static constexpr double FxInfinityd = std::numeric_limits<double>::infinity();
 static constexpr float FxPif = std::numbers::pi_v<float>;
 static constexpr double FxPid = std::numbers::pi_v<double>;
 
-// Helper function for angle wrapping
-// Wrap an angle into [-pi, pi).
-// In-range angles are returned untouched: the shift by +pi below is lossy for small
-// magnitudes, since one ulp of float near pi is ~2.4e-7, so any angle under ~1.2e-7 rad
-// would round away and come back as exactly 0. Substep rotations land in that range at
-// small timesteps, and silently zeroing them stalls motors and freezes angular motion.
+// Wrap into [-pi, pi). In-range values pass through untouched (avoids float floor near pi).
 static inline float FxAngleWrap(float angle) {
     if (angle >= -FxPif && angle < FxPif) return angle;
     angle = std::fmod(angle + FxPif, 2.0f * FxPif);
@@ -628,11 +623,7 @@ class FxMat3f : public Eigen::Matrix3f {
     void set_h(float val) { (*this)(2, 1) = val; }
     void set_i(float val) { (*this)(2, 2) = val; }
 
-    // For a homogeneous transformation matrix M = [ R  t ]
-    //                                             [ 0  1 ]
-    // its inverse is: M⁻¹ = [ Rᵀ  -Rᵀt ]
-    //                       [  0    1  ]
-    // Extract the 2x2 rotation matrix from the upper-left block as an FxMat2f
+    // Upper-left 2x2 rotation of a homogeneous transform [R t; 0 1].
     FxMat2f Rot() const { return this->block<2, 2>(0, 0).eval(); }
     // Extract the translation vector (first two elements of the third column) as an FxVec2f
     FxVec2f t() const { return FxVec2f((*this)(0, 2), (*this)(1, 2)); }
@@ -1269,19 +1260,7 @@ inline std::ostream& operator<<(std::ostream& os, FxVec3f const& a) {
     return os;
 }
 
-//---------------------------------------------
-// Shape Definition
-//
-// All shapes share a unified storage model:
-//   * m_vertices   — local core feature points (empty for circle, 2 for capsule, N>=3 for polygon)
-//   * m_skin_radius — Minkowski-sum "skin" radius added uniformly around the core feature
-//
-// Circle           = no vertices,    skin_radius = r
-// Capsule          = 2 endpoints,    skin_radius = r
-// Edge             = 2 endpoints,    skin_radius = 0 (zero-thickness segment, static level
-// geometry) Polygon          = N>=3 vertices,  skin_radius = 0 Rounded polygon  = N>=3 vertices,
-// skin_radius > 0 (covers rounded rectangles)
-//---------------------------------------------
+// Unified shape: vertices (0/2/N) + skin_radius (circle/capsule/edge/polygon/rounded).
 enum class FxShapeType { Circle, Capsule, Polygon };
 
 struct FxShape {

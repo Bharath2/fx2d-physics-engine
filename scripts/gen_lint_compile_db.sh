@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Build a minimal compile_commands.json for clang-tidy that covers the physics
-# core (no raylib / imgui). Avoids -march=native so Eigen headers parse under
-# clang on machines that advertise AVX-512.
+# Minimal compile_commands.json for clang-tidy (physics core, no raylib).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

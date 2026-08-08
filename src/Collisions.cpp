@@ -9,11 +9,8 @@ namespace FxSolver {
 bool aabb_overlap_check(const FxEntity& entity1, const FxEntity& entity2) {
     auto aabb1 = entity1.bounding_box();
     auto aabb2 = entity2.bounding_box();
-    // check if they are overlapping
-    return !(aabb1(2) < aabb2(0) || aabb2(2) < aabb1(0) || // this.maxX < other.minX or other.maxX <
-                                                           // this.minX
-             aabb1(3) < aabb2(1) || aabb2(3) < aabb1(1)); // this.maxY < other.minY or  other.maxY <
-                                                          // this.minY
+    return !(aabb1(2) < aabb2(0) || aabb2(2) < aabb1(0) || aabb1(3) < aabb2(1) ||
+             aabb2(3) < aabb1(1));
 }
 
 // Overload for shared_ptr, delegates to object reference version
@@ -143,10 +140,7 @@ static std::pair<FxVec2f, FxVec2f> closest_capsule_to_polygon(const FxShape* cap
     return {best_p1, best_p2};
 }
 
-// Edge (zero-skin capsule) vs polygon. The generic capsule reduction measures distance to the
-// polygon boundary, which stays positive once the segment is inside the polygon, so a bare
-// segment needs its own query: treat the segment's line as the reference axis and collect the
-// polygon vertices that fall behind it, within the segment's span.
+// Edge vs polygon: use the segment as the reference axis (generic capsule misses interiors).
 static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) {
     const auto& ev = edge->vertices();
     const FxVec2f E0 = ev[0];

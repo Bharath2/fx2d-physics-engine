@@ -1,13 +1,4 @@
-// Resting-contact stability tests.
-//
-// The contact velocity solver used to add energy it could never remove: the
-// per-frame warm start replayed an impulse accumulated across every substep,
-// and resolve_velocities applied only positive impulse deltas, so the excess was
-// never released. Resting bodies buzzed forever (they never got quiet enough to
-// sleep) and with elasticity 0 they visibly climbed off the ground.
-//
-// These tests pin the resting behaviour down and, just as importantly, guard the
-// motion that must keep working: restitution, friction and penetration recovery.
+// Resting-contact stability: no jitter/creep, stacks sleep; bounce/friction still work.
 
 #include "Fx2D/Physics.h"
 
@@ -166,9 +157,7 @@ void test_three_box_stack_is_stable() {
             "stacked boxes must stay in contact (1 m spacing for 1 m cubes)");
 }
 
-// Rebound measured without relying on catching the exact impact frame: a fast body
-// crosses several centimetres per frame, so find the lowest point reached and then
-// the highest point after it.
+// Peak after lowest point — robust when impact spans multiple frames.
 struct Bounce {
     float lowest = 1e9f;
     float peak_after_lowest = -1e9f;
@@ -183,9 +172,7 @@ struct Bounce {
     float rebound() const { return peak_after_lowest - lowest; }
 };
 
-// Regression guard: the jitter fix must not be achieved by killing restitution.
-// An elasticity 0.9 ball dropped 2.25 m rebounds ~24% of the drop here, the same
-// before and after the contact solver rework.
+// Elastic bounce must survive the resting-contact fix.
 void test_elastic_ball_still_bounces() {
     FxScene scene = make_scene();
     // Contact elasticity is min(A, B), so the ground must be elastic too.
@@ -209,9 +196,7 @@ void test_elastic_ball_still_bounces() {
             "an elastic ball must never rebound above its drop height");
 }
 
-// The headline energy test. With elasticity 0 the ball used to rebound to 103% of
-// its drop height - more energy out than in - because the solver replayed a
-// warm-start impulse it was structurally unable to take back.
+// Inelastic landings must not gain energy (old warm-start bug rebounded >100%).
 void test_inelastic_ball_does_not_gain_energy() {
     FxScene scene = make_scene();
     make_ground(scene, 6.0f, 0.75f, 12.0f, 1.5f);

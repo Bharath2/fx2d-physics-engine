@@ -272,10 +272,7 @@ void FxMotionAlongAxisConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2, f
 }
 
 namespace FxSolver {
-// A sleeping body is treated as immovable by contact solving. Its integration is
-// paused, so any correction it receives is never balanced by gravity again and it
-// would drift out of the pile indefinitely. Corrections go to the awake partner,
-// which is safe because FxScene wakes a sleeper as soon as its partner is moving.
+// Sleeping bodies are immovable in contact solves (integration is paused).
 static float eff_inv_mass(const FxEntity& e) {
     return e.is_sleeping() ? 0.0f : e.inv_mass();
 }
@@ -376,9 +373,7 @@ void warm_start(FxContact& contact) {
         B.velocity.xy() += wB * impulse;
         A.velocity.theta() -= IA * (jn * rA[i].cross(n) + jt * rA[i].cross(t));
         B.velocity.theta() += IB * (jn * rB[i].cross(n) + jt * rB[i].cross(t));
-        // Book the guess as applied, so resolve_velocities can subtract it again if
-        // it turns out to be too large. Without this the kick is never undone and
-        // resting bodies gain energy every frame.
+        // Book the warm-start as applied so excess can be released later.
         contact.jn_accumulated[i] = jn;
         contact.jt_accumulated[i] = jt;
     }
@@ -419,10 +414,7 @@ void resolve_velocities(FxContact& contact) {
             float ra_n = rA[k].cross(n), rb_n = rB[k].cross(n);
             float K_n = wA + wB + IA * ra_n * ra_n + IB * rb_n * rb_n;
 
-            // Restitution aims at a fixed target derived from the closing speed
-            // captured at the start of the substep, not at the current velocity:
-            // otherwise a second sweep over this contact would see the bounce as
-            // error and cancel it.
+            // Fixed restitution target from substep start (later sweeps must not cancel bounce).
             const float vn_target =
                 (contact.vn_pre[k] < -kRestitutionSlop) ? -e * contact.vn_pre[k] : 0.0f;
             if (K_n > 1e-6f) {
@@ -432,8 +424,7 @@ void resolve_velocities(FxContact& contact) {
                 float delta_jn = new_jn - old_jn;
                 contact.jn_accumulated[k] = new_jn;
 
-                // Apply both signs: a negative delta releases impulse this substep
-                // already applied (never more, since new_jn is clamped at zero).
+                // Negative delta releases excess impulse already applied this substep.
                 if (delta_jn != 0.0f) {
                     FxVec2f Pn = n * delta_jn;
                     A.velocity.xy() -= wA * Pn;
@@ -445,9 +436,7 @@ void resolve_velocities(FxContact& contact) {
         }
     }
 
-    // Normal impulse this substep applied, shared as the friction cone budget.
-    // Summed once here: accumulating it inside the iteration loop above counted
-    // every contact point twice and doubled the friction limit.
+    // Friction cone budget = normal impulse this substep (sum once, not per iter).
     float jn_sum = 0.0f;
     for (size_t i = 0; i < contact.count; i++)
         jn_sum += contact.jn_accumulated[i];

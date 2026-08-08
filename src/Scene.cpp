@@ -196,9 +196,7 @@ void FxScene::step(double step_dt) {
                                                         entities_vec[pair.second],
                                                         static_cast<float>(substep_dt));
             if (c.is_valid()) {
-                // Wake a sleeping body only when its partner is awake and actually
-                // moving. Waking on the mere existence of a contact means a resting
-                // stack is roused every substep and can never stay asleep.
+                // Wake only when a moving, awake partner disturbs a sleeper.
                 auto wake_if_disturbed = [](const std::shared_ptr<FxEntity>& sleeper,
                                             const std::shared_ptr<FxEntity>& other) {
                     if (!sleeper || !other || !sleeper->is_sleeping()) return;
@@ -220,8 +218,7 @@ void FxScene::step(double step_dt) {
                     // discard cached friction impulse to avoid spurious lateral forces.
                     bool normal_stable = cache_it->second.normal.dot(c.normal) > 0.99f;
                     for (size_t contact_idx = 0; contact_idx < 2; ++contact_idx) {
-                        // Seed the warm-start guess only. jn_accumulated tracks what this
-                        // substep applies, so it must stay at zero until warm_start runs.
+                        // Warm-start guess only; jn_accumulated stays 0 until warm_start.
                         c.jn_warm[contact_idx] = cache_it->second.jn[contact_idx];
                         c.jt_warm[contact_idx] =
                             normal_stable ? cache_it->second.jt[contact_idx] : 0.0f;
@@ -249,11 +246,7 @@ void FxScene::step(double step_dt) {
             entity->velocity = delta / substep_dt;
         });
 
-        // Solve velocity constraints (dynamic friction and restitution).
-        // Warm start only on the first substep: subsequent substeps already carry the
-        // previous substep's impulse through body.step() velocity integration, so
-        // re-applying it would double-count the impulse and cause excessive bounce.
-        // Capture closing speeds before any impulse is applied this substep.
+        // Restitution target, then warm-start (first substep only), then velocity sweeps.
         for (auto& c : contacts)
             FxSolver::init_velocity_pass(c);
 
@@ -262,10 +255,7 @@ void FxScene::step(double step_dt) {
                 FxSolver::warm_start(c);
         }
 
-        // Sweep the whole contact list several times. Solving each contact once in
-        // isolation leaves a large velocity residual in stacks, because every
-        // neighbour re-introduces error into the contacts already visited - enough
-        // residual to keep a visually motionless stack above the sleep threshold.
+        // Multiple passes: one solve per contact leaves stack velocity residuals.
         for (size_t pass = 0; pass < kVelocityPasses; ++pass) {
             for (auto& c : contacts)
                 FxSolver::resolve_velocities(c);
@@ -312,14 +302,3 @@ void FxScene::step(double step_dt) {
         m_func_step_callback(*this, clamped_dt);
     }
 }
-
-// // set the maximum limit for time step
-// void FxScene::set_max_time_step(const double& step_dt){
-//     if (step_dt < m_min_time_step){
-//         throw std::invalid_argument("FxScene: max time step (dt) must be greater than 1e-3");
-//     } else if (step_dt > 0.1){
-//         throw std::invalid_argument("FxScene: max time step (dt) must be less than or equal to
-//         0.1");
-//     }
-//     m_max_time_step = step_dt;
-// }
