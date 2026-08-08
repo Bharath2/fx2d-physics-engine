@@ -11,7 +11,9 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-bool approx(float a, float b, float eps = 1e-5f) { return std::fabs(a - b) <= eps; }
+bool approx(float a, float b, float eps = 1e-5f) {
+    return std::fabs(a - b) <= eps;
+}
 
 // FxAngleWrap used to shift by +pi before the fmod, which rounds away any angle
 // smaller than ~1.2e-7 rad (half an ulp of float near pi) and returns exactly 0.

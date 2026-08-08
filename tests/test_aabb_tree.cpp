@@ -4,14 +4,14 @@
 
 // Helper: build a square AABB centred at (cx,cy) with half-extent h
 static FxAABB box(float cx, float cy, float h) {
-    return { cx - h, cy - h, cx + h, cy + h };
+    return {cx - h, cy - h, cx + h, cy + h};
 }
 
 // 1. Single leaf → no pairs
 static void test_single_leaf_no_pairs() {
     FxAABBTree t;
     t.insert(0, box(1.0f, 1.0f, 0.5f));
-    std::vector<std::pair<int32_t,int32_t>> pairs;
+    std::vector<std::pair<int32_t, int32_t>> pairs;
     t.query_pairs(pairs);
     assert(pairs.empty());
 }
@@ -20,8 +20,8 @@ static void test_single_leaf_no_pairs() {
 static void test_two_overlapping_one_pair() {
     FxAABBTree t;
     t.insert(0, box(0.0f, 0.0f, 1.0f));
-    t.insert(1, box(1.0f, 0.0f, 1.0f));  // overlaps leaf 0
-    std::vector<std::pair<int32_t,int32_t>> pairs;
+    t.insert(1, box(1.0f, 0.0f, 1.0f)); // overlaps leaf 0
+    std::vector<std::pair<int32_t, int32_t>> pairs;
     t.query_pairs(pairs);
     assert(pairs.size() == 1);
     assert(pairs[0].first == 0 && pairs[0].second == 1);
@@ -31,8 +31,8 @@ static void test_two_overlapping_one_pair() {
 static void test_two_separated_no_pairs() {
     FxAABBTree t;
     t.insert(0, box(0.0f, 0.0f, 0.4f));
-    t.insert(1, box(5.0f, 5.0f, 0.4f));  // far away
-    std::vector<std::pair<int32_t,int32_t>> pairs;
+    t.insert(1, box(5.0f, 5.0f, 0.4f)); // far away
+    std::vector<std::pair<int32_t, int32_t>> pairs;
     t.query_pairs(pairs);
     assert(pairs.empty());
 }
@@ -43,7 +43,7 @@ static void test_remove_restores_empty_pairs() {
     int32_t n0 = t.insert(0, box(0.0f, 0.0f, 1.0f));
     int32_t n1 = t.insert(1, box(0.5f, 0.0f, 1.0f));
     t.remove(n1);
-    std::vector<std::pair<int32_t,int32_t>> pairs;
+    std::vector<std::pair<int32_t, int32_t>> pairs;
     t.query_pairs(pairs);
     assert(pairs.empty());
     (void)n0;
@@ -57,7 +57,7 @@ static void test_update_outside_fat_box_returns_true() {
     // Move leaf 1 close enough to overlap leaf 0; this must escape its fat box
     bool reinserted = t.update(n1, box(0.5f, 0.0f, 1.0f));
     assert(reinserted == true);
-    std::vector<std::pair<int32_t,int32_t>> pairs;
+    std::vector<std::pair<int32_t, int32_t>> pairs;
     t.query_pairs(pairs);
     assert(pairs.size() == 1);
     (void)n0;

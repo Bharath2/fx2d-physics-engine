@@ -1,10 +1,10 @@
 #include <iostream>
-#include <string>
 #include <memory>
+#include <string>
 
 #include "Fx2D/Core.h"
 
-int main(int, char**){
+int main(int, char**) {
     // Load scene configuration from YAML file
     auto scene = FxYAML::buildScene("./Scene.yml");
 
@@ -16,7 +16,7 @@ int main(int, char**){
 
     // Initialize renderer with 60 FPS target
     FxRylbRenderer renderer(scene, 60);
-     
+
     // Start the simulation loop
     renderer.run();
 

@@ -17,9 +17,10 @@
 template<typename T>
 class FxNamedRegistry {
   protected:
-    std::vector<std::shared_ptr<T>> m_items_vec;         // packed storage for cache-friendly iteration
-    std::unordered_map<std::string, size_t> m_name_map;  // name -> packed index in m_items_vec
-    size_t m_size_limit = std::numeric_limits<size_t>::max();  // Hard ceiling imposed by the derived registry
+    std::vector<std::shared_ptr<T>> m_items_vec; // packed storage for cache-friendly iteration
+    std::unordered_map<std::string, size_t> m_name_map; // name -> packed index in m_items_vec
+    size_t m_size_limit = std::numeric_limits<size_t>::max(); // Hard ceiling imposed by the derived
+                                                              // registry
     size_t m_max_size = std::numeric_limits<size_t>::max();
 
     bool _add(const std::shared_ptr<T>& item) {
@@ -124,7 +125,7 @@ class FxNamedRegistry {
         m_name_map.rehash(0);
     }
 
-    template <typename ExecPolicy, typename Func>
+    template<typename ExecPolicy, typename Func>
     void for_each(ExecPolicy&& policy, Func&& func) {
         // Snapshot raw pointers first so parallel algorithms iterate a simple contiguous array.
         std::vector<T*> raw_items_vec;
@@ -133,15 +134,13 @@ class FxNamedRegistry {
             raw_items_vec.push_back(item.get());
         }
 
-        std::for_each(std::forward<ExecPolicy>(policy),
-                      raw_items_vec.begin(),
-                      raw_items_vec.end(),
+        std::for_each(std::forward<ExecPolicy>(policy), raw_items_vec.begin(), raw_items_vec.end(),
                       std::forward<Func>(func));
     }
 
-    template <typename ExecPolicy, typename Func>
+    template<typename ExecPolicy, typename Func>
     void transform(ExecPolicy&& policy, Func&& func,
-        std::vector<std::invoke_result_t<Func, std::shared_ptr<T>>>& results) {
+                   std::vector<std::invoke_result_t<Func, std::shared_ptr<T>>>& results) {
         // Pre-size the output so std::transform can write by index in one pass.
         results.resize(m_items_vec.size());
 
@@ -152,11 +151,8 @@ class FxNamedRegistry {
             raw_items_vec.push_back(item.get());
         }
 
-        std::transform(std::forward<ExecPolicy>(policy),
-                       raw_items_vec.begin(),
-                       raw_items_vec.end(),
-                       results.begin(),
-                       std::forward<Func>(func));
+        std::transform(std::forward<ExecPolicy>(policy), raw_items_vec.begin(), raw_items_vec.end(),
+                       results.begin(), std::forward<Func>(func));
     }
 };
 
@@ -165,11 +161,11 @@ class FxEntity;
 // Specialized registry for entities that handles collision pair exclusion.
 class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
   private:
-    std::unordered_set<uint64_t> m_no_collision_pairs;  // excluded collision pairs
-    uint32_t m_next_entity_id = 0;  // entity ID counter
-    mutable FxAABBTree m_aabb_tree;  // dynamic AABB tree
-    mutable std::unordered_map<uint32_t, int32_t> m_entity_node_map;  // entity_id -> tree node idx
-    std::unordered_map<uint32_t, size_t> m_entity_idx_map;  // entity_id -> packed entity index
+    std::unordered_set<uint64_t> m_no_collision_pairs; // excluded collision pairs
+    uint32_t m_next_entity_id = 0; // entity ID counter
+    mutable FxAABBTree m_aabb_tree; // dynamic AABB tree
+    mutable std::unordered_map<uint32_t, int32_t> m_entity_node_map; // entity_id -> tree node idx
+    std::unordered_map<uint32_t, size_t> m_entity_idx_map; // entity_id -> packed entity index
 
     void remove_entity_from_tree(uint32_t entity_id) const {
         // Keep the tree free of stale leaves when an entity disappears or loses collision geometry.
@@ -180,7 +176,8 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
     }
 
     void erase_collision_pairs_for(uint32_t entity_id) {
-        // Collision exclusions are keyed by entity id, so purge every pair that references the removed entity.
+        // Collision exclusions are keyed by entity id, so purge every pair that references the
+        // removed entity.
         for (auto it = m_no_collision_pairs.begin(); it != m_no_collision_pairs.end();) {
             uint32_t a = static_cast<uint32_t>(*it >> 32);
             uint32_t b = static_cast<uint32_t>(*it & 0xffffffffULL);
@@ -211,7 +208,8 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         entity->set_entity_id(m_next_entity_id);
         bool success = _add(entity);
         if (success) {
-            // Broad-phase queries translate tree entity ids back to packed indices through this map.
+            // Broad-phase queries translate tree entity ids back to packed indices through this
+            // map.
             m_entity_idx_map[m_next_entity_id] = m_items_vec.size() - 1;
             m_next_entity_id++;
         }
@@ -231,14 +229,16 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         bool moved_last = (idx != last);
         uint32_t moved_id = moved_last ? m_items_vec[last]->get_entity_id() : 0;
 
-        // Clean broad-phase and collision-filter state before the packed storage changes underneath us.
+        // Clean broad-phase and collision-filter state before the packed storage changes underneath
+        // us.
         remove_entity_from_tree(removed_id);
         erase_collision_pairs_for(removed_id);
         m_entity_idx_map.erase(removed_id);
 
         bool success = _remove(name);
         if (success && moved_last) {
-            // Swap-pop removal can move the last entity into idx, so refresh its cached packed index.
+            // Swap-pop removal can move the last entity into idx, so refresh its cached packed
+            // index.
             m_entity_idx_map[moved_id] = idx;
         }
         return success;
@@ -291,7 +291,7 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             }
 
             const auto& bb = e->bounding_box();
-            FxAABB tight { bb[0], bb[1], bb[2], bb[3] };
+            FxAABB tight{bb[0], bb[1], bb[2], bb[3]};
             if (!tight.is_valid()) continue;
 
             // For CCD bodies, extend the insertion AABB to cover the swept path this substep.
@@ -299,8 +299,7 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             if (e->enable_ccd && substep_dt > 0.0f) {
                 float dx = e->velocity.x() * substep_dt;
                 float dy = e->velocity.y() * substep_dt;
-                FxAABB swept { tight.minX + dx, tight.minY + dy,
-                               tight.maxX + dx, tight.maxY + dy };
+                FxAABB swept{tight.minX + dx, tight.minY + dy, tight.maxX + dx, tight.maxY + dy};
                 query_aabb = FxAABB::combine(tight, swept);
             }
 
@@ -329,9 +328,12 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             size_t j = ib->second;
 
             if (m_items_vec[i]->is_sleeping() && m_items_vec[j]->is_sleeping() &&
-                !m_items_vec[i]->enable_ccd && !m_items_vec[j]->enable_ccd) continue;
-            if (!is_collision_pair(static_cast<uint32_t>(eid_a), static_cast<uint32_t>(eid_b))) continue;
-            if (!m_items_vec[i]->collision_geometry() || !m_items_vec[j]->collision_geometry()) continue;
+                !m_items_vec[i]->enable_ccd && !m_items_vec[j]->enable_ccd)
+                continue;
+            if (!is_collision_pair(static_cast<uint32_t>(eid_a), static_cast<uint32_t>(eid_b)))
+                continue;
+            if (!m_items_vec[i]->collision_geometry() || !m_items_vec[j]->collision_geometry())
+                continue;
 
             if (i > j) std::swap(i, j);
             pairs.emplace_back(i, j);

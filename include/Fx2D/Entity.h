@@ -1,44 +1,45 @@
 
-#pragma once 
+#pragma once
 
 #include <memory>
-#include <string>
 #include <stdexcept>
+#include <string>
 
 #include "Fx2D/Math.h"
 
 inline bool is_valid_name(const std::string& s) {
     if (s.empty()) return false;
-    return std::all_of(s.begin(), s.end(), [](unsigned char c){
-        return (c >= '0' && c <= '9') ||
-               (c >= 'A' && c <= 'Z') ||
-               (c >= 'a' && c <= 'z') ||
+    return std::all_of(s.begin(), s.end(), [](unsigned char c) {
+        return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
                c == '_';
     });
 }
 
-// container for visual shape 
+// container for visual shape
 struct FxVisualShape : public FxShape {
-    private:    
-        FxVec4ui8 m_fillColor {200, 200, 200, 255};    // Fill color (RGBA)
-        FxVec4ui8 m_outlineColor {10, 10, 10, 255};    // Outline color (RGBA)
-        float m_outlineThickness = 2.5f;               // Outline thickness in pixels
-        std::string m_fillTexturePath = "";                // File path to texture file (empty = no texture)
-    public:
-        // 1. "Inherit" all of FxShape's ctors
-        using FxShape::FxShape;
-        // 2. Conversion‐style ctor: build a VisualShape from any Shape
-        FxVisualShape(const FxShape& base) : FxShape(base) {}
-        // Method to set a fillColor, outlineColor and texture
-        void set_fillColor(const FxVec4ui8& color) { m_fillColor = color; m_fillTexturePath = ""; }
-        void set_outlineColor(const FxVec4ui8& color) { m_outlineColor = color; }
-        void set_outlineThickness(const float& thickness){ m_outlineThickness = thickness; }
-        void set_fillTexture(const std::string& filePath) { m_fillTexturePath = filePath; }
-        // getters for all the attributes
-        const FxVec4ui8& fillColor() const {return m_fillColor;}
-        const std::string& fillTexture() const {return m_fillTexturePath;}
-        const FxVec4ui8& outlineColor() const {return m_outlineColor;}
-        float outlineThickness() const {return m_outlineThickness;}
+  private:
+    FxVec4ui8 m_fillColor{200, 200, 200, 255}; // Fill color (RGBA)
+    FxVec4ui8 m_outlineColor{10, 10, 10, 255}; // Outline color (RGBA)
+    float m_outlineThickness = 2.5f; // Outline thickness in pixels
+    std::string m_fillTexturePath = ""; // File path to texture file (empty = no texture)
+  public:
+    // 1. "Inherit" all of FxShape's ctors
+    using FxShape::FxShape;
+    // 2. Conversion‐style ctor: build a VisualShape from any Shape
+    FxVisualShape(const FxShape& base) : FxShape(base) {}
+    // Method to set a fillColor, outlineColor and texture
+    void set_fillColor(const FxVec4ui8& color) {
+        m_fillColor = color;
+        m_fillTexturePath = "";
+    }
+    void set_outlineColor(const FxVec4ui8& color) { m_outlineColor = color; }
+    void set_outlineThickness(const float& thickness) { m_outlineThickness = thickness; }
+    void set_fillTexture(const std::string& filePath) { m_fillTexturePath = filePath; }
+    // getters for all the attributes
+    const FxVec4ui8& fillColor() const { return m_fillColor; }
+    const std::string& fillTexture() const { return m_fillTexturePath; }
+    const FxVec4ui8& outlineColor() const { return m_outlineColor; }
+    float outlineThickness() const { return m_outlineThickness; }
 };
 
 // container for collision shape
@@ -49,52 +50,51 @@ class FxEntity {
   private:
     // unique identifier assigned by scene or registry
     uint32_t m_entity_id = 0;
-    
+
     // unique name for an entity
     std::string m_name;
-    
+
     // mass and inertia
-    float _mass = 1.0f;     
-    float _inertia = 1.0f;   // around center of mass
+    float _mass = 1.0f;
+    float _inertia = 1.0f; // around center of mass
     float _inv_mass = 1.0f;
     float _inv_inertia = 1.0f;
-    
+
     // store initial state for reset
-    FxVec3f _init_pose {0, 0, 0};
-    FxVec3f _init_velocity {0, 0, 0};
-    FxVec3d m_pose_carry {0, 0, 0};
-    
+    FxVec3f _init_pose{0, 0, 0};
+    FxVec3f _init_velocity{0, 0, 0};
+    FxVec3d m_pose_carry{0, 0, 0};
+
     // visual and collision shapes
     std::shared_ptr<FxCollisionShape> m_collision;
     std::shared_ptr<FxVisualShape> m_visual = std::make_shared<FxVisualShape>();
 
     // total resultant force and moment on the body
     float m_eff_moment = 0.0f;
-    FxVec2f m_eff_force {0, 0};
+    FxVec2f m_eff_force{0, 0};
 
     // accumulated impulses for the current step
     float m_eff_impulse_moment = 0.0f;
-    FxVec2f m_eff_impulse {0, 0};
+    FxVec2f m_eff_impulse{0, 0};
 
     // axis aligned bounding box in world coordinates
-    FxArray<float> m_bounding_box {-1.0f, -1.0f, -1.0f, -1.0f}; 
+    FxArray<float> m_bounding_box{-1.0f, -1.0f, -1.0f, -1.0f};
 
     // sleep state tracking
     float m_sleep_timer = 0.0f;
-    bool  m_sleeping    = false;
+    bool m_sleeping = false;
 
-    //update pose from velocity
+    // update pose from velocity
     void __update_pose(const double& step_dt);
-    
-  public:
 
+  public:
     // current state (public interface - single precision)
-    FxVec3f pose {0, 0, 0};    // x, y, theta
-    FxVec3f velocity {0, 0, 0};   // velocity along x, y axis and angular velocity along z axis
+    FxVec3f pose{0, 0, 0}; // x, y, theta
+    FxVec3f velocity{0, 0, 0}; // velocity along x, y axis and angular velocity along z axis
 
     // previous pose and velocity for tracking changes (public interface)
-    FxVec3f prev_pose {0, 0, 0};  
-    FxVec3f prev_velocity {0, 0, 0};
+    FxVec3f prev_pose{0, 0, 0};
+    FxVec3f prev_velocity{0, 0, 0};
 
     // physics config
     float elasticity = 1.0f;
@@ -102,34 +102,39 @@ class FxEntity {
     float gravity_scale = 1.0f;
     float static_friction = 0.0f;
     float dynamic_friction = 0.0f;
-    
+
     // entity state
-    bool enabled     = true;   // If false, entity is skipped in physics updates, collisions, and rendering
-    bool enable_ccd  = false;  // If true, speculative contacts are generated for this entity to prevent tunneling
+    bool enabled = true; // If false, entity is skipped in physics updates, collisions, and
+                         // rendering
+    bool enable_ccd = false; // If true, speculative contacts are generated for this entity to
+                             // prevent tunneling
 
     // sleep configuration
-    float sleep_threshold_linear  = 0.01f;  // linear speed below which entity may sleep
-    float sleep_threshold_angular = 0.05f;  // angular speed below which entity may sleep
-    float sleep_time_required     = 0.5f;   // seconds of low motion before sleeping
+    float sleep_threshold_linear = 0.01f; // linear speed below which entity may sleep
+    float sleep_threshold_angular = 0.05f; // angular speed below which entity may sleep
+    float sleep_time_required = 0.5f; // seconds of low motion before sleeping
     bool is_sleeping() const { return m_sleeping; }
-    void wake()  { m_sleeping = false; m_sleep_timer = 0.0f; }
+    void wake() {
+        m_sleeping = false;
+        m_sleep_timer = 0.0f;
+    }
     void sleep() { m_sleeping = true; }
-    void tick_sleep(float dt);  // advance sleep timer; called by FxScene each step
+    void tick_sleep(float dt); // advance sleep timer; called by FxScene each step
 
     // contructor with name validation
     explicit FxEntity(const std::string& entityName);
 
     // getter for the name and ID
-    const std::string& get_name() const {return m_name;}
-    uint32_t get_entity_id() const {return m_entity_id;}
-    void set_entity_id(uint32_t id) {m_entity_id = id;}
+    const std::string& get_name() const { return m_name; }
+    uint32_t get_entity_id() const { return m_entity_id; }
+    void set_entity_id(uint32_t id) { m_entity_id = id; }
 
     // resets current state to inital state
     void reset();
 
     // methods to set mass and inertia
     void set_mass(const float& mass);
-    void set_inertia(); //calculate based on shape
+    void set_inertia(); // calculate based on shape
     void set_inertia(const float& inertia);
     // methods to get mass and inertia
     float mass() const { return _mass; }
@@ -144,20 +149,20 @@ class FxEntity {
     void enable_external_forces(bool enable);
 
     // clear existing visual and collison shapes and assign new
-    void set_visual_geometry(FxVisualShape visual){
+    void set_visual_geometry(FxVisualShape visual) {
         m_visual = std::make_shared<FxVisualShape>(std::move(visual));
         m_visual->set_world_pose(pose);
     }
-    void set_collision_geometry(FxCollisionShape collision){
+    void set_collision_geometry(FxCollisionShape collision) {
         m_collision = std::make_shared<FxCollisionShape>(std::move(collision));
         m_collision->set_world_pose(pose);
     }
     // getters for visual and collison shapes
-    std::shared_ptr<FxVisualShape> visual_geometry() const {return m_visual;}
-    std::shared_ptr<FxCollisionShape> collision_geometry() const {return m_collision;}
+    std::shared_ptr<FxVisualShape> visual_geometry() const { return m_visual; }
+    std::shared_ptr<FxCollisionShape> collision_geometry() const { return m_collision; }
     // methods to delete visual and collision shapes
-    void del_visual_geometry(){ m_visual.reset(); };
-    void del_collision_geometry(){ m_collision.reset(); };
+    void del_visual_geometry() { m_visual.reset(); };
+    void del_collision_geometry() { m_collision.reset(); };
 
     // collision detection methods
     const FxArray<float> bounding_box() const;
@@ -174,10 +179,10 @@ class FxEntity {
     // Get instantaneous velocity at a specific position
     FxVec2f velocity_at_world_point(const FxVec2f& position) const;
     FxVec2f velocity_at_local_point(const FxVec2f& local_position) const;
-    // Vector implementations of above 
+    // Vector implementations of above
     FxVec2fArray velocity_at_world_point(const FxVec2fArray& position) const;
     FxVec2fArray velocity_at_local_point(const FxVec2fArray& local_position) const;
-    
+
     // Convert local point to world coordinates and vice-versa
     FxVec2f to_world_frame(const FxVec2f& local_point) const;
     FxVec2f to_entity_frame(const FxVec2f& world_point) const;
@@ -185,8 +190,8 @@ class FxEntity {
     // resolve the forces and torques and calculate acceleration;
     FxVec3f calc_acceleration();
     FxVec3f calc_acceleration(const FxVec2f& gravity);
-    
+
     void step(const FxVec2f& gravity, const double& step_dt);
 
-    ~FxEntity(){}
+    ~FxEntity() {}
 };

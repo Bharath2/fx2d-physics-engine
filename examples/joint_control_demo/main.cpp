@@ -28,7 +28,7 @@
 int main() {
     FxScene scene = FxYAML::buildScene("examples/joint_control_demo/Scene.yml");
 
-    auto motor  = std::dynamic_pointer_cast<FxRevoluteJoint>(scene.get_joint("arm_motor"));
+    auto motor = std::dynamic_pointer_cast<FxRevoluteJoint>(scene.get_joint("arm_motor"));
     auto slider = std::dynamic_pointer_cast<FxPrismaticJoint>(scene.get_joint("slider_motor"));
     if (!motor) {
         std::cerr << "ERROR: revolute joint 'arm_motor' not found in scene\n";
@@ -43,16 +43,14 @@ int main() {
     // is offset from its centre of mass, and the resulting per-substep corrections
     // fall below float resolution at 1 ms, costing the motor most of its authority.
     // See docs/joint_control.md.
-    const double dt           = 0.01;
-    const int    steps        = 200;   // 2 s per phase
-    const int    print_every  = 40;
+    const double dt = 0.01;
+    const int steps = 200; // 2 s per phase
+    const int print_every = 40;
 
     auto report = [&](int step) {
-        std::cout << "  step " << step
-                  << "  theta=" << motor->get_theta()
-                  << "  omega=" << motor->get_omega()
-                  << "  pos="   << slider->get_position()
-                  << "  vel="   << slider->get_velocity() << "\n";
+        std::cout << "  step " << step << "  theta=" << motor->get_theta()
+                  << "  omega=" << motor->get_omega() << "  pos=" << slider->get_position()
+                  << "  vel=" << slider->get_velocity() << "\n";
     };
 
     // ---------------------------------------------------------------
@@ -96,7 +94,7 @@ int main() {
     motor->set_control_mode(ControlMode::EFFORT);
     slider->set_control_mode(ControlMode::EFFORT);
     motor->set_torque(15.0f);
-    slider->set_force(-2.0f);  // reverses the slider back toward the rail centre
+    slider->set_force(-2.0f); // reverses the slider back toward the rail centre
     for (int i = 0; i < steps; ++i) {
         scene.step(dt);
         if (i % print_every == 0) report(i);

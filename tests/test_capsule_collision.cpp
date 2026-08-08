@@ -14,11 +14,13 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-bool approx(float a, float b, float eps = 1e-3f) { return std::fabs(a - b) <= eps; }
+bool approx(float a, float b, float eps = 1e-3f) {
+    return std::fabs(a - b) <= eps;
+}
 
 // Build a capsule entity at (x, y) with segment length and skin radius.
-std::shared_ptr<FxEntity> make_capsule(const std::string& name, float x, float y,
-                                       float length, float radius, float theta = 0.0f) {
+std::shared_ptr<FxEntity> make_capsule(const std::string& name, float x, float y, float length,
+                                       float radius, float theta = 0.0f) {
     auto e = std::make_shared<FxEntity>(name);
     e->set_mass(1.0f);
     e->set_collision_geometry(FxCollisionShape(length, radius));
@@ -38,8 +40,8 @@ std::shared_ptr<FxEntity> make_circle(const std::string& name, float x, float y,
     return e;
 }
 
-std::shared_ptr<FxEntity> make_rect(const std::string& name, float x, float y,
-                                    float w, float h, float skin = 0.0f, float theta = 0.0f) {
+std::shared_ptr<FxEntity> make_rect(const std::string& name, float x, float y, float w, float h,
+                                    float skin = 0.0f, float theta = 0.0f) {
     auto e = std::make_shared<FxEntity>(name);
     e->set_mass(1.0f);
     e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}, skin));
@@ -63,13 +65,14 @@ void test_capsule_construction() {
 void test_capsule_vs_capsule_endon() {
     const float L = 2.0f, r = 0.5f;
     // Move them slightly closer so the skins overlap.
-    auto a = make_capsule("cap_a", -1.4f, 0.0f, L, r);   // right end at -0.4
-    auto b = make_capsule("cap_b",  1.4f, 0.0f, L, r);   // left end at 0.4 -> gap should be 0.8 - 2r = -0.2
+    auto a = make_capsule("cap_a", -1.4f, 0.0f, L, r); // right end at -0.4
+    auto b = make_capsule("cap_b", 1.4f, 0.0f, L, r); // left end at 0.4 -> gap should be 0.8 - 2r =
+                                                      // -0.2
     FxContact c = FxSolver::collision_check(a, b);
     require(c.is_valid(), "end-on capsules should collide");
     require(approx(c.penetration_depth, 0.2f, 1e-3f), "end-on penetration must be ~0.2");
-    require(approx(c.normal.x(),  1.0f, 1e-2f), "normal must point along +x (A->B)");
-    require(approx(c.normal.y(),  0.0f, 1e-2f), "normal y component must be ~0");
+    require(approx(c.normal.x(), 1.0f, 1e-2f), "normal must point along +x (A->B)");
+    require(approx(c.normal.y(), 0.0f, 1e-2f), "normal y component must be ~0");
 }
 
 // Two horizontal capsules stacked: side-by-side overlap along y.
@@ -85,8 +88,8 @@ void test_capsule_vs_capsule_side_by_side() {
 
 // Capsule and a far-away circle: no contact.
 void test_capsule_vs_circle_separated() {
-    auto cap    = make_capsule("cap", 0.0f, 0.0f, 2.0f, 0.5f);
-    auto circle = make_circle ("ball", 10.0f, 0.0f, 0.5f);
+    auto cap = make_capsule("cap", 0.0f, 0.0f, 2.0f, 0.5f);
+    auto circle = make_circle("ball", 10.0f, 0.0f, 0.5f);
     FxContact c = FxSolver::collision_check(cap, circle);
     require(!c.is_valid(), "separated capsule/circle must report no contact");
 }
@@ -94,8 +97,9 @@ void test_capsule_vs_circle_separated() {
 // Circle just touching the side of a horizontal capsule.
 void test_capsule_vs_circle_side() {
     const float L = 4.0f, r = 0.5f;
-    auto cap    = make_capsule("cap", 0.0f, 0.0f, L, r);
-    auto circle = make_circle ("ball", 0.5f, 0.8f, 0.5f); // surface gap along y = 0.8 - r - 0.5 = -0.2
+    auto cap = make_capsule("cap", 0.0f, 0.0f, L, r);
+    auto circle = make_circle("ball", 0.5f, 0.8f, 0.5f); // surface gap along y = 0.8 - r - 0.5 =
+                                                         // -0.2
     FxContact c = FxSolver::collision_check(cap, circle);
     require(c.is_valid(), "circle should hit capsule side");
     require(approx(c.penetration_depth, 0.2f, 1e-3f), "side penetration ~0.2");
@@ -104,8 +108,8 @@ void test_capsule_vs_circle_side() {
 
 // Capsule hitting a thin rectangle from above (rounded shape vs polygon).
 void test_capsule_vs_rectangle() {
-    auto cap  = make_capsule("cap",   0.0f, 1.4f, 4.0f, 0.5f);  // bottom of capsule at y=0.9
-    auto rect = make_rect   ("floor", 0.0f, 0.0f, 10.0f, 2.0f); // top of rect at y=1.0
+    auto cap = make_capsule("cap", 0.0f, 1.4f, 4.0f, 0.5f); // bottom of capsule at y=0.9
+    auto rect = make_rect("floor", 0.0f, 0.0f, 10.0f, 2.0f); // top of rect at y=1.0
     // Overlap along y: capsule bottom at 0.9, rect top at 1.0 -> 0.1 penetration.
     FxContact c = FxSolver::collision_check(cap, rect);
     require(c.is_valid(), "capsule should touch rectangle");
@@ -126,7 +130,8 @@ void test_rounded_box_construction() {
 void test_rounded_box_vs_rounded_box() {
     const float w = 2.0f, h = 2.0f, sk = 0.25f;
     auto a = make_rect("ra", 0.0f, 0.0f, w, h, sk);
-    auto b = make_rect("rb", 2.4f, 0.0f, w, h, sk); // gap between raw rects = 0.4, skins overlap by 0.1
+    auto b = make_rect("rb", 2.4f, 0.0f, w, h, sk); // gap between raw rects = 0.4, skins overlap by
+                                                    // 0.1
     FxContact c = FxSolver::collision_check(a, b);
     require(c.is_valid(), "rounded boxes with overlapping skins must collide");
     require(approx(c.penetration_depth, 0.1f, 1e-2f), "rounded-box penetration ~0.1");
