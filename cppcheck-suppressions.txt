@@ -1,9 +1,0 @@
-# Intentional / third-party noise. Keep this file small — prefer fixing real issues.
-missingIncludeSystem
-unusedFunction
-# Test harness uses throw for require() failures from main().
-throwInEntryPoint:tests/*
-# Registry stores non-const entity pointers by design (broad-phase mutates).
-constVariablePointer:include/Fx2D/Registry.h
-# Intentional override that also clears side caches (AABB tree, pair filters).
-duplInheritedMember:include/Fx2D/Registry.h
