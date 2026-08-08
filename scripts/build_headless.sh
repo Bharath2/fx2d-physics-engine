@@ -39,7 +39,8 @@ build joint_control_demo  examples/joint_control_demo/main.cpp
 echo "==> fx2d_tests"
 "$CXX" "${FLAGS[@]}" tests/test_aabb_tree.cpp tests/test_joints.cpp tests/test_ccd.cpp \
     tests/test_capsule_collision.cpp tests/test_collisions_edge.cpp \
-    tests/test_angle_precision.cpp "${CORE[@]}" "${LIBS[@]}" -o "$OUT/fx2d_tests"
+    tests/test_angle_precision.cpp tests/test_resting_stability.cpp \
+    "${CORE[@]}" "${LIBS[@]}" -o "$OUT/fx2d_tests"
 
 echo
 echo "Built in $OUT/ — run from the repo root so Scene.yml paths resolve."

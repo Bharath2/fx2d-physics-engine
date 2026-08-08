@@ -80,8 +80,10 @@ void test_effort_mode_applies_direct_effort() {
         e1->step(FxVec2f{0.0f, 0.0f}, 1.0);
         e2->step(FxVec2f{0.0f, 0.0f}, 1.0);
 
-        require(approx_equal(e1->velocity.theta(), -2.0f), "Revolute effort mode did not apply torque to entity1");
-        require(approx_equal(e2->velocity.theta(), 2.0f), "Revolute effort mode did not apply torque to entity2");
+        require(approx_equal(e1->velocity.theta(), -2.0f),
+                "Revolute effort mode did not apply torque to entity1");
+        require(approx_equal(e2->velocity.theta(), 2.0f),
+                "Revolute effort mode did not apply torque to entity2");
     }
 
     {
@@ -96,8 +98,10 @@ void test_effort_mode_applies_direct_effort() {
         e1->step(FxVec2f{0.0f, 0.0f}, 1.0);
         e2->step(FxVec2f{0.0f, 0.0f}, 1.0);
 
-        require(approx_equal(e1->velocity.x(), -3.0f), "Prismatic effort mode did not apply force to entity1");
-        require(approx_equal(e2->velocity.x(), 3.0f), "Prismatic effort mode did not apply force to entity2");
+        require(approx_equal(e1->velocity.x(), -3.0f),
+                "Prismatic effort mode did not apply force to entity1");
+        require(approx_equal(e2->velocity.x(), 3.0f),
+                "Prismatic effort mode did not apply force to entity2");
     }
 }
 
@@ -121,8 +125,10 @@ void test_pid_state_resets_on_target_and_mode_changes() {
     e1->step(FxVec2f{0.0f, 0.0f}, 1.0);
     e2->step(FxVec2f{0.0f, 0.0f}, 1.0);
 
-    require(approx_equal(e1->velocity.theta(), 0.0f), "PID state was not reset for entity1 on target change");
-    require(approx_equal(e2->velocity.theta(), 0.0f), "PID state was not reset for entity2 on target change");
+    require(approx_equal(e1->velocity.theta(), 0.0f),
+            "PID state was not reset for entity1 on target change");
+    require(approx_equal(e2->velocity.theta(), 0.0f),
+            "PID state was not reset for entity2 on target change");
 
     reset_entity_state(e1);
     reset_entity_state(e2);
@@ -141,8 +147,10 @@ void test_pid_state_resets_on_target_and_mode_changes() {
     e1->step(FxVec2f{0.0f, 0.0f}, 1.0);
     e2->step(FxVec2f{0.0f, 0.0f}, 1.0);
 
-    require(approx_equal(e1->velocity.theta(), 0.0f), "PID state was not reset for entity1 on mode change");
-    require(approx_equal(e2->velocity.theta(), 0.0f), "PID state was not reset for entity2 on mode change");
+    require(approx_equal(e1->velocity.theta(), 0.0f),
+            "PID state was not reset for entity1 on mode change");
+    require(approx_equal(e2->velocity.theta(), 0.0f),
+            "PID state was not reset for entity2 on mode change");
 }
 
 void test_yaml_joint_build_supports_effort_mode_and_aliases() {
@@ -186,29 +194,41 @@ joints:
     max_torque: 7.0
 )yaml");
 
-    auto revolute_effort = std::dynamic_pointer_cast<FxRevoluteJoint>(scene.get_joint("revolute_effort"));
-    auto prismatic_alias = std::dynamic_pointer_cast<FxPrismaticJoint>(scene.get_joint("prismatic_alias"));
-    auto revolute_alias = std::dynamic_pointer_cast<FxRevoluteJoint>(scene.get_joint("revolute_alias"));
+    auto revolute_effort =
+        std::dynamic_pointer_cast<FxRevoluteJoint>(scene.get_joint("revolute_effort"));
+    auto prismatic_alias =
+        std::dynamic_pointer_cast<FxPrismaticJoint>(scene.get_joint("prismatic_alias"));
+    auto revolute_alias =
+        std::dynamic_pointer_cast<FxRevoluteJoint>(scene.get_joint("revolute_alias"));
 
     require(static_cast<bool>(revolute_effort), "Failed to build revolute_effort joint");
     require(static_cast<bool>(prismatic_alias), "Failed to build prismatic_alias joint");
     require(static_cast<bool>(revolute_alias), "Failed to build revolute_alias joint");
 
-    require(revolute_effort->get_control_mode() == ControlMode::EFFORT, "YAML did not set revolute effort mode");
-    require(approx_equal(revolute_effort->get_effort(), 1.5f), "YAML did not set revolute effort target");
-    require(approx_equal(revolute_effort->get_max_effort(), 4.0f), "YAML did not set unified max_effort");
+    require(revolute_effort->get_control_mode() == ControlMode::EFFORT,
+            "YAML did not set revolute effort mode");
+    require(approx_equal(revolute_effort->get_effort(), 1.5f),
+            "YAML did not set revolute effort target");
+    require(approx_equal(revolute_effort->get_max_effort(), 4.0f),
+            "YAML did not set unified max_effort");
     FxVec3f pid = revolute_effort->get_pid();
     require(approx_equal(pid.x(), 2.0f), "YAML did not set pid p");
     require(approx_equal(pid.y(), 3.0f), "YAML did not set pid i");
     require(approx_equal(pid.z(), 4.0f), "YAML did not set pid d");
 
-    require(prismatic_alias->get_control_mode() == ControlMode::EFFORT, "YAML did not set prismatic effort mode");
-    require(approx_equal(prismatic_alias->get_effort(), 2.5f), "YAML did not set prismatic effort target");
-    require(approx_equal(prismatic_alias->get_max_effort(), 6.0f), "YAML max_force alias did not map to max_effort");
+    require(prismatic_alias->get_control_mode() == ControlMode::EFFORT,
+            "YAML did not set prismatic effort mode");
+    require(approx_equal(prismatic_alias->get_effort(), 2.5f),
+            "YAML did not set prismatic effort target");
+    require(approx_equal(prismatic_alias->get_max_effort(), 6.0f),
+            "YAML max_force alias did not map to max_effort");
 
-    require(revolute_alias->get_control_mode() == ControlMode::EFFORT, "YAML did not set revolute alias effort mode");
-    require(approx_equal(revolute_alias->get_effort(), 3.5f), "YAML did not set revolute alias effort target");
-    require(approx_equal(revolute_alias->get_max_effort(), 7.0f), "YAML max_torque alias did not map to max_effort");
+    require(revolute_alias->get_control_mode() == ControlMode::EFFORT,
+            "YAML did not set revolute alias effort mode");
+    require(approx_equal(revolute_alias->get_effort(), 3.5f),
+            "YAML did not set revolute alias effort target");
+    require(approx_equal(revolute_alias->get_max_effort(), 7.0f),
+            "YAML max_torque alias did not map to max_effort");
 }
 
 void test_entity_registry_remove_keeps_broad_phase_consistent() {
@@ -223,8 +243,10 @@ void test_entity_registry_remove_keeps_broad_phase_consistent() {
 
     auto pairs = registry.get_broad_phase_pairs();
     require(pairs.size() == 1, "Expected one initial broad-phase pair");
-    require(registry.items()[pairs[0].first]->get_name() == "registry_a", "Unexpected first initial pair name");
-    require(registry.items()[pairs[0].second]->get_name() == "registry_b", "Unexpected second initial pair name");
+    require(registry.items()[pairs[0].first]->get_name() == "registry_a",
+            "Unexpected first initial pair name");
+    require(registry.items()[pairs[0].second]->get_name() == "registry_b",
+            "Unexpected second initial pair name");
 
     require(registry.remove("registry_a"), "Failed to remove registry_a");
 
@@ -233,17 +255,20 @@ void test_entity_registry_remove_keeps_broad_phase_consistent() {
 
     pairs = registry.get_broad_phase_pairs();
     require(pairs.size() == 1, "Expected one post-remove broad-phase pair");
-    require(registry.items()[pairs[0].first]->get_name() == "registry_c", "Moved entity index was not updated");
-    require(registry.items()[pairs[0].second]->get_name() == "registry_d", "New entity pair was not discovered");
+    require(registry.items()[pairs[0].first]->get_name() == "registry_c",
+            "Moved entity index was not updated");
+    require(registry.items()[pairs[0].second]->get_name() == "registry_d",
+            "New entity pair was not discovered");
 }
 
 } // namespace
 
 void run_aabb_tree_tests(); // defined in test_aabb_tree.cpp
-void run_ccd_tests();       // defined in test_ccd.cpp
-void run_capsule_tests();   // defined in test_capsule_collision.cpp
-void run_edge_tests();      // defined in test_collisions_edge.cpp
+void run_ccd_tests(); // defined in test_ccd.cpp
+void run_capsule_tests(); // defined in test_capsule_collision.cpp
+void run_edge_tests(); // defined in test_collisions_edge.cpp
 void run_angle_precision_tests(); // defined in test_angle_precision.cpp
+void run_resting_stability_tests(); // defined in test_resting_stability.cpp
 
 int main() {
     run_aabb_tree_tests();
@@ -251,6 +276,7 @@ int main() {
     run_capsule_tests();
     run_edge_tests();
     run_angle_precision_tests();
+    run_resting_stability_tests();
     test_pid_round_trip();
     test_effort_aliases();
     test_effort_mode_applies_direct_effort();

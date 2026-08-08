@@ -5,7 +5,10 @@ uint64_t pack_contact_key(uint32_t a, uint32_t b) {
     if (a > b) std::swap(a, b);
     return static_cast<uint64_t>(a) << 32 | static_cast<uint64_t>(b);
 }
-}
+
+// Sweeps over the full contact list per substep in the velocity pass.
+constexpr size_t kVelocityPasses = 8;
+} // namespace
 
 // calls reset of all entities
 void FxScene::reset() {
@@ -50,7 +53,8 @@ bool FxScene::add_constraint(const std::shared_ptr<FxConstraint>& constraint) {
     if (success) {
         // Add to collision exclusion if entities should not collide
         if (constraint->get_entity1() && constraint->get_entity2()) {
-            m_entities.disable_collision(constraint->get_entity1_name(), constraint->get_entity2_name());
+            m_entities.disable_collision(constraint->get_entity1_name(),
+                                         constraint->get_entity2_name());
         }
     }
     return success;
@@ -63,7 +67,8 @@ bool FxScene::delete_constraint(const std::string& name) {
     if (constraint) {
         // Remove from collision exclusion before deleting the constraint
         if (constraint->get_entity1() && constraint->get_entity2()) {
-             m_entities.enable_collision(constraint->get_entity1_name(), constraint->get_entity2_name());
+            m_entities.enable_collision(constraint->get_entity1_name(),
+                                        constraint->get_entity2_name());
         }
     }
     return m_constraints.remove(name);
@@ -159,12 +164,12 @@ void FxScene::step(double step_dt) {
     const auto& entities_vec = m_entities.items();
     for (size_t iter = 0; iter < m_substeps; ++iter) {
         // apply any required pid controls on the joints
-        m_joints.for_each(std::execution::seq, [&](auto joint) {
-            joint->apply_controls(substep_dt);
-        });
-        
+        m_joints.for_each(std::execution::seq,
+                          [&](auto joint) { joint->apply_controls(substep_dt); });
+
         m_entities.for_each(std::execution::par, [&](auto entity) {
-            if (!entity->enabled || entity->is_sleeping()) return;  // Skip disabled/sleeping entities
+            if (!entity->enabled || entity->is_sleeping())
+                return; // Skip disabled/sleeping entities
             entity->step(gravity, substep_dt);
             // Boundary handling with elasticity bounce
             if ((entity->pose.x() >= static_cast<float>(size.x()) && entity->velocity.x() > 0.0f) ||
@@ -183,15 +188,31 @@ void FxScene::step(double step_dt) {
         contacts.clear();
         auto broad_phase_pairs = m_entities.get_broad_phase_pairs(static_cast<float>(substep_dt));
         for (const auto& pair : broad_phase_pairs) {
-            FxContact c = FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
-            if (!c.is_valid() && (entities_vec[pair.first]->enable_ccd || entities_vec[pair.second]->enable_ccd))
-                c = FxSolver::speculative_contact_check(entities_vec[pair.first], entities_vec[pair.second], static_cast<float>(substep_dt));
+            FxContact c =
+                FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
+            if (!c.is_valid() &&
+                (entities_vec[pair.first]->enable_ccd || entities_vec[pair.second]->enable_ccd))
+                c = FxSolver::speculative_contact_check(entities_vec[pair.first],
+                                                        entities_vec[pair.second],
+                                                        static_cast<float>(substep_dt));
             if (c.is_valid()) {
-                // Wake any sleeping entity involved in an actual contact
-                if (c.entity1 && c.entity1->is_sleeping()) c.entity1->wake();
-                if (c.entity2 && c.entity2->is_sleeping()) c.entity2->wake();
+                // Wake a sleeping body only when its partner is awake and actually
+                // moving. Waking on the mere existence of a contact means a resting
+                // stack is roused every substep and can never stay asleep.
+                auto wake_if_disturbed = [](const std::shared_ptr<FxEntity>& sleeper,
+                                            const std::shared_ptr<FxEntity>& other) {
+                    if (!sleeper || !other || !sleeper->is_sleeping()) return;
+                    if (other->is_sleeping()) return;
+                    const bool moving =
+                        other->velocity.head<2>().norm() > sleeper->sleep_threshold_linear ||
+                        std::fabs(other->velocity.theta()) > sleeper->sleep_threshold_angular;
+                    if (moving) sleeper->wake();
+                };
+                wake_if_disturbed(c.entity1, c.entity2);
+                wake_if_disturbed(c.entity2, c.entity1);
 
-                uint64_t key = pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
+                uint64_t key =
+                    pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
                 active_keys.insert(key);
                 auto cache_it = m_contact_cache.find(key);
                 if (cache_it != m_contact_cache.end()) {
@@ -199,8 +220,11 @@ void FxScene::step(double step_dt) {
                     // discard cached friction impulse to avoid spurious lateral forces.
                     bool normal_stable = cache_it->second.normal.dot(c.normal) > 0.99f;
                     for (size_t contact_idx = 0; contact_idx < 2; ++contact_idx) {
-                        c.jn_accumulated[contact_idx] = cache_it->second.jn[contact_idx];
-                        c.jt_accumulated[contact_idx] = normal_stable ? cache_it->second.jt[contact_idx] : 0.0f;
+                        // Seed the warm-start guess only. jn_accumulated tracks what this
+                        // substep applies, so it must stay at zero until warm_start runs.
+                        c.jn_warm[contact_idx] = cache_it->second.jn[contact_idx];
+                        c.jt_warm[contact_idx] =
+                            normal_stable ? cache_it->second.jt[contact_idx] : 0.0f;
                     }
                 }
                 contacts.emplace_back(std::move(c));
@@ -213,13 +237,13 @@ void FxScene::step(double step_dt) {
         }
 
         // Solve constraints (XPBD-style)
-        m_constraints.for_each(std::execution::seq, [&](auto constraint) {
-            constraint->resolve(substep_dt);
-        });
+        m_constraints.for_each(std::execution::seq,
+                               [&](auto constraint) { constraint->resolve(substep_dt); });
 
         // Update velocities from positions - skip disabled/sleeping entities
         m_entities.for_each(std::execution::par, [&](auto entity) {
-            if (!entity->enabled || entity->is_sleeping()) return;  // Skip disabled/sleeping entities
+            if (!entity->enabled || entity->is_sleeping())
+                return; // Skip disabled/sleeping entities
             FxVec3f delta = (entity->pose - entity->prev_pose);
             delta.set_theta(FxAngleWrap(delta.theta()));
             entity->velocity = delta / substep_dt;
@@ -229,10 +253,25 @@ void FxScene::step(double step_dt) {
         // Warm start only on the first substep: subsequent substeps already carry the
         // previous substep's impulse through body.step() velocity integration, so
         // re-applying it would double-count the impulse and cause excessive bounce.
-        for (auto& c : contacts) {
-            if (iter == 0) FxSolver::warm_start(c);
-            FxSolver::resolve_velocities(c);
+        // Capture closing speeds before any impulse is applied this substep.
+        for (auto& c : contacts)
+            FxSolver::init_velocity_pass(c);
 
+        if (iter == 0) {
+            for (auto& c : contacts)
+                FxSolver::warm_start(c);
+        }
+
+        // Sweep the whole contact list several times. Solving each contact once in
+        // isolation leaves a large velocity residual in stacks, because every
+        // neighbour re-introduces error into the contacts already visited - enough
+        // residual to keep a visually motionless stack above the sleep threshold.
+        for (size_t pass = 0; pass < kVelocityPasses; ++pass) {
+            for (auto& c : contacts)
+                FxSolver::resolve_velocities(c);
+        }
+
+        for (auto& c : contacts) {
             uint64_t key = pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
             auto& cache_entry = m_contact_cache[key];
             cache_entry.normal = c.normal; // save basis so next frame can detect flips
@@ -274,13 +313,13 @@ void FxScene::step(double step_dt) {
     }
 }
 
-
 // // set the maximum limit for time step
 // void FxScene::set_max_time_step(const double& step_dt){
 //     if (step_dt < m_min_time_step){
 //         throw std::invalid_argument("FxScene: max time step (dt) must be greater than 1e-3");
 //     } else if (step_dt > 0.1){
-//         throw std::invalid_argument("FxScene: max time step (dt) must be less than or equal to 0.1");
+//         throw std::invalid_argument("FxScene: max time step (dt) must be less than or equal to
+//         0.1");
 //     }
 //     m_max_time_step = step_dt;
 // }
