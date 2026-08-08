@@ -104,6 +104,8 @@ Headless examples skip the graphics stack entirely:
 
 ![2D truck suspension physics simulation](./examples/truck/play.gif)
 
+![2D joint motor control demo](./examples/joint_control_demo/play.gif)
+
 **Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute and prismatic joint motor control (position, velocity, and effort modes)
 
 ## Documentation
