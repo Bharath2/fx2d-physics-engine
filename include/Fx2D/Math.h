@@ -21,7 +21,13 @@ static constexpr float FxPif = std::numbers::pi_v<float>;
 static constexpr double FxPid = std::numbers::pi_v<double>;
 
 // Helper function for angle wrapping
+// Wrap an angle into [-pi, pi).
+// In-range angles are returned untouched: the shift by +pi below is lossy for small
+// magnitudes, since one ulp of float near pi is ~2.4e-7, so any angle under ~1.2e-7 rad
+// would round away and come back as exactly 0. Substep rotations land in that range at
+// small timesteps, and silently zeroing them stalls motors and freezes angular motion.
 static inline float FxAngleWrap(float angle) {
+    if (angle >= -FxPif && angle < FxPif) return angle;
     angle = std::fmod(angle + FxPif, 2.0f * FxPif);
     if (angle < 0.0f) angle += 2.0f * FxPif;
     return angle - FxPif;
