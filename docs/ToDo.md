@@ -54,9 +54,15 @@ This file tracks the next feature and robustness targets for Fx2D.
 
 6. Add more examples and docs around newer features.
    Prioritize:
-   - joint control examples for position, velocity, and effort
-   - scene YAML examples that include joints
-   - query/event examples once those APIs exist
+   - ~~joint control examples for position, velocity, and effort~~ ✅ Done (`examples/joint_control_demo/`,
+     covering revolute and prismatic motors in all three control modes)
+   - ~~scene YAML examples that include joints~~ ✅ Done (`examples/joint_control_demo/Scene.yml`)
+   - query/event examples — blocked on item 2 (query/event APIs not implemented yet)
+
+   Open issue found while validating the example: joint motors lose all authority at very small
+   timesteps. XPBD compliance scales with `1/dt^2`, so at `dt = 1e-3` (the minimum `FxScene::step`
+   accepts) the constraint solve cancels a revolute motor's torque entirely and the body never
+   moves. The example runs at `dt = 0.01`; the underlying scaling still needs a fix.
 
 ## Why These Matter
 
