@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# Build the headless Fx2D examples with plain g++ and no graphics dependencies.
-#
-# Deliberately does NOT reference raylib, Dear ImGui or rlImGui anywhere: if any
-# core physics header regains a dependency on the renderer, this script fails.
-#
-# Requires: g++ (C++20), Eigen 3 headers, yaml-cpp, TBB (for std::execution::par).
-#   Debian/Ubuntu: sudo apt install g++ libeigen3-dev libyaml-cpp-dev libtbb-dev
-#
-# Usage (from the repo root):
-#   ./scripts/build_headless.sh
-#   ./build-headless/truck_headless
-#   ./build-headless/joint_control_demo
-
+# Headless g++ build (no raylib/ImGui). Needs: eigen3, yaml-cpp, tbb.
+# Usage: ./scripts/build_headless.sh && ./build-headless/truck_headless
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

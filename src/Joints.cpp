@@ -85,14 +85,10 @@ FxRevoluteJoint::FxRevoluteJoint(const std::string& name, const std::shared_ptr<
     m_angle_max(angle_max) {
     m_constraints.reserve(2);
 
-    // Create anchor constraint
     auto anchor_constraint = std::make_shared<FxAnchorConstraint>(e1, e2, anchor_point, true);
-    // anchor_constraint->m_name = name + "_anchor";
     m_constraints.push_back(anchor_constraint);
 
-    // Create angular limit constraint
     auto angular_limit = std::make_shared<FxAngularLimitConstraint>(e1, e2);
-    // angular_limit->m_name = name + "_angular_limit";
     angular_limit->lower_limit = angle_min;
     angular_limit->upper_limit = angle_max;
     m_constraints.push_back(angular_limit);
@@ -203,21 +199,15 @@ FxPrismaticJoint::FxPrismaticJoint(const std::string& name, const std::shared_pt
 
     m_constraints.reserve(3);
 
-    // Create motion along axis constraint
     auto motion_constraint = std::make_shared<FxMotionAlongAxisConstraint>(e1, e2, m_axis, true);
-    // motion_constraint->m_name = name + "_motion";
     m_constraints.push_back(motion_constraint);
 
-    // Create separation constraint
     auto separation_constraint = std::make_shared<FxSeparationConstraint>(e1, e2, m_axis, true);
-    // separation_constraint->m_name = name + "_separation";
     separation_constraint->lower_limit = m_position_min;
     separation_constraint->upper_limit = m_position_max;
     m_constraints.push_back(separation_constraint);
 
-    // Create angle lock constraint
     auto angle_lock = std::make_shared<FxAngleLockConstraint>(e1, e2, 0.0f);
-    // angle_lock->m_name = name + "_angle_lock";
     m_constraints.push_back(angle_lock);
 }
 

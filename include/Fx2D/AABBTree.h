@@ -5,12 +5,8 @@
 #include <utility>
 #include <vector>
 
-// ============================================================
-// Dynamic AABB tree (index-based pool, SAH-guided insertion)
-// ============================================================
-
-// 20% half-extent margin used to fatten leaf AABBs so that
-// small position changes don't trigger constant reinsertion.
+// Dynamic AABB tree (index-based pool, SAH-guided insertion).
+// Fat margin so small moves don't force constant reinsertion.
 static constexpr float AABB_TREE_MARGIN = 0.20f;
 
 struct FxAABBTreeNode {

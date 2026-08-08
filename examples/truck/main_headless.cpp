@@ -1,16 +1,5 @@
-// Truck — Fx2D headless example
-//
-// Same scene and constraint rig as examples/truck/main.cpp, but stepped in a
-// plain loop and reported as text instead of being handed to the renderer.
-// Because it includes "Fx2D/Physics.h" rather than "Fx2D/Core.h", nothing here
-// touches raylib / Dear ImGui / rlImGui — only yaml-cpp, Eigen and TBB.
-//
-// Build (from the repo root, no graphics stack required):
-//   ./scripts/build_headless.sh
-//   ./build-headless/truck_headless
-//
-// Scene.yml is resolved relative to the working directory, so run from the
-// repo root.
+// Headless truck: same constraint rig as examples/truck/main.cpp, text report only.
+// Build/run from repo root: ./scripts/build_headless.sh && ./build-headless/truck_headless
 
 #include "Fx2D/Physics.h"
 
@@ -31,24 +20,19 @@ int main() {
         return 1;
     }
 
-    // Keep truck head and back aligned horizontally.
-    auto motion_constraint =
-        std::make_shared<FxMotionAlongAxisConstraint>(truck_head, truck_back, FxVec2f(1.0f, 0.0f),
-                                                      true);
+    auto motion_constraint = std::make_shared<FxMotionAlongAxisConstraint>(
+        truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
     motion_constraint->setCompliance(1e-5);
 
-    // Maintain fixed separation between truck head and back.
-    auto separation_constraint =
-        std::make_shared<FxSeparationConstraint>(truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
+    auto separation_constraint = std::make_shared<FxSeparationConstraint>(
+        truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
     separation_constraint->lower_limit = 0.0f;
     separation_constraint->upper_limit = 0.0f;
     separation_constraint->setCompliance(1e-5);
 
-    // Lock relative angle between truck head and back.
     auto angle_lock = std::make_shared<FxAngleLockConstraint>(truck_head, truck_back);
     angle_lock->setCompliance(1e-5);
 
-    // Attach wheels to truck head and back.
     auto wheel2_anchor =
         std::make_shared<FxAnchorConstraint>(truck_head, wheel2, FxVec2f(0.1f, -0.65f), true);
     auto wheel1_anchor =

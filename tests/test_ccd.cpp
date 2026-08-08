@@ -28,14 +28,7 @@ std::shared_ptr<FxEntity> make_circle(const std::string& name, float x, float y,
     return e;
 }
 
-// --------------------------------------------------------------------------
-// test_fast_body_speculative_contact
-//
-// Two circles: e1 static at origin, e2 moving toward it at 1000 units/s.
-// The separation is 0.5 units but the substep is 1/600 s, so e2 travels ~1.67
-// units in one substep — enough to tunnel through e1 without CCD.
-// With CCD enabled, speculative_contact_check must return a valid contact.
-// --------------------------------------------------------------------------
+// Fast body would tunnel in one substep; CCD speculative contact must fire.
 void test_fast_body_speculative_contact() {
     const float r = 0.5f;
     const float sep = 0.5f; // gap between surfaces
@@ -58,16 +51,7 @@ void test_fast_body_speculative_contact() {
     require(spec_c.count >= 1, "speculative contact must have at least one contact point");
 }
 
-// --------------------------------------------------------------------------
-// test_ccd_flag_off_no_regression
-//
-// Same setup, but enable_ccd = false. speculative_contact_check is still
-// callable, but the caller (Scene.cpp) only invokes it when the flag is set.
-// Here we verify the function itself still returns valid — the flag check is
-// the scene-level guard; the function is unconditional by design.
-// This test ensures the non-CCD code path (static check only) returns invalid,
-// confirming tunneling would occur without the flag.
-// --------------------------------------------------------------------------
+// Without enable_ccd, static check alone stays invalid (would tunnel).
 void test_ccd_flag_off_no_regression() {
     const float r = 0.5f;
     const float sep = 0.5f;
@@ -82,11 +66,7 @@ void test_ccd_flag_off_no_regression() {
             "CCD off: static check must be invalid (bodies separated — would tunnel)");
 }
 
-// --------------------------------------------------------------------------
-// test_separating_bodies_no_speculative_contact
-//
-// Bodies moving away from each other must not get a speculative contact.
-// --------------------------------------------------------------------------
+// Separating bodies must not get a speculative contact.
 void test_separating_bodies_no_speculative_contact() {
     const float r = 0.5f;
     const float sep = 0.5f;

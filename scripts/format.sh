@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Format Fx2D first-party sources with clang-format, or check them.
-#
-#   ./scripts/format.sh          # rewrite in place
-#   ./scripts/format.sh --check  # exit non-zero if any file would change
+# clang-format rewrite; pass --check for dry-run (CI).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

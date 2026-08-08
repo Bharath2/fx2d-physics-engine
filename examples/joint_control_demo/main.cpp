@@ -1,25 +1,6 @@
-// Joint Control Demo — Fx2D headless example
-//
-// Demonstrates a revolute motor and a prismatic motor cycling through all three
-// control modes:
-//   POSITION  — arm rotates to a target angle (rad); slider moves to a target offset (m)
-//   VELOCITY  — arm spins at a target angular velocity (rad/s); slider tracks a speed (m/s)
-//   EFFORT    — arm is driven by a direct torque (N·m); slider by a direct force (N)
-//
-// Run procedure:
-//   1. Copy this file to src/main.cpp (replacing the existing placeholder)
-//   2. Build with CMake per the README (from the repo root)
-//   3. Run ./build/Fx2D from the repo root — Scene.yml is loaded by path
-//      relative to the working directory, so run from the repo root, not
-//      from the build/ directory.
-//
-// Visual version: include "Fx2D/Core.h" instead and replace the step loops
-// below with FxRylbRenderer(scene, 60).run() — the joint API calls above the
-// loop are identical.
-//
-// "Fx2D/Physics.h" pulls in no raylib / Dear ImGui / rlImGui headers, so this
-// example builds and runs on a machine with no graphics stack:
-//   ./scripts/build_headless.sh && ./build-headless/joint_control_demo
+// Headless revolute + prismatic motors through POSITION / VELOCITY / EFFORT.
+// Build: ./scripts/build_headless.sh && ./build-headless/joint_control_demo
+// Visual twin: examples/joint_control_demo/main_visual.cpp
 
 #include "Fx2D/Physics.h"
 #include <iostream>
@@ -39,10 +20,7 @@ int main() {
         return 1;
     }
 
-    // 10 ms fixed step. FxScene accepts steps down to 1 ms, but this arm's anchor
-    // is offset from its centre of mass, and the resulting per-substep corrections
-    // fall below float resolution at 1 ms, costing the motor most of its authority.
-    // See docs/joint_control.md.
+    // 10 ms step: offset-pivot motors lose authority at 1 ms (float resolution).
     const double dt = 0.01;
     const int steps = 200; // 2 s per phase
     const int print_every = 40;
@@ -53,11 +31,7 @@ int main() {
                   << "  vel=" << slider->get_velocity() << "\n";
     };
 
-    // ---------------------------------------------------------------
-    // POSITION phase — arm tracks theta = 1.0 rad, slider tracks 1.0 m
-    // ---------------------------------------------------------------
-    // Position loops want strong damping: D near 2*sqrt(P*inertia) / 2*sqrt(P*mass)
-    // keeps the arm and slider from oscillating around the target.
+    // POSITION — strong D near 2*sqrt(P*inertia) / 2*sqrt(P*mass).
     std::cout << "=== POSITION phase  (target theta = 1.0 rad, position = 1.0 m) ===\n";
     motor->set_pid({6.0f, 0.05f, 3.0f});
     slider->set_pid({8.0f, 0.2f, 5.0f});
@@ -70,11 +44,7 @@ int main() {
         if (i % print_every == 0) report(i);
     }
 
-    // ---------------------------------------------------------------
-    // VELOCITY phase — arm tracks omega = 3.14 rad/s, slider tracks 0.5 m/s
-    // ---------------------------------------------------------------
-    // A velocity loop needs its own gains: the error is already a rate, so the
-    // position-mode D term would differentiate acceleration and stall the motor.
+    // VELOCITY — drop D; position-mode D would stall a rate loop.
     std::cout << "=== VELOCITY phase  (target omega = 3.14 rad/s, velocity = 0.5 m/s) ===\n";
     motor->set_pid({6.0f, 0.2f, 0.0f});
     slider->set_pid({8.0f, 0.2f, 0.0f});
@@ -87,9 +57,6 @@ int main() {
         if (i % print_every == 0) report(i);
     }
 
-    // ---------------------------------------------------------------
-    // EFFORT phase — arm driven by torque 15.0 N·m, slider pushed back by -2.0 N
-    // ---------------------------------------------------------------
     std::cout << "=== EFFORT phase    (torque = 15.0 N*m, force = -2.0 N) ===\n";
     motor->set_control_mode(ControlMode::EFFORT);
     slider->set_control_mode(ControlMode::EFFORT);

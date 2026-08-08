@@ -15,10 +15,7 @@ bool approx(float a, float b, float eps = 1e-5f) {
     return std::fabs(a - b) <= eps;
 }
 
-// FxAngleWrap used to shift by +pi before the fmod, which rounds away any angle
-// smaller than ~1.2e-7 rad (half an ulp of float near pi) and returns exactly 0.
-// Substep rotations fall in that range at small timesteps, so this silently froze
-// all angular motion. In-range angles must now pass through bit-exact.
+// In-range angles must pass through bit-exact (old wrap floored tiny substep rotations).
 void test_angle_wrap_preserves_tiny_angles() {
     const float tiny[] = {1e-8f, 5e-8f, 1e-7f, 5e-7f, 1e-6f, 1e-4f};
     for (float a : tiny) {
