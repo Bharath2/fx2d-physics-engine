@@ -6,14 +6,42 @@ Fx2D can run without a window or renderer — useful for data collection, testin
 
 ## How It Works
 
-`FxScene::step(dt)` advances the physics simulation by `dt` seconds entirely in CPU memory. There is no dependency on raylib or a display context. You can call it in a plain `main()` without ever constructing an `FxRylbRenderer`.
+`FxScene::step(dt)` advances the physics simulation by `dt` seconds entirely in CPU memory. You can call it in a plain `main()` without ever constructing an `FxRylbRenderer`.
+
+Include `"Fx2D/Physics.h"` rather than `"Fx2D/Core.h"`: it aggregates the math, entity, joint, solver, scene and YAML headers and pulls in **no** raylib, Dear ImGui or rlImGui header. `"Fx2D/Core.h"` is `Physics.h` plus the renderer, so it still requires the full graphics stack.
+
+Headless builds therefore need only:
+
+- a C++20 compiler
+- Eigen 3 (header-only) — math types
+- yaml-cpp — `Scene.yml` loading
+- TBB — backs `std::execution::par` in libstdc++
+
+No GL, X11, Wayland or window system is involved, so this works over SSH, in a container, or in CI.
+
+---
+
+## Building Headless
+
+`scripts/build_headless.sh` compiles the two headless examples with plain `g++` and no reference to any graphics library — if a core header ever regains a renderer dependency, the script fails:
+
+```bash
+sudo apt install g++ libeigen3-dev libyaml-cpp-dev libtbb-dev   # Debian/Ubuntu
+./scripts/build_headless.sh
+./build-headless/truck_headless        # constraint rig: chassis, wheels, ground
+./build-headless/joint_control_demo    # revolute + prismatic motor control modes
+```
+
+Run the binaries from the repo root — each resolves its `Scene.yml` relative to the working directory.
+
+See `examples/truck/main_headless.cpp` and `examples/joint_control_demo/main.cpp` for the full sources.
 
 ---
 
 ## Basic Loop
 
 ```cpp
-#include "Fx2D/Core.h"
+#include "Fx2D/Physics.h"
 #include <iostream>
 
 int main() {

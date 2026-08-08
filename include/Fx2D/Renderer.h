@@ -13,7 +13,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "Fx2D/Core.h"
+#include "Fx2D/Physics.h"
 #include "Fx2D/Math.h"
 
 class FxRylbRenderer {

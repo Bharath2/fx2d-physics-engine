@@ -63,8 +63,10 @@ int main() {
 }
 ```
 
-For headless simulation, testing, or data collection.
+For headless simulation, testing, or data collection. Include `Fx2D/Physics.h` instead of `Fx2D/Core.h` — it pulls in no raylib, Dear ImGui or rlImGui headers, so no graphics stack is needed at all.
 ```cpp
+#include "Fx2D/Physics.h"
+
 int main() {
     // Load scene from YAML
     auto scene = FxYAML::buildScene("./Scene.yml");
@@ -86,6 +88,14 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 ```bash
 ./Fx2D      # Linux/macOS
 ./Fx2D.exe  # Windows
+```
+
+Headless examples skip CMake and the graphics stack entirely:
+
+```bash
+./scripts/build_headless.sh
+./build-headless/truck_headless        # run from the repo root
+./build-headless/joint_control_demo
 ```
 
 ![2D truck suspension physics simulation](./examples/truck/play.gif)
