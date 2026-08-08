@@ -9,19 +9,45 @@ jobs:
   lint:
     name: format + cppcheck + clang-tidy
     runs-on: ubuntu-24.04
+    env:
+      CPPCHECK_VER: "2.17.1"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache cppcheck build
+        id: cache-cppcheck
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.local/cppcheck
+          key: cppcheck-${{ env.CPPCHECK_VER }}-${{ runner.os }}-norules
 
       - name: Install tools and headers
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang-format-18 clang-tidy-18 cppcheck \
-            libeigen3-dev libyaml-cpp-dev
+            clang-format-18 clang-tidy-18 \
+            libeigen3-dev libyaml-cpp-dev \
+            cmake g++ make
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 100
           clang-format --version
           clang-tidy --version
+
+          # Ubuntu 24.04 apt cppcheck (2.13) can't parse C++20 trailing requires in Math.h.
+          PREFIX="${{ github.workspace }}/.local/cppcheck"
+          if [[ ! -x "$PREFIX/bin/cppcheck" ]]; then
+            curl -fsSL "https://github.com/danmar/cppcheck/archive/refs/tags/${CPPCHECK_VER}.tar.gz" \
+              -o /tmp/cppcheck.tar.gz
+            tar -xzf /tmp/cppcheck.tar.gz -C /tmp
+            cmake -S "/tmp/cppcheck-${CPPCHECK_VER}" -B /tmp/cppcheck-build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+              -DHAVE_RULES=OFF
+            cmake --build /tmp/cppcheck-build -j"$(nproc)"
+            cmake --install /tmp/cppcheck-build
+          fi
+          echo "$PREFIX/bin" >> "$GITHUB_PATH"
+          "$PREFIX/bin/cppcheck" --version
 
       - name: clang-format
         run: ./scripts/format.sh --check
