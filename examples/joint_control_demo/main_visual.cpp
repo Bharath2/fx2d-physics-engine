@@ -16,12 +16,12 @@ enum class Phase { Position, Velocity, Effort };
 
 const char* phase_name(Phase p) {
     switch (p) {
-        case Phase::Position:
-            return "POSITION  (arm -> target angle, slider -> target offset)";
-        case Phase::Velocity:
-            return "VELOCITY  (arm spins at 3.14 rad/s, slider at 1.0 m/s)";
-        case Phase::Effort:
-            return "EFFORT    (raw torque 15 N*m, raw force -6 N)";
+    case Phase::Position:
+        return "POSITION  (arm -> target angle, slider -> target offset)";
+    case Phase::Velocity:
+        return "VELOCITY  (arm spins at 3.14 rad/s, slider at 1.0 m/s)";
+    case Phase::Effort:
+        return "EFFORT    (raw torque 15 N*m, raw force -6 N)";
     }
     return "";
 }
@@ -68,29 +68,29 @@ int main() {
         std::cout << "[t=" << s.time_elapsed() << "s] " << phase_name(phase) << "\n";
 
         switch (phase) {
-            case Phase::Position:
-                motor->set_pid({6.0f, 0.05f, 3.0f});
-                slider->set_pid({8.0f, 0.2f, 5.0f});
-                motor->set_control_mode(ControlMode::POSITION);
-                slider->set_control_mode(ControlMode::POSITION);
-                position_toggle = true; // flips on the next callback, issuing targets
-                break;
+        case Phase::Position:
+            motor->set_pid({6.0f, 0.05f, 3.0f});
+            slider->set_pid({8.0f, 0.2f, 5.0f});
+            motor->set_control_mode(ControlMode::POSITION);
+            slider->set_control_mode(ControlMode::POSITION);
+            position_toggle = true; // flips on the next callback, issuing targets
+            break;
 
-            case Phase::Velocity:
-                motor->set_pid({6.0f, 0.2f, 0.0f});
-                slider->set_pid({8.0f, 0.2f, 0.0f});
-                motor->set_control_mode(ControlMode::VELOCITY);
-                slider->set_control_mode(ControlMode::VELOCITY);
-                motor->set_omega(3.14f, false);
-                slider->set_velocity(1.0f, false);
-                break;
+        case Phase::Velocity:
+            motor->set_pid({6.0f, 0.2f, 0.0f});
+            slider->set_pid({8.0f, 0.2f, 0.0f});
+            motor->set_control_mode(ControlMode::VELOCITY);
+            slider->set_control_mode(ControlMode::VELOCITY);
+            motor->set_omega(3.14f, false);
+            slider->set_velocity(1.0f, false);
+            break;
 
-            case Phase::Effort:
-                motor->set_control_mode(ControlMode::EFFORT);
-                slider->set_control_mode(ControlMode::EFFORT);
-                motor->set_torque(15.0f);
-                slider->set_force(-6.0f);
-                break;
+        case Phase::Effort:
+            motor->set_control_mode(ControlMode::EFFORT);
+            slider->set_control_mode(ControlMode::EFFORT);
+            motor->set_torque(15.0f);
+            slider->set_force(-6.0f);
+            break;
         }
     });
 

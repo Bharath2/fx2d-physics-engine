@@ -55,8 +55,8 @@ class FxScene {
     FxVec2f gravity{0.0f, -9.81f};
 
     // constructor, destructor
-    FxScene(FxVec2ui SceneSize) : m_entities(m_enitities_limit), size(SceneSize) {};
-    ~FxScene() {};
+    FxScene(FxVec2ui SceneSize) : m_entities(m_enitities_limit), size(SceneSize) {}
+    ~FxScene() = default;
 
     // calls reset of all entities
     void reset();

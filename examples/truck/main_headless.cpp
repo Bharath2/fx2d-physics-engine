@@ -20,12 +20,13 @@ int main() {
         return 1;
     }
 
-    auto motion_constraint = std::make_shared<FxMotionAlongAxisConstraint>(
-        truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
+    auto motion_constraint =
+        std::make_shared<FxMotionAlongAxisConstraint>(truck_head, truck_back, FxVec2f(1.0f, 0.0f),
+                                                      true);
     motion_constraint->setCompliance(1e-5);
 
-    auto separation_constraint = std::make_shared<FxSeparationConstraint>(
-        truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
+    auto separation_constraint =
+        std::make_shared<FxSeparationConstraint>(truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
     separation_constraint->lower_limit = 0.0f;
     separation_constraint->upper_limit = 0.0f;
     separation_constraint->setCompliance(1e-5);
