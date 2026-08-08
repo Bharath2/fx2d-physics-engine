@@ -13,11 +13,15 @@
 //      relative to the working directory, so run from the repo root, not
 //      from the build/ directory.
 //
-// Visual version: replace the step loops below with
-//   FxRylbRenderer(scene, 60).run()
-// — the joint API calls above the loop are identical.
+// Visual version: include "Fx2D/Core.h" instead and replace the step loops
+// below with FxRylbRenderer(scene, 60).run() — the joint API calls above the
+// loop are identical.
+//
+// "Fx2D/Physics.h" pulls in no raylib / Dear ImGui / rlImGui headers, so this
+// example builds and runs on a machine with no graphics stack:
+//   ./scripts/build_headless.sh && ./build-headless/joint_control_demo
 
-#include "Fx2D/Core.h"
+#include "Fx2D/Physics.h"
 #include <iostream>
 #include <memory>
 

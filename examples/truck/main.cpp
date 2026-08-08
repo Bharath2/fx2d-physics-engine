@@ -20,18 +20,18 @@ int main(int, char**){
     // Keep truck head and back aligned horizontally
     auto motion_constraint = std::make_shared<FxMotionAlongAxisConstraint>(
                                         truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
-    motion_constraint->compliance = 1e-5f;
+    motion_constraint->setCompliance(1e-5);
 
     // Maintain fixed separation between truck head and back
     auto separation_constraint = std::make_shared<FxSeparationConstraint>(
                                          truck_head, truck_back, FxVec2f(1.0f, 0.0f), true);
     separation_constraint->lower_limit = 0.0f;
     separation_constraint->upper_limit = 0.0f;
-    separation_constraint->compliance = 1e-5f;
+    separation_constraint->setCompliance(1e-5);
 
     // Lock relative angle between truck head and back
     auto angle_lock = std::make_shared<FxAngleLockConstraint>(truck_head, truck_back);
-    angle_lock->compliance = 1e-5f;
+    angle_lock->setCompliance(1e-5);
 
     // Attach wheels to truck head and back
     auto wheel2_anchor = std::make_shared<FxAnchorConstraint>(

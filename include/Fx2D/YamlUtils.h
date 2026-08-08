@@ -9,7 +9,8 @@
 #include <filesystem>
 
 #include "Fx2D/Math.h"
-#include "Fx2D/Core.h"
+#include "Fx2D/Entity.h"
+#include "Fx2D/Scene.h"
 
 namespace fs = std::filesystem;
 
