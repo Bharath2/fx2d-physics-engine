@@ -6,7 +6,7 @@
 
 int main(int, char**){
     // Load scene configuration from YAML file
-    auto scene = FxYAML::buildScene("./Scene.yml");
+    auto scene = FxYAML::buildScene("examples/stacked_boxes/Scene.yml");
     
     // Initialize renderer with 60 FPS target
     FxRylbRenderer renderer(scene, 60);

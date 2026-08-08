@@ -8,7 +8,7 @@
 
 int main(int, char**){
     // Load scene configuration from YAML file
-    auto scene = FxYAML::buildScene("./Scene.yml");
+    auto scene = FxYAML::buildScene("examples/truck/Scene.yml");
 
     // Get entities from the scene
     auto truck_head = scene.get_entity("truck_head");

@@ -197,6 +197,24 @@ endfunction()
 fx2d_tune_target(Fx2Dlib)
 fx2d_tune_target(${TARGET_NAME})
 
+# ============================================================
+# Examples
+# ============================================================
+# Each example resolves its Scene.yml relative to the working directory, so run
+# the resulting binaries from the repo root.
+option(FX2D_BUILD_EXAMPLES "Build the example programs" OFF)
+
+if (FX2D_BUILD_EXAMPLES)
+  add_executable(example_truck         examples/truck/main.cpp)
+  add_executable(example_joint_control examples/joint_control_demo/main_visual.cpp)
+  add_executable(example_stacked_boxes examples/stacked_boxes/main.cpp)
+
+  foreach(example_target example_truck example_joint_control example_stacked_boxes)
+    target_link_libraries(${example_target} PRIVATE Fx2Dlib)
+    fx2d_tune_target(${example_target})
+  endforeach()
+endif()
+
 if (FX2D_BUILD_TESTS)
   enable_testing()
 

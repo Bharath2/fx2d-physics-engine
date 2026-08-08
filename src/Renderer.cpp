@@ -122,7 +122,12 @@ Texture2D FxRylbRenderer::get_or_load_texture(const std::string& path) {
 	auto it = m_textureCache.find(path);
 	if (it != m_textureCache.end()) return it->second;
 	Image img = LoadImage(path.c_str());
-	if (img.data == nullptr) return Texture2D{}; // invalid texture
+	if (img.data == nullptr) {
+		// Cache the failure too, otherwise every frame retries the missing file.
+		m_textureCache[path] = Texture2D{};
+		TraceLog(LOG_WARNING, "Fx2D: texture '%s' failed to load; falling back to fill color", path.c_str());
+		return Texture2D{};
+	}
 	Texture2D tex = LoadTextureFromImage(img);
 	UnloadImage(img);
 	m_textureCache[path] = tex;
@@ -154,6 +159,7 @@ void FxRylbRenderer::draw_scene() {
 
         if (visual->is_circle()) {
             const float r = static_cast<float>(m_scale) * visual->skin_radius();
+            bool textured = false;
             if (!visual->fillTexture().empty()) {
                 Texture2D tex = get_or_load_texture(visual->fillTexture());
                 if (tex.id != 0) {
@@ -162,8 +168,10 @@ void FxRylbRenderer::draw_scene() {
                     Vector2   origin{r, r};
                     const float deg = -pose.theta() * 180.0f / FxPif;
                     DrawTexturePro(tex, src, dst, origin, deg, to_rl_color(visual->fillColor()));
+                    textured = true;
                 }
-            } else {
+            }
+            if (!textured) {
 				DrawCircleV(Vector2{x, y}, r, to_rl_color(visual->fillColor()));
             }
             const float outline_px = std::max(0.0f, visual->outlineThickness());
@@ -256,9 +264,11 @@ void FxRylbRenderer::draw_scene() {
 
 			// textured fill
 			rlDisableBackfaceCulling();
+			bool textured = false;
             if (!visual->fillTexture().empty()) {
 				Texture2D tex = get_or_load_texture(visual->fillTexture());
 				if (tex.id != 0) {
+					textured = true;
 					auto b = local.bounds(); // {minx,miny,maxx,maxy} in LOCAL space
 					const float minx = b[0], miny = b[1], maxx = b[2], maxy = b[3];
 					const float invW = (maxx > minx) ? 1.0f / (maxx - minx) : 0.0f;
@@ -268,7 +278,9 @@ void FxRylbRenderer::draw_scene() {
 					rlSetTexture(tex.id);
 					auto emit_vertex = [&](size_t i) {
 						float u = (local[i].x() - minx) * invW;
-						float v = (local[i].y() - miny) * invH;
+						// Local y grows upward but texture v grows downward, so v must be
+						// measured from maxy - otherwise the image renders upside down.
+						float v = (maxy - local[i].y()) * invH;
 						rlTexCoord2f(u, v);
 						rlVertex2f(pts[i].x, pts[i].y);  // Use screen-space position
 					};
@@ -279,7 +291,8 @@ void FxRylbRenderer::draw_scene() {
 					rlEnd();
 					rlSetTexture(0);
 				}
-			} else {
+			}
+			if (!textured) {
 				DrawTriangleFan(pts.data(), (int)n, fill);
 			}
 
