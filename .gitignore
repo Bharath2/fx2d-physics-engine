@@ -1,5 +1,6 @@
 build
 build-headless
+build-lint
 # Only the textures referenced by the tracked Scene.yml files are committed
 # (downscaled to 512 px); everything else in assets/ stays local.
 assets/*

@@ -1,0 +1,28 @@
+# Light clang-tidy profile for Fx2D — bugprone / performance / analyzer only.
+# Readability and modernize are intentionally off to keep noise low on a
+# physics codebase that mixes Eigen, YAML and a raylib renderer.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-branch-clone,
+  clang-analyzer-*,
+  -clang-analyzer-optin.*,
+  performance-*,
+  -performance-avoid-endl,
+  -performance-enum-size,
+  -performance-unnecessary-value-param
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/Fx2D/.*|src/.*|tests/.*|examples/.*'
+ExcludeHeaderFilterRegex: 'lib/.*|build.*/.*'
+FormatStyle: file
+UseColor: true
+
+CheckOptions:
+  - key: bugprone-unused-return-value.CheckedFunctions
+    value: '::std::async;::std::launder;::std::remove;::std::remove_if;::std::unique;::std::unique_ptr::release;::std::basic_string::empty;::std::vector::empty'
+  - key: performance-for-range-copy.WarnOnAllAutoCopies
+    value: 'true'

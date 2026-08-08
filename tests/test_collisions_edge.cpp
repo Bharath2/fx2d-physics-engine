@@ -14,11 +14,12 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-bool approx(float a, float b, float eps = 1e-3f) { return std::fabs(a - b) <= eps; }
+bool approx(float a, float b, float eps = 1e-3f) {
+    return std::fabs(a - b) <= eps;
+}
 
 // Build an entity with an edge collision shape; a zero-dt step syncs the AABB.
-std::shared_ptr<FxEntity> make_edge(const std::string& name,
-                                    const FxVec2f& a, const FxVec2f& b,
+std::shared_ptr<FxEntity> make_edge(const std::string& name, const FxVec2f& a, const FxVec2f& b,
                                     float wx = 0.0f, float wy = 0.0f) {
     auto e = std::make_shared<FxEntity>(name);
     e->set_mass(1.0f);
@@ -39,8 +40,8 @@ std::shared_ptr<FxEntity> make_circle(const std::string& name, float x, float y,
     return e;
 }
 
-std::shared_ptr<FxEntity> make_box(const std::string& name, float x, float y,
-                                   float w = 1.0f, float h = 1.0f) {
+std::shared_ptr<FxEntity> make_box(const std::string& name, float x, float y, float w = 1.0f,
+                                   float h = 1.0f) {
     auto e = std::make_shared<FxEntity>(name);
     e->set_mass(1.0f);
     e->set_inertia(1.0f);
@@ -165,8 +166,10 @@ void test_edge_vs_rounded_box() {
 void test_edge_yaml_load() {
     YAML::Node cfg;
     YAML::Node a, b;
-    a.push_back(-2.0f); a.push_back(0.0f);
-    b.push_back(2.0f);  b.push_back(0.0f);
+    a.push_back(-2.0f);
+    a.push_back(0.0f);
+    b.push_back(2.0f);
+    b.push_back(0.0f);
     cfg["geometry"]["edge"].push_back(a);
     cfg["geometry"]["edge"].push_back(b);
     FxShape shape = FxYAML::buildShape(cfg);
@@ -177,7 +180,8 @@ void test_edge_yaml_load() {
 void test_edge_yaml_bad_arity() {
     YAML::Node cfg;
     YAML::Node a;
-    a.push_back(0.0f); a.push_back(0.0f);
+    a.push_back(0.0f);
+    a.push_back(0.0f);
     cfg["geometry"]["edge"].push_back(a);
     bool threw = false;
     try {
