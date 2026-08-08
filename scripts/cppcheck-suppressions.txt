@@ -1,6 +1,8 @@
 # Intentional / third-party noise. Keep this file small — prefer fixing real issues.
 missingIncludeSystem
 unusedFunction
+# Informational branch-limit notice; must not fail --error-exitcode=1.
+normalCheckLevelMaxBranches
 # Test harness uses throw for require() failures from main().
 throwInEntryPoint:tests/*
 # Registry stores non-const entity pointers by design (broad-phase mutates).

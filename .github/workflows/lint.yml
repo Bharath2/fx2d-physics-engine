@@ -10,7 +10,7 @@ jobs:
     name: format + cppcheck + clang-tidy
     runs-on: ubuntu-24.04
     env:
-      CPPCHECK_VER: "2.17.1"
+      CPPCHECK_VER: "2.20.0"
     steps:
       - uses: actions/checkout@v4
 
