@@ -206,6 +206,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_ccd.cpp
     tests/test_capsule_collision.cpp
     tests/test_collisions_edge.cpp
+    tests/test_angle_precision.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

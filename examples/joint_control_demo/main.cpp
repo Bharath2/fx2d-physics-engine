@@ -35,10 +35,10 @@ int main() {
         return 1;
     }
 
-    // 10 ms fixed step. FxScene accepts steps down to 1 ms, but the joint
-    // constraints stiffen as the substep shrinks (XPBD compliance scales with
-    // 1/dt^2) and at 1 ms they cancel the revolute motor's torque outright, so
-    // the arm never moves. See docs/joint_control.md.
+    // 10 ms fixed step. FxScene accepts steps down to 1 ms, but this arm's anchor
+    // is offset from its centre of mass, and the resulting per-substep corrections
+    // fall below float resolution at 1 ms, costing the motor most of its authority.
+    // See docs/joint_control.md.
     const double dt           = 0.01;
     const int    steps        = 200;   // 2 s per phase
     const int    print_every  = 40;

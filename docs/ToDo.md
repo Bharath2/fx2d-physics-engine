@@ -59,10 +59,19 @@ This file tracks the next feature and robustness targets for Fx2D.
    - ~~scene YAML examples that include joints~~ ✅ Done (`examples/joint_control_demo/Scene.yml`)
    - query/event examples — blocked on item 2 (query/event APIs not implemented yet)
 
-   Open issue found while validating the example: joint motors lose all authority at very small
-   timesteps. XPBD compliance scales with `1/dt^2`, so at `dt = 1e-3` (the minimum `FxScene::step`
-   accepts) the constraint solve cancels a revolute motor's torque entirely and the body never
-   moves. The example runs at `dt = 0.01`; the underlying scaling still needs a fix.
+7. Remove the float precision floor in position-level solving.
+   Found while validating the joint example, where motors appeared dead at small timesteps.
+   - ~~`FxAngleWrap` shifted by `+pi` before its `fmod`, which rounded away any angle below
+     ~`1.2e-7` rad (half an ulp of float near pi) and returned exactly `0`. Substep rotations
+     land in that range at small timesteps, so all angular motion silently froze.~~ ✅ Fixed —
+     in-range angles now pass through untouched; covered by `tests/test_angle_precision.cpp`
+   - Constraint corrections are still computed on `float` world coordinates, so a correction
+     below one ulp of the coordinate magnitude (~`4.8e-7` at `x = 7`) is lost. A revolute joint
+     with an anchor offset from the child's centre of mass depends on displacements at that
+     scale, so at `dt = 1e-3` it loses most of its motor authority, and the error grows with
+     distance from the origin. The same joint near the origin rotates ~5 orders of magnitude
+     further per unit time. Fixing this means accumulating constraint corrections in double
+     precision, or solving in body-relative coordinates rather than world coordinates.
 
 ## Why These Matter
 
