@@ -1158,7 +1158,8 @@ inline std::ostream& operator<<(std::ostream& os, FxVec3f const& a) {
 //   * m_skin_radius — Minkowski-sum "skin" radius added uniformly around the core feature
 //
 // Circle           = no vertices,    skin_radius = r
-// Capsule          = 2 endpoints,    skin_radius = r  (zero skin => bare line segment)
+// Capsule          = 2 endpoints,    skin_radius = r
+// Edge             = 2 endpoints,    skin_radius = 0 (zero-thickness segment, static level geometry)
 // Polygon          = N>=3 vertices,  skin_radius = 0
 // Rounded polygon  = N>=3 vertices,  skin_radius > 0 (covers rounded rectangles)
 //---------------------------------------------
@@ -1250,6 +1251,19 @@ struct FxShape {
         m_world_vertices = m_vertices;
     }
 
+    //–– Edge ctor: zero-thickness segment between two local-frame endpoints.
+    //   Stored as a capsule with skin_radius = 0; endpoints are kept as given so the
+    //   body origin stays where the scene author placed it.
+    FxShape(const FxVec2f& a, const FxVec2f& b) {
+        if ((b - a).norm() <= 1e-6f)
+            throw std::invalid_argument("FxShape: edge endpoints must be distinct");
+        m_shape_type     = FxShapeType::Capsule;
+        m_vertices       = { a, b };
+        m_skin_radius    = 0.0f;
+        m_radius         = calc_radius(m_vertices);
+        m_world_vertices = m_vertices;
+    }
+
     //–– Polygon from arbitrary vertices, with optional uniform skin (rounding) radius
     FxShape(const FxVec2fArray& vertices, float skin_radius = 0.0f) {
         constexpr float minArea = 1e-6f;
@@ -1312,6 +1326,11 @@ struct FxShape {
 
     bool is_polygon() const {
         return m_shape_type == FxShapeType::Polygon;
+    }
+
+    // A zero-skin capsule is a bare segment: zero area, zero inertia, static level geometry.
+    bool is_edge() const {
+        return m_shape_type == FxShapeType::Capsule && m_skin_radius <= 1e-6f;
     }
 
     // Get area of the shape (handles circle, capsule, and polygon — skin radius included)

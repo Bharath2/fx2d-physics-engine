@@ -16,6 +16,10 @@ This file tracks the next feature and robustness targets for Fx2D.
    latter two can carry a Minkowski-sum skin radius. YAML adds a `capsule:` key and an optional
    `radius:` modifier on `rectangle:` / `polygon:` for rounded variants.
 
+   Edges are zero-skin capsules authored with `edge: [[x, y], [x, y]]`, intended for static level
+   geometry. Edge-vs-polygon uses a dedicated line-reference query so a segment inside a polygon
+   still reports contact; edge-vs-edge pairs and CCD on edges are intentionally skipped.
+
 2. Add higher-level query and event systems.
    Build public scene/world APIs for:
    - ray casts
