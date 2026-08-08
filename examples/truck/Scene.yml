@@ -1,7 +1,7 @@
 scene:
     size: [12, 6]  
     gravity: [0, -10]
-    background: [225, 225, 225, 255] #./assets/bg.png  
+    background: [225, 225, 225, 255] #./examples/truck/assets/bg.png  
 
 entities:
     ground:
@@ -10,8 +10,8 @@ entities:
             elasticity:  0.6
             gravity_scale: 0.0              # scale gravity (float) (0.0 will disable effect of gravity)
             external_forces_enabled: false
-            static_friction: 0.3           # used in calculation of contact forces
-            dynamic_friction: 0.2          # used in calculation of contact forces
+            static_friction: 0.55          # used in calculation of contact forces
+            dynamic_friction: 0.4           # used in calculation of contact forces
         visual:
             geometry: 
                 rectangle: [12, 1.5]      # width, height
@@ -24,12 +24,14 @@ entities:
     box:
         pose: [2, 2.2, 0]
         physics:
-            mass: 5.0
-            elasticity:  0.6
+            mass: 12.0
+            elasticity:  0.2
+            static_friction: 0.55
+            dynamic_friction: 0.4
         visual:
             geometry: 
                 rectangle: [1.0, 1.25]      # width, height
-            texture: ./assets/bricks.png
+            texture: ./examples/truck/assets/bricks.png
             border_thickness: 0.25
         collision:
             geometry: 
@@ -44,7 +46,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [1.25, 1.5]      # width, height
-            texture: ./assets/head.png  # color(RGBA) or image path
+            texture: ./examples/truck/assets/head.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 0.0
         collision:
@@ -60,7 +62,7 @@ entities:
         visual:
             geometry: 
                 circle: 0.4    # width, height
-            texture: ./assets/wheel.png  # color(RGBA) or image path
+            texture: ./examples/truck/assets/wheel.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:
@@ -100,7 +102,7 @@ entities:
         visual:
             geometry: 
                 rectangle: [2.25, 1.0]      # width, height
-            texture: ./assets/back2.png  # color(RGBA) or image path
+            texture: ./examples/truck/assets/back2.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.0
         collision:
@@ -116,7 +118,7 @@ entities:
         visual:
             geometry: 
                 circle: 0.4      # width, height
-            texture: ./assets/wheel.png  # color(RGBA) or image path
+            texture: ./examples/truck/assets/wheel.png  # color(RGBA) or image path
             border_color: [0, 0, 0, 255]
             border_thickness: 2.5
         collision:

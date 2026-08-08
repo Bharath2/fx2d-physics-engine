@@ -1,16 +1,9 @@
 build
 build-headless
 build-lint
-# Only the textures referenced by the tracked Scene.yml files are committed
-# (downscaled to 512 px); everything else in assets/ stays local.
-assets/*
-!assets/back2.png
-!assets/ball.png
-!assets/bricks.png
-!assets/head.png
-!assets/rock.png
-!assets/wheel.png
-!assets/wood.png
+# Example textures live under examples/*/assets/ (committed, downscaled).
+# Ignore any leftover root assets/ folder used for local extras.
+assets/
 bin
 lib/imgui/*
 !lib/imgui/.gitkeep

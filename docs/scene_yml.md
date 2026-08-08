@@ -70,7 +70,7 @@ scene:
     size: [12, 8]
     gravity: [0, -10]
     background: [230, 230, 230, 255]     # solid light-grey
-    # background: ./assets/sky.png       # or an image file
+    # background: ./examples/truck/assets/bricks.png  # or an image file
 ```
 
 ---
@@ -169,7 +169,7 @@ visual:
     pose: [0, 0, 0]
     geometry:
         rectangle: [1.0, 0.5]
-    texture: ./assets/crate.png
+    texture: ./examples/stacked_boxes/assets/rock.png
     border_color: [0, 0, 0, 255]
     border_thickness: 2.0
 ```
@@ -301,7 +301,7 @@ entities:
             pose: [0, 0, 0]
             geometry:
                 circle: 0.5
-            texture: ./assets/ball.png
+            texture: ./examples/stacked_boxes/assets/ball.png
             border_color: [0, 0, 0, 255]
             border_thickness: 5.0
         collision:

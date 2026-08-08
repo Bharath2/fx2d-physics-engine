@@ -152,15 +152,15 @@ $$\mathbf{v}_\text{rel} = (\mathbf{v}_B + \omega_B \times \mathbf{r}_B) - (\math
 
 $$v_n = \mathbf{v}_\text{rel} \cdot \mathbf{n}$$
 
-**2. Apply restitution bias** — bounce only if bodies are approaching and the relative normal velocity exceeds a threshold (`1e-3`):
+**2. Restitution target** — captured once per substep as `vn_pre` (relative normal velocity before the velocity sweeps). Bounce only if that approach speed exceeds a small slop:
 
-$$e = \min(e_A, e_B), \qquad \text{bias} = \begin{cases} e & v_n < -10^{-3} \\ 0 & \text{otherwise} \end{cases}$$
+$$e = \min(e_A, e_B), \qquad v_{n,\text{target}} = \begin{cases} -e \cdot v_{n,\text{pre}} & v_{n,\text{pre}} < -v_{\text{slop}} \\ 0 & \text{otherwise} \end{cases}$$
 
 **3. Compute and apply normal impulse (with accumulation):**
 
-The solver uses **accumulated impulses** per contact point (`jn_accumulated[i]`), clamped to remain non-negative (no tensile forces):
+The solver uses **accumulated impulses** per contact point (`jn_accumulated[i]`), clamped to remain non-negative (no tensile forces). Negative $\Delta j_n$ is applied too, so excess impulse from an earlier sweep can be released:
 
-$$j_{n,\text{fresh}} = \frac{-(1 + \text{bias}) \cdot v_n}{K_n}$$
+$$j_{n,\text{fresh}} = \frac{-(v_n - v_{n,\text{target}})}{K_n}$$
 $$j_{n,\text{new}} = \max(0,\; j_{n,\text{accumulated}} + j_{n,\text{fresh}})$$
 $$\Delta j_n = j_{n,\text{new}} - j_{n,\text{accumulated}}$$
 
@@ -185,7 +185,11 @@ Where $K_t$ is the effective mass along the tangent, computed analogously to $K_
 
 $$\mu_s = \min(\mu_{s,A},\, \mu_{s,B}), \qquad \mu_k = \min(\mu_{k,A},\, \mu_{k,B})$$
 
-$$j_t = \begin{cases} j_t & |j_t| \leq \mu_s \cdot j_n \quad \text{(static friction — no slip)} \\ \text{sign}(j_t) \cdot \mu_k \cdot j_n & |j_t| > \mu_s \cdot j_n \quad \text{(kinetic friction — sliding)} \end{cases}$$
+The Coulomb budget uses the **sum** of normal impulses on the manifold for this substep ($j_{n,\text{sum}} = \sum_i j_{n,\text{accumulated}}[i]$), computed once after the normal loop:
+
+$$j_t = \begin{cases} j_t & |j_t| \leq \mu_s \cdot j_{n,\text{sum}} \quad \text{(static friction — no slip)} \\ \text{sign}(j_t) \cdot \mu_k \cdot j_{n,\text{sum}} & |j_t| > \mu_s \cdot j_{n,\text{sum}} \quad \text{(kinetic friction — sliding)} \end{cases}$$
+
+Unset friction in YAML defaults to `0`, and pair coefficients use $\min(\mu_A,\mu_B)$ — so a body with no friction makes the contact frictionless.
 
 **4. Apply tangential impulse** to both linear and angular velocities along `t`.
 
@@ -195,7 +199,7 @@ $$j_t = \begin{cases} j_t & |j_t| \leq \mu_s \cdot j_n \quad \text{(static frict
 
 **Normal convention.** The contact normal always points from `entity1` to `entity2`. Corrections push `entity1` in the `−n` direction and `entity2` in the `+n` direction.
 
-**Warm starting.** On the first substep of each frame, `FxSolver::warm_start()` pre-applies the accumulated impulses from the previous frame to both bodies' velocities. This provides a good initial guess for the iterative velocity solver, reducing jitter on resting/stacking contacts. Warm starting is skipped on substeps 2 onward to avoid double-counting impulses already present in the integrated velocity.
+**Warm starting.** Cached impulses from the previous frame are stored as `jn_warm` / `jt_warm`. On the first substep only, `FxSolver::warm_start()` applies those guesses and seeds `jn_accumulated` / `jt_accumulated`. Later substeps start accumulation from zero so warm impulses are not double-counted.
 
 **Order of response.** Position correction runs before velocity derivation; velocity impulses run after. This means the restitution and friction impulses work on the velocities that already reflect all positional fixes from constraints and penetration resolution.
 
