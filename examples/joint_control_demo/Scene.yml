@@ -32,6 +32,34 @@ entities:
             geometry:
                 rectangle: [2.0, 0.25]
 
+    rail:                       # static anchor (slider motor's parent)
+        pose: [6.0, 1.5, 0.0]
+        physics:
+            mass: 0.0
+            gravity_scale: 0.0
+            external_forces_enabled: false
+        visual:
+            geometry:
+                rectangle: [10.0, 0.4]
+            texture: [60, 60, 60, 255]
+        collision:
+            geometry:
+                rectangle: [10.0, 0.4]
+
+    slider:                     # dynamic block driven along the rail
+        pose: [6.0, 1.5, 0.0]   # coincident with the rail centre: starts at position 0
+        physics:
+            mass: 1.0
+            inertia: 0.1
+            gravity_scale: 0.0  # keep the demo output driven purely by the motor
+        visual:
+            geometry:
+                rectangle: [0.8, 0.8]
+            texture: [40, 160, 120, 255]
+        collision:
+            geometry:
+                rectangle: [0.8, 0.8]
+
 joints:
     arm_motor:
         type: revolute
@@ -44,3 +72,15 @@ joints:
         target: 1.0             # radians (revolute position target)
         max_effort: 25.0
         pid: [6.0, 0.05, 0.4]
+
+    slider_motor:
+        type: prismatic
+        parent: rail
+        child: slider
+        axis: [1.0, 0.0]        # slide along the rail's local x
+        position_min: -4.0      # travel limits along the axis, in metres
+        position_max: 4.0
+        control_mode: position  # initial mode; main.cpp switches it
+        target: 0.0             # metres along the axis
+        max_effort: 20.0
+        pid: [8.0, 0.2, 5.0]    # D near critical damping (2*sqrt(P*mass)) to avoid overshoot

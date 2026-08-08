@@ -210,3 +210,15 @@ scene.add_joint(slider);
 ```
 
 For YAML-based joint configuration see [scene_yml.md](scene_yml.md).
+
+---
+
+## Runnable Example
+
+[`../examples/joint_control_demo/`](../examples/joint_control_demo/) is a complete headless demo. Its `Scene.yml` declares an `arm_motor` (revolute) and a `slider_motor` (prismatic), and `main.cpp` drives both through `POSITION`, `VELOCITY`, and `EFFORT` phases, printing angle, angular velocity, slider offset, and slider velocity as they track. Swap the step loops for `FxRylbRenderer(scene, 60).run()` to watch it instead.
+
+Two things the example demonstrates that are easy to get wrong:
+
+**Position and velocity loops need different gains.** A position loop wants strong damping — roughly `D = 2*sqrt(P * inertia)` for a revolute joint, or `2*sqrt(P * mass)` for a prismatic one — or the joint oscillates around the target. In velocity mode the error is already a rate, so reusing that `D` differentiates acceleration and fights the motor hard enough to stall it. The example calls `set_pid()` at the start of each phase.
+
+**Very small timesteps weaken motors.** XPBD compliance scales with `1/dt^2`, so joint constraints stiffen as the substep shrinks. At `dt = 1e-3` (the smallest `FxScene::step` accepts) the constraint solve cancels the revolute motor's torque outright and the arm does not move at all. The example runs at `dt = 0.01`. If a motor seems dead, try a larger timestep before re-tuning gains.

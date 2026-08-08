@@ -408,7 +408,7 @@ joints:
         pid: [4.0, 0.0, 0.2]
 ```
 
-For a runnable scene that uses a `joints:` block, see [`examples/joint_control_demo/Scene.yml`](../examples/joint_control_demo/Scene.yml).
+For a runnable scene that uses a `joints:` block, see [`examples/joint_control_demo/Scene.yml`](../examples/joint_control_demo/Scene.yml). It declares both joint types against static parents: `arm_motor` (revolute, with `anchor`, `angle_min`/`angle_max`, `pid`, `control_mode`, `target`, and `max_effort`) and `slider_motor` (prismatic, with `axis`, `position_min`/`position_max`, and the same control fields). The companion [`main.cpp`](../examples/joint_control_demo/main.cpp) drives both through all three control modes; see [joint_control.md](joint_control.md) for the motor API and gain-tuning notes.
 
 ---
 

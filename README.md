@@ -90,7 +90,7 @@ To run an example, copy the `main.cpp` from [examples](./examples/) to `src/`, b
 
 ![2D truck suspension physics simulation](./examples/truck/play.gif)
 
-**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute joint motor control (position, velocity, and effort modes)
+**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute and prismatic joint motor control (position, velocity, and effort modes)
 
 ## Documentation
 
