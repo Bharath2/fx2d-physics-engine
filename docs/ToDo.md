@@ -1,24 +1,22 @@
 # Fx2D Roadmap
 
-This file tracks the next feature and robustness targets for Fx2D.
+This file tracks the next feature and robustness targets for Fx2D. Delivered
+targets are removed; see git history for what already landed (shapes unified
+under `vertices[] + skin_radius`, capsules/edges/rounded variants, speculative-
+contact CCD, broad-phase hardening, the test suite, joint-control examples,
+and the `FxAngleWrap` precision fix).
 
 ## Priority Targets
 
-1. Add more collision shapes.
-   Start with a few high-value shapes that unlock better level geometry and character collision:
-   - ~~capsules~~ ✅ Done
-   - ~~line segments / edges~~ ✅ Done (zero-radius capsule)
-   - chain or polyline colliders
-   - ~~rounded boxes or other rounded convex variants~~ ✅ Done (skin radius on any polygon)
-
-   All shapes now share a unified `vertices[] + skin_radius` storage. `FxShape` recognises three
-   types: `Circle` (0 vertices), `Capsule` (2 vertices), and `Polygon` (>=3 vertices); any of the
-   latter two can carry a Minkowski-sum skin radius. YAML adds a `capsule:` key and an optional
-   `radius:` modifier on `rectangle:` / `polygon:` for rounded variants.
-
-   Edges are zero-skin capsules authored with `edge: [[x, y], [x, y]]`, intended for static level
-   geometry. Edge-vs-polygon uses a dedicated line-reference query so a segment inside a polygon
-   still reports contact; edge-vs-edge pairs and CCD on edges are intentionally skipped.
+1. Add chain / polyline colliders.
+   The last shape from the original shape list. Shapes share a unified
+   `vertices[] + skin_radius` storage — `FxShape` recognises `Circle`
+   (0 vertices), `Capsule` (2 vertices), and `Polygon` (>=3 vertices) — and
+   edges already exist as zero-skin capsules (`edge: [[x, y], [x, y]]`) with a
+   dedicated line-reference query. A chain collider is the natural composition:
+   a sequence of edge segments authored as one entity, for static level
+   geometry that a polygon approximates awkwardly. Edge-vs-edge pairs and CCD
+   on edges are intentionally skipped today; chains inherit that.
 
 2. Add higher-level query and event systems.
    This is the gap between a physics demo and a game/RL substrate. The data already
@@ -74,50 +72,19 @@ This file tracks the next feature and robustness targets for Fx2D.
      outside its swept path — mitigate with a small extra sweep margin, or let
      CCD bodies alone re-query per substep.
 
-   **Continuous collision.** Reduce tunneling for fast movers with:
-   - ~~speculative contacts~~ ✅ Done
-     - `FxEntity::enable_ccd` flag (default `false`, zero overhead when off)
-     - `FxSolver::speculative_contact_check()` generates a pre-contact (negative depth) when gap closes within the substep
-     - Sleep filter in `Registry::get_broad_phase_pairs()` bypassed for CCD bodies
-     - YAML `ccd:` key supported under the `physics:` block
+   **Continuous collision.** Speculative contacts are done
+   (`FxEntity::enable_ccd`, `FxSolver::speculative_contact_check()`, YAML
+   `ccd:` key). Remaining, to reduce tunneling further for fast movers:
    - time-of-impact style sweeps
    - fast-body or bullet-style handling for selected entities
 
-4. ~~Harden broad-phase and collision robustness.~~ ✅ Done
-   - Fixed fragile AABB sentinel check in `Registry::get_broad_phase_pairs()` using `FxAABB::is_valid()`
-   - Static bodies (`inv_mass == 0`) no longer enter sleep state
-   - Constrained entities are excluded from sleep-tick to prevent mid-joint drift
-   - Restitution slop raised to `2e-2f` to suppress micro-bounce during stacking
-
-5. ~~Expand test coverage and regression coverage.~~ ✅ Done
-   Add more automated checks for:
-   - ~~YAML scene loading~~ ✅ Done (`FxYAML::buildScene` on an inline scene in
-     `tests/test_joints.cpp`; `FxYAML::buildShape` for capsule/rounded-rect/edge forms and
-     error cases in `tests/test_capsule_collision.cpp` and `tests/test_collisions_edge.cpp`)
-   - ~~joints and motor control~~ ✅ Done (`tests/test_joints.cpp`)
-   - ~~collision manifolds and solver regressions~~ ✅ Done (`tests/test_capsule_collision.cpp`,
-     `tests/test_collisions_edge.cpp`, `tests/test_resting_stability.cpp` — the last added with
-     the resting-contact energy-leak fix)
-   - ~~broad-phase updates and removal paths~~ ✅ Done (`tests/test_aabb_tree.cpp`)
-   - ~~fast-moving body edge cases once CCD lands~~ ✅ Done (`tests/test_ccd.cpp`)
-
-   The suite builds as one `Fx2DTests` binary under CTest; style and static
-   analysis are separately gated in CI (`.github/workflows/lint.yml`,
-   `scripts/lint.sh`).
-
-6. Add more examples and docs around newer features.
-   Prioritize:
-   - ~~joint control examples for position, velocity, and effort~~ ✅ Done (`examples/joint_control_demo/`,
-     covering revolute and prismatic motors in all three control modes)
-   - ~~scene YAML examples that include joints~~ ✅ Done (`examples/joint_control_demo/Scene.yml`)
+4. Add more examples and docs around newer features.
    - query/event examples — blocked on item 2 (query/event APIs not implemented yet)
 
-7. Remove the float precision floor in position-level solving.
-   Found while validating the joint example, where motors appeared dead at small timesteps.
-   - ~~`FxAngleWrap` shifted by `+pi` before its `fmod`, which rounded away any angle below
-     ~`1.2e-7` rad (half an ulp of float near pi) and returned exactly `0`. Substep rotations
-     land in that range at small timesteps, so all angular motion silently froze.~~ ✅ Fixed —
-     in-range angles now pass through untouched; covered by `tests/test_angle_precision.cpp`
+5. Remove the float precision floor in position-level solving.
+   Found while validating the joint example, where motors appeared dead at small
+   timesteps; the `FxAngleWrap` half is fixed and regression-covered
+   (`tests/test_angle_precision.cpp`). The remaining half:
    - Constraint corrections are still computed on `float` world coordinates, so a correction
      below one ulp of the coordinate magnitude (~`4.8e-7` at `x = 7`) is lost. A revolute joint
      with an anchor offset from the child's centre of mass depends on displacements at that
@@ -126,7 +93,7 @@ This file tracks the next feature and robustness targets for Fx2D.
      further per unit time. Fixing this means accumulating constraint corrections in double
      precision, or solving in body-relative coordinates rather than world coordinates.
 
-8. Add renderer-level input hooks (keyboard/mouse).
+6. Add renderer-level input hooks (keyboard/mouse).
    There is currently nothing: the renderer only has ImGui panel widgets, no key
    polling exists anywhere, and the examples drive motors programmatically.
    Practically, since raylib is linked anyway, `IsKeyDown(KEY_RIGHT)` can already
@@ -136,10 +103,42 @@ This file tracks the next feature and robustness targets for Fx2D.
    have to reach into raylib directly (and headless scenes can be driven by the
    same interface).
 
+7. Parallelize the narrow phase and the island solve.
+   The engine is single-threaded today. Leaf-level SIMD hygiene already exists —
+   `-O3 -march=native` under `FX2D_NATIVE`, 32-byte-aligned `FxArray` with
+   `__restrict` loops that auto-vectorize — but the solver hot path is AoS
+   `FxVec2f`/`FxVec3f` math through `shared_ptr` entities, which neither
+   vectorizes wide nor threads. Ranked by value/effort:
+   - **Narrow phase (easy, biggest win).** Each pair's `collision_check` in
+     `FxScene::step()` (`src/Scene.cpp`) is independent pure geometry against
+     const entity state. Parallel-for over `broad_phase_pairs` with per-thread
+     contact buffers, concatenated **in pair order** (never completion order —
+     that keeps determinism). Hoist the shared-state bits currently inside the
+     loop — `wake_if_disturbed`, `active_keys.insert`, warm-start cache lookup —
+     into a cheap serial pass over the produced contacts. OpenMP is the least
+     invasive mechanism; a small thread pool avoids the dependency.
+   - **Entity integration.** The `entity->step()` and velocity-derivation loops
+     are trivially parallel, but only pay off in the thousands-of-bodies range.
+   - **Island-based parallel solve (structurally correct big one).** The XPBD
+     position solve and velocity sweeps are Gauss-Seidel: sequential within a
+     group of touching bodies, but bodies only couple through contacts/joints —
+     so disconnected islands solve independently. Union-find over contact pairs
+     + joints → one task per island; also unlocks per-island sleeping. Payoff
+     scales with scene fragmentation (many separate stacks ≈ linear speedup;
+     one giant pile ≈ none).
+   - **Graph coloring within an island** (Jacobi-style, how XPBD runs on GPUs)
+     — only worth it for huge single islands; changes convergence slightly.
+     Skip until proven needed.
+   - Discipline throughout: fixed reduction order for float accumulation and no
+     parallel writes to `m_contact_cache` (write-back stays serial) — otherwise
+     the sim goes nondeterministic, which would hurt the RL story.
+   - Out of scope for now: SoA/SIMD batch solving of contacts (Box2D v3 style)
+     — a large refactor that only matters after the above land.
+
 ## Why These Matter
 
-- More shapes improve practical scene authoring and reduce the need for awkward polygon approximations.
+- Chain colliders finish practical scene authoring for static level geometry.
 - Query and event APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop.
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
-- Better tests and solver regression coverage are key to making the engine more trustworthy as features grow.
 - Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
+- Parallelism raises the body-count ceiling without touching solver behavior — narrow phase first because it is embarrassingly parallel, islands second because they preserve Gauss-Seidel convergence.
