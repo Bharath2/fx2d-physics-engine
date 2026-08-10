@@ -8,6 +8,9 @@ Contributions are welcome! Please follow the existing code style and conventions
   changes, and open a pull request referencing the issue.
 - Run `./scripts/format.sh` before opening a PR; `./scripts/lint.sh` should
   pass. Both are gated in CI on every push and pull request.
+- **Looking for something to work on?** The roadmap of open targets lives in
+  [docs/ToDo.md](./docs/ToDo.md) — each item records the motivation, the
+  relevant code paths, and the suggested approach.
 
 ## Linting
 
