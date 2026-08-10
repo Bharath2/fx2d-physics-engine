@@ -135,6 +135,33 @@ and the `FxAngleWrap` precision fix).
    - Out of scope for now: SoA/SIMD batch solving of contacts (Box2D v3 style)
      — a large refactor that only matters after the above land.
 
+8. Prove the solver against adversarial scenes.
+   The solver's *design* is contemporary — 11 substeps × position solve + 8
+   velocity passes with warm-starting, normal-flip detection on the friction
+   basis, a restitution speed floor, and accumulated normal/tangent impulses is
+   the same substepping-with-soft-constraints generation Box2D v3 moved to.
+   What is missing is not architecture but *proof*: the stability suite covers
+   no-jitter, no-creep, a three-box equal-mass stack, bounce energy, friction
+   stop, and bounded penetration — all correct things to test, and all easy
+   mode. The proven envelope today is small scenes at benign mass ratios.
+   Add the scenes mature engines burned years on, as regression tests, and fix
+   what falls out:
+   - **Tall stacks** — 10/20/30 boxes and pyramid stacks. Substepping should
+     handle these well; "should" is untested.
+   - **High mass ratios** — a 100:1 anvil on a feather box; a heavy body atop
+     a light stack. The classic solver killer; nothing in the suite goes
+     beyond ~equal masses.
+   - **Chains under tension** — long revolute chains (rope, bridge) with a
+     weight at the end; joint stretch and motor authority under load. Item 5's
+     float-precision finding (motor authority dying with distance from origin)
+     was discovered *by accident* in this class — direct evidence it holds
+     more landing mines.
+   - **The rest of the classics** — degenerate geometry (thin slivers),
+     restitution chains (Newton's cradle), fast-spinning bodies, kinematic
+     platforms.
+   Item 5's remaining half is the first known bug this suite would pin down;
+   expect it to surface others. Tractable, just grinding.
+
 ## Why These Matter
 
 - Chain colliders finish practical scene authoring for static level geometry.
@@ -142,3 +169,4 @@ and the `FxAngleWrap` precision fix).
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
 - Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
 - Parallelism raises the body-count ceiling without touching solver behavior — narrow phase first because it is embarrassingly parallel, islands second because they preserve Gauss-Seidel convergence.
+- Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns.
