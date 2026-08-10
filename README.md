@@ -120,27 +120,11 @@ Headless examples skip the graphics stack entirely:
 | [joint_control.md](./docs/joint_control.md) | Joint motor API — revolute and prismatic joints, control modes (position/velocity/effort), PID tuning |
 | [math_utils.md](./docs/math_utils.md) | `FxArray`, vector/matrix math utilities, and helper functions |
 
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the
+workflow, lint gate (`./scripts/lint.sh`), and how to run the test suite.
+
 ## License
 
 BSD-3-Clause License
-
-## Linting
-
-Style and light static analysis (clang-format, cppcheck, clang-tidy) are gated in CI:
-
-```bash
-./scripts/format.sh           # rewrite sources to .clang-format
-./scripts/format.sh --check   # dry-run (fails if anything would change)
-./scripts/lint.sh             # format check + cppcheck + clang-tidy
-```
-
-Install on Debian/Ubuntu: `sudo apt install clang-format clang-tidy cppcheck libeigen3-dev`.
-On MSYS2 MinGW64: `pacman -S mingw-w64-x86_64-clang-tools-extra` (and cppcheck from your preferred source).
-
-## Contributing
-
-Contributions are welcome! Please follow the existing code style and conventions.
-
-- Run `./scripts/format.sh` before opening a PR; `./scripts/lint.sh` should pass.
-- **Bugs & feature requests:** Open a new issue describing the problem or proposal clearly (steps to reproduce, or the rationale/use case).
-- **Working on features/fixes:** Create a new branch from `main`, commit your changes, and open a pull request referencing the issue.

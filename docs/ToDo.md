@@ -44,13 +44,21 @@ This file tracks the next feature and robustness targets for Fx2D.
    - Constrained entities are excluded from sleep-tick to prevent mid-joint drift
    - Restitution slop raised to `2e-2f` to suppress micro-bounce during stacking
 
-5. Expand test coverage and regression coverage.
+5. ~~Expand test coverage and regression coverage.~~ ✅ Done
    Add more automated checks for:
-   - YAML scene loading
-   - joints and motor control
-   - collision manifolds and solver regressions
-   - broad-phase updates and removal paths
-   - fast-moving body edge cases once CCD lands
+   - ~~YAML scene loading~~ ✅ Done (`FxYAML::buildScene` on an inline scene in
+     `tests/test_joints.cpp`; `FxYAML::buildShape` for capsule/rounded-rect/edge forms and
+     error cases in `tests/test_capsule_collision.cpp` and `tests/test_collisions_edge.cpp`)
+   - ~~joints and motor control~~ ✅ Done (`tests/test_joints.cpp`)
+   - ~~collision manifolds and solver regressions~~ ✅ Done (`tests/test_capsule_collision.cpp`,
+     `tests/test_collisions_edge.cpp`, `tests/test_resting_stability.cpp` — the last added with
+     the resting-contact energy-leak fix)
+   - ~~broad-phase updates and removal paths~~ ✅ Done (`tests/test_aabb_tree.cpp`)
+   - ~~fast-moving body edge cases once CCD lands~~ ✅ Done (`tests/test_ccd.cpp`)
+
+   The suite builds as one `Fx2DTests` binary under CTest; style and static
+   analysis are separately gated in CI (`.github/workflows/lint.yml`,
+   `scripts/lint.sh`).
 
 6. Add more examples and docs around newer features.
    Prioritize:
