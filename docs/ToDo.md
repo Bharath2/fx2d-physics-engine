@@ -21,15 +21,60 @@ This file tracks the next feature and robustness targets for Fx2D.
    still reports contact; edge-vs-edge pairs and CCD on edges are intentionally skipped.
 
 2. Add higher-level query and event systems.
+   This is the gap between a physics demo and a game/RL substrate. The data already
+   exists — `FxContact` carries up to 2 world-space contact points, the normal,
+   penetration depth, applied impulses, and both entity pointers — but the contact
+   list is a local variable inside `FxScene::step()` (`src/Scene.cpp`): computed,
+   solved against, and thrown away every substep. The step callback fires after all
+   that, so user code can never see a collision — "did the ball touch the goal?" is
+   unanswerable today without re-doing collision math yourself.
+
    Build public scene/world APIs for:
-   - ray casts
+   - buffered contact list exposed after each step (retain what `step()` already
+     computes instead of discarding it)
+   - begin/end contact events — the scene already keys contact pairs by a `uint64`
+     id for warm-starting (`m_contact_cache`), so diffing pair ids across steps
+     gives begin/end for little extra cost
+   - sensors / trigger-only fixtures — a trigger is a contact that generates an
+     event but no impulse; the plumbing is ~90% shared with the above
+   - ray casts — lidar-style observations for RL, "what's under the mouse click"
+     for a game
    - overlap queries
    - shape queries
-   - sensors / trigger-only fixtures
-   - buffered contact and sensor events exposed after each step
 
-3. Add continuous collision support.
-   Reduce tunneling for fast movers with:
+   Suggested slices: (a) buffered contacts + begin/end events + triggers, which
+   unblocks games and RL reward functions; then (b) ray/overlap/shape queries,
+   which unblocks RL observations.
+
+3. Make the collision pipeline faster and continuous.
+   Two halves of the same pipeline: the broad phase decides *which pairs get
+   looked at*; CCD is what actually prevents fast bodies passing through thin
+   geometry. Division of labour matters — per-substep broad-phase queries never
+   prevented tunneling (they sample AABBs at substep start; a fast body can
+   cross a thin wall *within* one substep), so hoisting the query out of the
+   substep loop costs no protection.
+
+   **Broad-phase efficiency.** The tree itself is sound (SAH-guided dynamic
+   AABB tree, fat boxes, dual-tree pair descent), but it is driven wastefully:
+   `get_broad_phase_pairs()` runs per *substep* (`src/Scene.cpp`), so every
+   frame pays N tree syncs + N full pair queries.
+   - Query once per step over **full-step swept AABBs**
+     (`combine(aabb, aabb + velocity * dt_full)`): any pair that can touch
+     during any substep already overlaps in swept-box space at step start, so
+     the once-per-step list is a superset of what per-substep queries find.
+     Narrow phase still runs per substep on that list. The swept-box machinery
+     already exists for CCD bodies in `Registry::get_broad_phase_pairs()` —
+     apply it to all moving bodies with the full-step dt.
+   - De-hash the hot path: store the tree node index on `FxEntity` instead of
+     the `m_entity_node_map` / `m_entity_idx_map` lookups per entity/pair.
+   - Reuse pair/contact buffers across calls instead of reallocating.
+   - Trade: swept boxes admit a few more false-positive pairs (cheaply rejected
+     by narrow phase) in exchange for one tree walk per step instead of N.
+   - Edge case: a hard mid-step impact can redirect a fast body into geometry
+     outside its swept path — mitigate with a small extra sweep margin, or let
+     CCD bodies alone re-query per substep.
+
+   **Continuous collision.** Reduce tunneling for fast movers with:
    - ~~speculative contacts~~ ✅ Done
      - `FxEntity::enable_ccd` flag (default `false`, zero overhead when off)
      - `FxSolver::speculative_contact_check()` generates a pre-contact (negative depth) when gap closes within the substep
@@ -81,9 +126,20 @@ This file tracks the next feature and robustness targets for Fx2D.
      further per unit time. Fixing this means accumulating constraint corrections in double
      precision, or solving in body-relative coordinates rather than world coordinates.
 
+8. Add renderer-level input hooks (keyboard/mouse).
+   There is currently nothing: the renderer only has ImGui panel widgets, no key
+   polling exists anywhere, and the examples drive motors programmatically.
+   Practically, since raylib is linked anyway, `IsKeyDown(KEY_RIGHT)` can already
+   be called inside `set_step_callback` to set joint targets — that works today
+   for a quick game. The clean version is a proper renderer-level input hook, or
+   an input-state struct passed to the step callback, so gameplay code does not
+   have to reach into raylib directly (and headless scenes can be driven by the
+   same interface).
+
 ## Why These Matter
 
 - More shapes improve practical scene authoring and reduce the need for awkward polygon approximations.
 - Query and event APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop.
-- Continuous collision is one of the biggest gaps for fast-moving bodies.
+- The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
 - Better tests and solver regression coverage are key to making the engine more trustworthy as features grow.
+- Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
