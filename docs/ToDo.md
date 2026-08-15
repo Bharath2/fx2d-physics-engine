@@ -132,51 +132,52 @@ ordering fix).
    - Out of scope for now: SoA/SIMD batch solving of contacts (Box2D v3 style)
      — a large refactor that only matters after the above land.
 
-8. Fix what the adversarial scenes found.
-   The scenes themselves have landed (`tests/test_adversarial.cpp`): tall stacks,
-   pyramids, mass ratios, thin slivers, a restitution chain, spinning bodies, and
-   a kinematic platform. They pin the envelope the solver provably owns, and the
-   thresholds in them are measured rather than aspirational. What they proved:
+8. Push past the envelope the adversarial scenes established.
+   The scenes have landed (`tests/test_adversarial.cpp`): tall stacks, pyramids, mass
+   ratios, thin slivers, a restitution chain, spinning bodies, a topple test and a
+   kinematic platform. Thresholds in them are measured rather than aspirational.
 
-   **Works.** Columns up to 15 boxes and a 5-wide pyramid hold at the default 11
-   substeps. A 20-box column holds at 22. Raising substeps monotonically reduces
-   sink, so the knob users reach for genuinely works. 10:1 mass ratios are
-   near-exact and 100:1 holds to within 0.073 of a unit box height. Thin slivers
-   (down to 0.02 thick) rest without jitter or tilt. Newton's cradle transfers
-   momentum correctly, leaving the middle balls in place. A box rides a
-   velocity-driven kinematic platform.
+   **The solver passed everything thrown at it.** No correctness bug was found. Columns
+   up to 15 boxes and a 5-wide pyramid hold at the default 11 substeps; 20 holds at 22.
+   Raising substeps monotonically reduces sink, so the knob users reach for works. 10:1
+   mass ratios are near-exact. Slivers down to 0.02 thick rest without jitter. Newton's
+   cradle transfers momentum and leaves the middle balls in place. A box rides a
+   velocity-driven kinematic platform. Mechanical energy never rises on an inelastic
+   floor, at any spin rate tested up to 100 rad/s.
 
-   Remaining, in the order the evidence justifies:
+   Two behaviours were initially mistaken for bugs, recorded so the mistake is not
+   repeated. A box spinning at 100 rad/s vaults metres into the air — legitimate, since it
+   holds ~838 J of rotational energy and lifting 1 kg by 7 m costs 70 J; measured energy
+   gain is exactly zero. It then leaves the platform sideways and lands on the scene floor,
+   which looked like tunneling but is not: it was at x = 0.015, far off a platform spanning
+   x in [5, 35]. Likewise a 100 kg box dropped on a five-box column scatters it flat, which
+   looked like interpenetration but is a plain topple — pairwise overlap checks confirm
+   every body stays separated. Both lessons are now enforced as tests: assert conserved
+   energy rather than height, and assert overlap rather than final height.
 
-   - **Spin injects energy into the contact solve.** A unit box spun in place on
-     the ground may legitimately rise to corner-pivot height (centre at
-     `1.5 + sqrt(2)/2 = 2.207`). Up to 15 rad/s it reaches exactly that and no
-     more. From 20 rad/s it climbs past it — 2.31 at 20, 2.67 at 30, 3.74 at 50,
-     8.89 at 100 — so the solver is manufacturing height out of rotation. At
-     100 rad/s the box launches to y ≈ 8.9 while angular velocity drops 100 → 28.6:
-     roughly 70% of the spin is converted into a 6.7 m/s upward throw. It then
-     falls back at ~13 m/s and tunnels through the 1-unit-thick floor. This is the
-     clearest correctness bug the suite found, and the tunneling is only its
-     symptom — fixing the energy gain removes the fall-through with it. Note CCD
-     makes no difference, because `speculative_contact_check()` computes closing
-     speed from linear velocity alone and ignores angular velocity entirely.
-   - **High mass ratios creep without converging.** A 100 kg box dropped on a
-     stack of five 1 kg boxes sinks continuously rather than settling: over 120
-     steps the whole stack descends steadily and never reaches equilibrium, ending
-     collapsed into the ground. A static 1000:1 pair is similar, burying the light
-     box half its height. The 100:1 resting pair is fine, so the failure is about
-     accumulated load through a chain of contacts, not the ratio alone.
-   - **Chains under tension are still untested.** The one class from the original
-     list not yet covered — long revolute chains (rope, bridge) with a weight at
-     the end, testing joint stretch and motor authority under load. Item 5's
-     float-precision finding was discovered *by accident* in this class, which is
-     direct evidence it holds more. Worth resolving the duplicate-constraint
-     warning (`FxNamedRegistry: Item 'base_link_Anchor' already exists.`, printed
-     by the joint tests) first, since chain tests depend on joint constraints
-     registering the way the author expects.
+   What is genuinely open:
 
-   Note the suite is marked slow and skipped when `FX2D_SKIP_SLOW_TESTS=1`, which
-   CI sets for its Debug/sanitizer job only. Release runs it on every push.
+   - **Deep penetration at extreme mass ratios.** A 1000:1 resting pair at the default 11
+     substeps presses the light box exactly half its height into the ground and leaves it
+     there — in place, unrotated, so this is real interpenetration rather than a topple. At
+     44 substeps it does not happen. The milder 100:1 case buries 0.073 at 11 substeps and
+     0.005 at 44, so penetration under load is substep-limited throughout. Worth attacking
+     if extreme ratios matter; the fix direction is more position-solve authority per
+     substep rather than simply more substeps.
+   - **Stack height is substep-limited.** A 20-box column is stable at 22 substeps and
+     collapses at 11. Since a perfectly aligned column is numerically symmetric, what
+     topples it is solver noise rather than physics. Raising the default trades throughput
+     for height; a better position solve would buy both.
+   - **Chains under tension remain untested** — the one class from the original list not
+     covered. Long revolute chains (rope, bridge) with a weight at the end, testing joint
+     stretch and motor authority under load. Item 5's float-precision finding was
+     discovered *by accident* in this class, which is direct evidence it holds more. Worth
+     resolving the duplicate-constraint warning (`FxNamedRegistry: Item
+     'base_link_Anchor' already exists.`, printed by the joint tests) first, since chain
+     tests depend on joint constraints registering the way the author expects.
+
+   The suite is marked slow and skipped when `FX2D_SKIP_SLOW_TESTS=1`, which CI sets for
+   its Debug/sanitizer job only. Release runs it on every push.
 
 ## Why These Matter
 
@@ -185,4 +186,4 @@ ordering fix).
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
 - Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
 - Parallelism raises the body-count ceiling without touching solver behavior — narrow phase first because it is embarrassingly parallel, islands second because they preserve Gauss-Seidel convergence.
-- Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns. The scenes now exist and have already located a real energy-injection bug in the contact solve.
+- Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns. The scenes now exist, and the solver cleared them: the outcome is a measured envelope rather than a bug list.
