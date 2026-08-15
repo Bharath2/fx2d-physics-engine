@@ -1,15 +1,13 @@
 #include "Fx2D/Physics.h"
 
+#include "test_harness.h"
+
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 
 namespace {
-
-void require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
-}
 
 bool approx(float a, float b, float eps = 1e-5f) {
     return std::fabs(a - b) <= eps;
