@@ -59,5 +59,10 @@ jobs:
       - name: Build
         run: cmake --build build-ci --target Fx2DTests -j"$(nproc)"
 
+      # The adversarial stacking scenes take minutes under ASan/UBSan and add no coverage
+      # the other suites do not already give the sanitizers, so the Debug job skips them.
+      # The Release job runs the full suite on every push.
       - name: Test
+        env:
+          FX2D_SKIP_SLOW_TESTS: ${{ matrix.build_type == 'Debug' && '1' || '0' }}
         run: ctest --test-dir build-ci --output-on-failure
