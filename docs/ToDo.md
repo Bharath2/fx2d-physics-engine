@@ -74,8 +74,10 @@ ordering fix, the adversarial scene suite, and keyboard/mouse input).
    - fast-body or bullet-style handling for selected entities
 
 4. Add more examples and docs around newer features.
-   - a worked contact-event example — a sensor goal region plus impact-strength
-     readout, now that item 2 slice (a) makes it expressible
+   `examples/angry_boxes` covers mouse input, the draw overlay and impact strength read from
+   `FxScene::contacts()`. Still open:
+   - a sensor / trigger example — a goal region that fires a begin-contact event, the half of
+     item 2 slice (a) no example demonstrates yet
    - ray-cast / overlap examples — still blocked on item 2 slice (b)
 
 5. Remove the float precision floor in position-level solving.
@@ -108,8 +110,11 @@ ordering fix, the adversarial scene suite, and keyboard/mouse input).
    - **Per-step input.** Edge events currently last a whole rendered frame, which may span
      several physics steps; `input.md` documents the latch pattern that works around it. If
      that proves awkward in a real game, feed input per step instead of per frame.
-   - **A worked playable example.** The strongest proof the layer is usable — a small
-     keyboard-driven scene under `examples/`, which would also cover item 4.
+   A worked playable example now exists: `examples/angry_boxes` is a mouse-driven slingshot
+   that drags a ball back and topples a tower, with the mechanic itself covered headlessly by
+   `tests/test_slingshot.cpp`, which injects mouse state instead of a cursor. The renderer also
+   gained `set_draw_callback()` for overlays a game needs but the scene does not own — the
+   slingshot band, the trajectory preview and the score are all drawn through it.
 
 7. Opt-in multithreading, only where A/B testing shows it wins.
    The engine is single-threaded today, deliberately. It previously ran the entity

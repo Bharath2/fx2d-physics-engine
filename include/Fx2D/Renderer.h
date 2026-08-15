@@ -9,6 +9,7 @@
 #include "rlImGui.h"
 #include <rlgl.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -37,6 +38,8 @@ class FxRylbRenderer {
     // texture cache for entity textures
     std::unordered_map<std::string, Texture2D> m_textureCache;
     Texture2D get_or_load_texture(const std::string& path);
+    // user overlay drawn after the scene, before the UI
+    std::function<void(FxRylbRenderer&)> m_func_draw_callback;
     // helpers
     void init(int fps = 60);
     void draw_ui(double curr_rt_factor);
@@ -57,4 +60,11 @@ class FxRylbRenderer {
     // Convert between window pixels and scene units.
     FxVec2f screen_to_world(const FxVec2f& screen) const;
     FxVec2f world_to_screen(const FxVec2f& world) const;
+
+    // Custom drawing on top of the scene, before the ImGui panels. Use world_to_screen() to
+    // place things in scene coordinates. Anything a game needs to show that is not an entity
+    // — an aim line, a trajectory preview, a score — goes here.
+    void set_draw_callback(const std::function<void(FxRylbRenderer&)>& callback) {
+        m_func_draw_callback = callback;
+    }
 };

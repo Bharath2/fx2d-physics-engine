@@ -236,8 +236,9 @@ if (FX2D_BUILD_EXAMPLES)
   add_executable(example_truck         examples/truck/main.cpp)
   add_executable(example_joint_control examples/joint_control_demo/main_visual.cpp)
   add_executable(example_stacked_boxes examples/stacked_boxes/main.cpp)
+  add_executable(example_angry_boxes   examples/angry_boxes/main.cpp)
 
-  foreach(example_target example_truck example_joint_control example_stacked_boxes)
+  foreach(example_target example_truck example_joint_control example_stacked_boxes example_angry_boxes)
     target_link_libraries(${example_target} PRIVATE Fx2Dlib)
     fx2d_tune_target(${example_target})
   endforeach()
@@ -272,9 +273,13 @@ if (FX2D_BUILD_TESTS)
     tests/test_yaml_inertia.cpp
     tests/test_adversarial.cpp
     tests/test_input.cpp
+    tests/test_slingshot.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)
+  # test_slingshot.cpp drives the example's FxSlingshot directly, so the mechanic that ships
+  # in examples/angry_boxes is the one under test.
+  target_include_directories(Fx2DTests PRIVATE ${CMAKE_SOURCE_DIR}/examples)
   fx2d_tune_target(Fx2DTests)
   add_test(NAME Fx2DTests COMMAND Fx2DTests)
 endif()
