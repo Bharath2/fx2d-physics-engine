@@ -100,37 +100,63 @@ ordering fix).
    have to reach into raylib directly (and headless scenes can be driven by the
    same interface).
 
-7. Parallelize the narrow phase and the island solve.
-   The engine is single-threaded today. Leaf-level SIMD hygiene already exists —
-   `-O3 -march=native` under `FX2D_NATIVE`, 32-byte-aligned `FxArray` with
-   `__restrict` loops that auto-vectorize — but the solver hot path is AoS
-   `FxVec2f`/`FxVec3f` math through `shared_ptr` entities, which neither
-   vectorizes wide nor threads. Ranked by value/effort:
-   - **Narrow phase (easy, biggest win).** Each pair's `collision_check` in
-     `FxScene::step()` (`src/Scene.cpp`) is independent pure geometry against
-     const entity state. Parallel-for over `broad_phase_pairs` with per-thread
-     contact buffers, concatenated **in pair order** (never completion order —
-     that keeps determinism). Hoist the shared-state bits currently inside the
-     loop — `wake_if_disturbed`, `active_keys.insert`, warm-start cache lookup —
-     into a cheap serial pass over the produced contacts. OpenMP is the least
-     invasive mechanism; a small thread pool avoids the dependency.
-   - **Entity integration.** The `entity->step()` and velocity-derivation loops
-     are trivially parallel, but only pay off in the thousands-of-bodies range.
-   - **Island-based parallel solve (structurally correct big one).** The XPBD
-     position solve and velocity sweeps are Gauss-Seidel: sequential within a
-     group of touching bodies, but bodies only couple through contacts/joints —
-     so disconnected islands solve independently. Union-find over contact pairs
-     + joints → one task per island; also unlocks per-island sleeping. Payoff
-     scales with scene fragmentation (many separate stacks ≈ linear speedup;
-     one giant pile ≈ none).
-   - **Graph coloring within an island** (Jacobi-style, how XPBD runs on GPUs)
-     — only worth it for huge single islands; changes convergence slightly.
-     Skip until proven needed.
-   - Discipline throughout: fixed reduction order for float accumulation and no
-     parallel writes to `m_contact_cache` (write-back stays serial) — otherwise
-     the sim goes nondeterministic, which would hurt the RL story.
-   - Out of scope for now: SoA/SIMD batch solving of contacts (Box2D v3 style)
-     — a large refactor that only matters after the above land.
+7. Opt-in multithreading, only where A/B testing shows it wins.
+   The engine is single-threaded today, deliberately. It previously ran the entity
+   integration and velocity-derivation loops under `std::execution::par`, and that was
+   measured to be **slower at every body count tested** — 10, 50, 200, 400, 800, 1600
+   and 3000, against a registry cap of 4096 — while burning up to 32x the CPU:
+
+   | bodies | par | seq | speedup | CPU multiplier |
+   |--------|--------|--------|---------|-----|
+   | 10     | 0.71 ms/step | 0.22 | 3.2x | 32x |
+   | 50     | 4.17   | 1.35   | 3.1x    | 23x |
+   | 200    | 10.18  | 5.96   | 1.7x    | 8x  |
+   | 800    | 22.63  | 19.86  | 1.14x   | 3x  |
+   | 3000   | 59.27  | 48.61  | 1.22x   | 2.4x |
+
+   There was no crossover: sequential won across the whole supported range. The cause is
+   structural — the work is memory-bound over `shared_ptr`-indirected AoS entities, and it
+   was dispatched once per *substep*, so 11 thread hand-offs per frame cost more than the
+   arithmetic they saved. The parallel policies have been removed (`src/Scene.cpp`).
+
+   So the target is no longer "parallelize the solver". It is **opt-in, user-controllable
+   threading in the few places that can actually pay for it, each justified by an A/B
+   measurement before it lands.** Concretely:
+
+   - **Measure first, always.** Any threading change ships with a before/after on a
+     realistic scene sweep (tens to thousands of bodies), reporting wall time *and* CPU
+     time. A change that halves wall time at 8x CPU is usually the wrong trade for a
+     library that may be one subsystem among many, and is a bad trade for RL rollouts
+     where many independent sims already saturate the machine.
+   - **User-controllable, off by default.** Threading should be a scene-level opt-in
+     (thread count, or an explicit policy on `FxScene`) rather than baked into the step.
+     A batched RL workload wants each sim single-threaded; a single large interactive
+     scene may want the opposite. Only the caller knows which.
+   - **Best candidate: the narrow phase.** Each pair's `collision_check` is independent
+     pure geometry against const entity state, and unlike the entity loops it does real
+     compute per item, so it has a plausible shot at beating dispatch overhead. Parallel
+     over `broad_phase_pairs` with per-thread contact buffers concatenated **in pair
+     order**, never completion order. The shared-state bits currently inside that loop
+     (`wake_if_disturbed`, the step-contact buffer insert, warm-start cache lookup) hoist
+     into a cheap serial pass afterwards. Prove it on a many-contact scene before adopting.
+   - **Second candidate: island solve.** The XPBD position solve and velocity sweeps are
+     Gauss-Seidel — sequential within a group of touching bodies, but bodies only couple
+     through contacts and joints, so disconnected islands are independent. Union-find over
+     contact pairs plus joints gives one task per island, and also unlocks per-island
+     sleeping, which is a win even single-threaded. Payoff scales with fragmentation: many
+     separate stacks approach linear speedup, one giant pile gains nothing.
+   - **Not worth it on current evidence:** the entity integration and velocity-derivation
+     loops. These are exactly what was measured and removed; they are memory-bound and too
+     cheap per item. Revisit only if the entity layout stops being AoS `shared_ptr`.
+   - **Skip until proven needed:** graph colouring within an island (Jacobi-style, how XPBD
+     runs on GPUs) — only relevant for huge single islands and it changes convergence.
+   - **Determinism is a hard requirement**, not a nicety: fixed reduction order for float
+     accumulation, no parallel writes to `m_contact_cache` (write-back stays serial),
+     concatenation in pair order. A nondeterministic sim would undermine the RL story.
+   - **Out of scope for now:** SoA/SIMD batch solving of contacts (Box2D v3 style) — a
+     large refactor that only matters if the above land and still leave a ceiling. Note
+     leaf-level SIMD hygiene already exists: `-O3 -march=native` under `FX2D_NATIVE`, and
+     32-byte-aligned `FxArray` with `__restrict` loops that auto-vectorize.
 
 8. Push past the envelope the adversarial scenes established.
    The scenes have landed (`tests/test_adversarial.cpp`): tall stacks, pyramids, mass
@@ -185,5 +211,5 @@ ordering fix).
 - Query APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop. Contacts and events (slice a) covered the reward/game-logic half; ray and overlap queries cover the observation half.
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
 - Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
-- Parallelism raises the body-count ceiling without touching solver behavior — narrow phase first because it is embarrassingly parallel, islands second because they preserve Gauss-Seidel convergence.
+- Threading is worth having only where it is measured to pay. The parallel policies the engine used to carry were slower than sequential at every body count while burning up to 32x the CPU, so the discipline — A/B first, opt-in, off by default — matters more than the parallelism itself.
 - Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns. The scenes now exist, and the solver cleared them: the outcome is a measured envelope rather than a bug list.
