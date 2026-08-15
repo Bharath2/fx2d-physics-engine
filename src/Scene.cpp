@@ -10,10 +10,64 @@ uint64_t pack_contact_key(uint32_t a, uint32_t b) {
 constexpr size_t kVelocityPasses = 8;
 } // namespace
 
+// Inserts a contact into the current step buffer, replacing any earlier one for the same pair.
+// A pair can be found in several substeps; the last one seen is the one worth keeping, because
+// it carries the impulses accumulated by the end of the step.
+void FxScene::record_contact(const FxContact& contact, uint64_t key) {
+    auto [it, inserted] = m_step_contact_index.emplace(key, m_step_contacts.size());
+    if (inserted) {
+        m_step_contacts.push_back(contact);
+    } else {
+        m_step_contacts[it->second] = contact;
+    }
+}
+
+// Diffs this step's touching pairs against the previous step's to produce begin/end events.
+void FxScene::build_contact_events() {
+    auto make_event = [](const FxContact& c) {
+        FxContactEvent event;
+        event.entity1 = c.entity1;
+        event.entity2 = c.entity2;
+        event.is_trigger =
+            (c.entity1 && c.entity1->is_sensor) || (c.entity2 && c.entity2->is_sensor);
+        return event;
+    };
+
+    for (const auto& [key, index] : m_step_contact_index) {
+        if (m_prev_contact_index.find(key) == m_prev_contact_index.end()) {
+            m_begin_contacts.push_back(make_event(m_step_contacts[index]));
+        }
+    }
+    for (const auto& [key, index] : m_prev_contact_index) {
+        if (m_step_contact_index.find(key) == m_step_contact_index.end()) {
+            m_end_contacts.push_back(make_event(m_prev_contacts[index]));
+        }
+    }
+
+    // The diff walks unordered_maps, whose iteration order is unspecified. Sort by entity id so
+    // repeated runs of the same scene deliver events in the same order.
+    auto by_entity_id = [](const FxContactEvent& lhs, const FxContactEvent& rhs) {
+        uint32_t lhs1 = lhs.entity1 ? lhs.entity1->get_entity_id() : 0;
+        uint32_t rhs1 = rhs.entity1 ? rhs.entity1->get_entity_id() : 0;
+        if (lhs1 != rhs1) return lhs1 < rhs1;
+        uint32_t lhs2 = lhs.entity2 ? lhs.entity2->get_entity_id() : 0;
+        uint32_t rhs2 = rhs.entity2 ? rhs.entity2->get_entity_id() : 0;
+        return lhs2 < rhs2;
+    };
+    std::sort(m_begin_contacts.begin(), m_begin_contacts.end(), by_entity_id);
+    std::sort(m_end_contacts.begin(), m_end_contacts.end(), by_entity_id);
+}
+
 // calls reset of all entities
 void FxScene::reset() {
     m_time_elapsed = 0.0; // Reset elapsed time
     m_contact_cache.clear();
+    m_step_contacts.clear();
+    m_step_contact_index.clear();
+    m_prev_contacts.clear();
+    m_prev_contact_index.clear();
+    m_begin_contacts.clear();
+    m_end_contacts.clear();
     for_each_entity(std::execution::par, [](auto entity) {
         entity->reset(); // Apply reset() to each entity
     });
@@ -158,9 +212,18 @@ void FxScene::step(double step_dt) {
         m_entities_dirty = false;
     }
 
+    // This step's contacts become the previous step's, which the begin/end diff needs. Holding
+    // the previous buffer also keeps entities that stopped touching alive long enough to be
+    // named in an end event, even if they were deleted from the scene meanwhile.
+    m_prev_contacts.swap(m_step_contacts);
+    m_prev_contact_index.swap(m_step_contact_index);
+    m_step_contacts.clear();
+    m_step_contact_index.clear();
+    m_begin_contacts.clear();
+    m_end_contacts.clear();
+
     // Substeps
     std::vector<FxContact> contacts;
-    std::unordered_set<uint64_t> active_keys;
     const auto& entities_vec = m_entities.items();
     for (size_t iter = 0; iter < m_substeps; ++iter) {
         // apply any required pid controls on the joints
@@ -196,6 +259,17 @@ void FxScene::step(double step_dt) {
                                                         entities_vec[pair.second],
                                                         static_cast<float>(substep_dt));
             if (c.is_valid()) {
+                uint64_t key =
+                    pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
+
+                // A sensor reports overlaps but never exchanges impulses, so its contacts are
+                // buffered for queries and events and then skipped by every solver stage. It
+                // also must not wake a sleeper, since it applies no force to disturb one.
+                if (c.entity1->is_sensor || c.entity2->is_sensor) {
+                    record_contact(c, key);
+                    continue;
+                }
+
                 // Wake only when a moving, awake partner disturbs a sleeper.
                 auto wake_if_disturbed = [](const std::shared_ptr<FxEntity>& sleeper,
                                             const std::shared_ptr<FxEntity>& other) {
@@ -209,9 +283,6 @@ void FxScene::step(double step_dt) {
                 wake_if_disturbed(c.entity1, c.entity2);
                 wake_if_disturbed(c.entity2, c.entity1);
 
-                uint64_t key =
-                    pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
-                active_keys.insert(key);
                 auto cache_it = m_contact_cache.find(key);
                 if (cache_it != m_contact_cache.end()) {
                     // If the contact normal changed significantly the tangent basis flipped;
@@ -269,11 +340,15 @@ void FxScene::step(double step_dt) {
                 cache_entry.jn[contact_idx] = c.jn_accumulated[contact_idx];
                 cache_entry.jt[contact_idx] = c.jt_accumulated[contact_idx];
             }
+            // Buffer the solved contact, so the exposed copy carries the applied impulses.
+            record_contact(c, key);
         }
     }
 
+    // The step buffer holds every pair that touched in any substep, so it is the set of live
+    // keys. Sensor pairs are in it too but never reach m_contact_cache, so they evict nothing.
     for (auto it = m_contact_cache.begin(); it != m_contact_cache.end();) {
-        if (active_keys.find(it->first) == active_keys.end()) {
+        if (m_step_contact_index.find(it->first) == m_step_contact_index.end()) {
             it = m_contact_cache.erase(it);
         } else {
             ++it;
@@ -296,6 +371,9 @@ void FxScene::step(double step_dt) {
             entity->tick_sleep(sleep_dt);
         }
     });
+
+    // Built before the callback so user code can read contacts and events from inside it.
+    build_contact_events();
 
     // If a custom step callback function is set, call it
     if (m_func_step_callback) {

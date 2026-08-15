@@ -18,6 +18,14 @@
 #include "Fx2D/Registry.h"
 #include "Fx2D/Solver.h"
 
+// A pair of entities that started or stopped touching during a step.
+struct FxContactEvent {
+    std::shared_ptr<FxEntity> entity1 = nullptr;
+    std::shared_ptr<FxEntity> entity2 = nullptr;
+    // True if either entity is a sensor, so no impulse was applied for this pair.
+    bool is_trigger = false;
+};
+
 // Scene class takes care of entities motion and collisions
 class FxScene {
   private:
@@ -39,6 +47,22 @@ class FxScene {
     double m_time_elapsed = 0.0;
     // Stores only scalar impulses so the cache never keeps entities alive accidentally.
     std::unordered_map<uint64_t, FxContactImpulseCache> m_contact_cache;
+
+    // Contacts observed during the most recent step, one entry per touching pair, and the same
+    // for the step before it. A pair may be found in several substeps; the entry keeps the last
+    // one seen, so solved contacts carry their final accumulated impulses. The previous step's
+    // buffer is retained so end-of-contact events can still name entities that stopped touching.
+    std::vector<FxContact> m_step_contacts;
+    std::unordered_map<uint64_t, size_t> m_step_contact_index;
+    std::vector<FxContact> m_prev_contacts;
+    std::unordered_map<uint64_t, size_t> m_prev_contact_index;
+    std::vector<FxContactEvent> m_begin_contacts;
+    std::vector<FxContactEvent> m_end_contacts;
+
+    // Inserts a contact into the current step buffer, replacing any earlier one for the pair.
+    void record_contact(const FxContact& contact, uint64_t key);
+    // Diffs the current step buffer against the previous one to build begin/end events.
+    void build_contact_events();
 
   protected:
     FxEntityRegistry m_entities; // stores pointers to all entities with collision management
@@ -96,6 +120,16 @@ class FxScene {
     bool delete_joint(const std::string& name);
     // Returns the joint pointer if found; otherwise returns nullptr.
     std::shared_ptr<FxJoint> get_joint(const std::string& name) const;
+
+    // Contacts from the most recent step, one entry per touching pair, in broad-phase order
+    // (unspecified, but reproducible across identical runs). Valid until the next call to step()
+    // or reset(). Pairs involving a sensor appear here with zero impulses; every other pair
+    // carries the impulses that were actually applied.
+    const std::vector<FxContact>& contacts() const { return m_step_contacts; }
+    // Pairs that began touching during the most recent step (not touching in the step before).
+    const std::vector<FxContactEvent>& begin_contact_events() const { return m_begin_contacts; }
+    // Pairs that stopped touching during the most recent step (touching in the step before).
+    const std::vector<FxContactEvent>& end_contact_events() const { return m_end_contacts; }
 
     // Registry access methods
     size_t entity_count() const { return m_entities.size(); }

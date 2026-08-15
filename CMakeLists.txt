@@ -254,6 +254,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_collisions_edge.cpp
     tests/test_angle_precision.cpp
     tests/test_resting_stability.cpp
+    tests/test_contact_events.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

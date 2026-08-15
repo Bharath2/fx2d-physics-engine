@@ -14,6 +14,7 @@ void run_capsule_tests();
 void run_edge_tests();
 void run_angle_precision_tests();
 void run_resting_stability_tests();
+void run_contact_event_tests();
 void run_joint_tests();
 
 namespace {
@@ -30,6 +31,7 @@ const Suite kSuites[] = {
     {"edge", run_edge_tests},
     {"angle_precision", run_angle_precision_tests},
     {"resting_stability", run_resting_stability_tests},
+    {"contact_events", run_contact_event_tests},
     {"joints", run_joint_tests},
 };
 

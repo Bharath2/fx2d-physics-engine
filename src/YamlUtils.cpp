@@ -207,6 +207,7 @@ std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML
         entity->enable_external_forces(
             physics["external_forces_enabled"].as<bool>(true)); // default to true if not specified
         entity->enable_ccd = physics["ccd"].as<bool>(false); // default to false if not specified
+        entity->is_sensor = physics["sensor"].as<bool>(false); // default to false if not specified
     }
 
     // Read visual properties
