@@ -108,6 +108,9 @@ class FxEntity {
                          // rendering
     bool enable_ccd = false; // If true, speculative contacts are generated for this entity to
                              // prevent tunneling
+    bool is_sensor = false; // If true, the entity detects overlaps but never receives or applies
+                            // contact impulses. Its contacts are reported through
+                            // FxScene::contacts() and the begin/end contact events only.
 
     // sleep configuration
     float sleep_threshold_linear = 0.01f; // linear speed below which entity may sleep

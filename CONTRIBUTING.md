@@ -49,8 +49,8 @@ ctest --test-dir build --output-on-failure
 ```
 
 The suite covers the AABB tree, joints and motor control, CCD, capsule and
-edge collisions, angle precision, and resting-contact stability
-(`tests/test_*.cpp`). New solver or collision work should
+edge collisions, angle precision, resting-contact stability, and contact
+events and sensors (`tests/test_*.cpp`). New solver or collision work should
 land with a matching regression test.
 
 ### Writing a test

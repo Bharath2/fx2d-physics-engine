@@ -14,9 +14,14 @@ A successful collision check produces an `FxContact`:
 | `normal` | `FxVec2f` | Unit contact normal, pointing **entity1 → entity2** |
 | `position` | `FxVec2fArray` | World-space contact point(s) — up to 2 |
 | `count` | `size_t` | Number of active contact points (0, 1, or 2) |
-| `penetration_depth` | `float` | Signed overlap along `normal` (positive = penetrating) |
+| `penetration_depth` | `float` | Signed overlap along `normal` (positive = penetrating, negative = a speculative gap not yet closed) |
+| `jn_accumulated`, `jt_accumulated` | `float[2]` | Normal / tangent impulse actually applied this substep, per contact point |
+| `jn_warm`, `jt_warm` | `float[2]` | Previous substep's impulses, used as the warm-start guess |
+| `vn_pre` | `float[2]` | Closing speed captured at substep start, fixing the restitution target for every sweep |
 
-`is_valid(full_check)` returns `true` when `count > 0`, `penetration_depth > 0`, and (with `full_check`) both entities are non-null and enabled.
+`is_valid(full_check)` returns `true` when the contact was constructed valid and — with `full_check`, the default — both entities are non-null, `count != 0`, `penetration_depth` is finite, and `normal` is non-degenerate (`norm() > 1e-3`). Note the depth test is finiteness, not positivity: speculative contacts carry a **negative** depth (a gap that will close within the substep) and are still valid.
+
+Contacts are no longer discarded once solved. `FxScene` retains them for the duration of the step and exposes them, along with begin/end contact events and sensor overlaps — see [contacts_and_events.md](contacts_and_events.md).
 
 ---
 
@@ -95,7 +100,22 @@ The final normal is re-oriented so it always points **entity1 → entity2**.
 
 Once the reference edge (on A) and incident edge (on B) are identified, up to **2 contact points** are computed via `clip_edge()` — a Sutherland–Hodgman-style clipping of the incident edge against the side planes of the reference edge. This gives stable multi-point contacts for flat-face collisions (e.g. a box resting on a plane).
 
-The final normal is re-oriented so it always points **entity1 → entity2**.
+### Speculative Contacts (CCD)
+
+Discrete detection samples geometry at substep boundaries, so a body moving fast enough to cross a thin collider between two samples passes straight through it. `FxSolver::speculative_contact_check()` closes most of that gap. It runs only when `collision_check()` found no overlap **and** at least one entity has `enable_ccd = true` (YAML `ccd: true`).
+
+The idea is to create the contact *before* the shapes touch, so the solver can arrest the motion in time:
+
+1. Measure the current skin-inclusive `gap` between the two shapes, reusing the same reductions as the discrete path — circle/capsule pairs via closest points minus radii, rounded-vs-polygon via the closest point on the polygon boundary, and polygon–polygon via `sat_gap_query()` run both ways, keeping the smaller gap.
+2. Compute the closing speed along that normal, `v_closing = -rel_vel · n̂`. If the bodies are separating (`v_closing <= 0`), there is nothing to anticipate and no contact is produced.
+3. Predict the gap at the end of the substep: `spec_depth = gap - v_closing · dt`. If it is still non-negative the bodies cannot meet this substep, so again no contact.
+4. Otherwise emit a single-point contact whose `penetration_depth` is that **negative** `spec_depth`.
+
+A negative depth is what makes this work: the position solver treats it as "do not approach closer than this", removing exactly the normal velocity that would have caused the overpenetration, rather than pushing the bodies apart. This is why `is_valid()` tests `penetration_depth` for finiteness rather than positivity.
+
+Edges are excluded (`A->is_edge() || B->is_edge()` returns early). A bare segment has no skin, so the distance-minus-radii math degenerates, and edges are static level geometry where discrete contacts suffice.
+
+Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see item 3 in [ToDo.md](ToDo.md)).
 
 ---
 
