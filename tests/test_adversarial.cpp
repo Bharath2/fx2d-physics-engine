@@ -6,6 +6,13 @@
 // limit is recorded in docs/ToDo.md rather than asserted, so this file stays green and any
 // regression inside the proven envelope shows up immediately.
 //
+// Assert invariants, not appearances. Two scenes here look like solver failures and are not:
+// a fast-spinning box vaults metres into the air (it has the rotational energy to pay for the
+// height), and a heavy box dropped on a light column scatters it across the floor (a topple,
+// with every body still separated). Both were briefly mistaken for bugs. The lesson is in the
+// tests: check conserved energy rather than height, and check pairwise overlap rather than
+// final height, because a toppled stack and a collapsed one both end up flat on the ground.
+//
 // Note every helper sets BOTH visual and collision geometry. FxEntity::set_inertia() derives
 // inertia from the *visual* shape, so a collision-only body silently gets the inertia of the
 // default 0.5-radius circle, which would make every rotational result here meaningless.
@@ -224,6 +231,36 @@ void test_hundred_to_one_mass_ratio_does_not_crush() {
                                         std::to_string(light->pose.y()));
 }
 
+// A heavy body dropped on a light column topples it. What must NOT happen is bodies ending up
+// inside one another: a scattered stack and an interpenetrating one both finish flat on the
+// ground, so overlap is the thing to check, not height.
+void test_heavy_body_topples_light_stack_without_interpenetration() {
+    FxScene scene = make_scene();
+    add_ground(scene);
+
+    std::vector<std::shared_ptr<FxEntity>> bodies;
+    for (int i = 0; i < 5; ++i)
+        bodies.push_back(add_box(scene, "l" + std::to_string(i), 20.0f,
+                                 2.0f + static_cast<float>(i), 1.0f, 1.0f, 1.0f));
+    bodies.push_back(add_box(scene, "heavy", 20.0f, 7.0f, 1.0f, 1.0f, 100.0f));
+
+    run(scene, kSettleSteps);
+
+    for (size_t i = 0; i < bodies.size(); ++i) {
+        require(bodies[i]->pose.y() > 1.4f, "no body may be pushed through the ground, " +
+                                                bodies[i]->get_name() +
+                                                " is at y=" + std::to_string(bodies[i]->pose.y()));
+        for (size_t j = i + 1; j < bodies.size(); ++j) {
+            const float dx = std::fabs(bodies[i]->pose.x() - bodies[j]->pose.x());
+            const float dy = std::fabs(bodies[i]->pose.y() - bodies[j]->pose.y());
+            require(dx > 0.85f || dy > 0.85f,
+                    "unit boxes must not end up inside one another: " + bodies[i]->get_name() +
+                        " and " + bodies[j]->get_name() + " are dx=" + std::to_string(dx) +
+                        " dy=" + std::to_string(dy) + " apart");
+        }
+    }
+}
+
 // Ten to one is comfortably inside the envelope and must stay near-exact.
 void test_ten_to_one_mass_ratio_is_solid() {
     FxScene scene = make_scene();
@@ -313,14 +350,46 @@ void test_restitution_chain_transfers_momentum() {
 
 // ------------------------------------------------------------ spinning bodies
 
-// A spinning box resting on the ground must lose energy to friction, never gain it.
+// Total mechanical energy of a spinning box on an inelastic floor must never rise.
 //
-// A unit box pivoting on one corner legitimately lifts its centre to half its diagonal above
-// the surface: 1.5 + sqrt(2)/2 = 2.207. Anything beyond that is energy the solver invented.
-// Up to 15 rad/s the box reaches exactly the corner-pivot height and no more. Above that it
-// starts converting spin into lift — see the high-spin entry in docs/ToDo.md — so the
-// assertion covers the proven envelope and catches any regression inside it.
-void test_spinning_box_does_not_gain_energy() {
+// This is the invariant that actually matters for a rotating body, and it is worth recording
+// why height is not. A box spun fast enough legitimately vaults off a corner and ends up
+// metres up: at 100 rad/s it carries ~838 J of rotational energy, while lifting a 1 kg box 7 m
+// costs only 70 J. Judging the solver by how high the box goes therefore flags correct physics
+// as a bug. Energy does not lie: with elasticity 0 every contact is dissipative, so the total
+// may fall but must never climb.
+void test_spinning_box_never_gains_energy() {
+    auto mechanical_energy = [](const std::shared_ptr<FxEntity>& e, float reference_height) {
+        const float w = e->velocity.theta();
+        return 0.5f * e->mass() * e->velocity.head<2>().squaredNorm() +
+               0.5f * e->inertia() * w * w + e->mass() * 10.0f * (e->pose.y() - reference_height);
+    };
+
+    for (float omega : {5.0f, 25.0f, 100.0f}) {
+        FxScene scene = make_scene();
+        add_ground(scene);
+        auto spinner = add_box(scene, "spinner", 20.0f, 2.0f, 1.0f, 1.0f, 1.0f);
+        spinner->set_init_velocity(FxVec3f{0.0f, 0.0f, omega});
+        spinner->reset();
+
+        const float initial = mechanical_energy(spinner, 1.5f);
+        float peak = initial;
+        for (int i = 0; i < kSettleSteps; ++i) {
+            scene.step(kFrame);
+            peak = std::max(peak, mechanical_energy(spinner, 1.5f));
+        }
+
+        // The tolerance absorbs float noise in the accumulation, nothing more.
+        require(peak <= initial + 1e-3f * std::fabs(initial),
+                "a box spinning at " + std::to_string(omega) +
+                    " rad/s must never gain mechanical energy on an inelastic floor: started " +
+                    std::to_string(initial) + " J, peaked at " + std::to_string(peak) + " J");
+    }
+}
+
+// At modest spin the box settles in place rather than vaulting. This is the everyday case, a
+// tumbling crate coming to rest, and it must stay well behaved.
+void test_modest_spin_settles_in_place() {
     const float corner_pivot_height = 1.5f + std::sqrt(2.0f) * 0.5f; // 2.207
 
     for (float omega : {5.0f, 10.0f, 15.0f}) {
@@ -404,9 +473,11 @@ void run_adversarial_tests() {
     test_pyramid_holds();
     test_hundred_to_one_mass_ratio_does_not_crush();
     test_ten_to_one_mass_ratio_is_solid();
+    test_heavy_body_topples_light_stack_without_interpenetration();
     test_thin_slivers_rest_stably();
     test_restitution_chain_transfers_momentum();
-    test_spinning_box_does_not_gain_energy();
+    test_spinning_box_never_gains_energy();
+    test_modest_spin_settles_in_place();
     test_box_rides_kinematic_platform();
     std::cout << "Adversarial scene tests passed." << std::endl;
 }
