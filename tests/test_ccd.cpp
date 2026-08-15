@@ -2,16 +2,14 @@
 #include "Fx2D/Math.h"
 #include "Fx2D/Solver.h"
 
+#include "test_harness.h"
+
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 
 namespace {
-
-void require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
-}
 
 // Build a circle entity at (x, y) with radius r and velocity (vx, vy).
 // A zero-timestep step() call is used to push the pose into the collision

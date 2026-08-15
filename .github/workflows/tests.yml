@@ -1,0 +1,63 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  guard:
+    name: test hygiene
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The suite is compiled with -DNDEBUG in Release, which strips assert()
+      # entirely and lets a broken test report success. tests/test_harness.h
+      # provides require() instead, which throws in every build type.
+      - name: no assert() in tests
+        run: |
+          # test_harness.h is excluded: it documents this very rule in a comment.
+          if grep -rnE --exclude=test_harness.h \
+              '(^|[^[:alnum:]_])assert[[:space:]]*\(|<cassert>|assert\.h' tests/; then
+            echo
+            echo "assert() is stripped by -DNDEBUG in Release builds."
+            echo "Use require() from tests/test_harness.h instead."
+            exit 1
+          fi
+          echo "OK: no assert() usage in tests/"
+
+  build-and-test:
+    name: build + test (${{ matrix.build_type }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The physics core and the whole test suite are renderer-free, so CI
+      # builds them without raylib/ImGui (which are not vendored in the repo).
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ make libeigen3-dev libyaml-cpp-dev libtbb-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-ci \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DFX2D_HEADLESS=ON \
+            -DFX2D_BUILD_TESTS=ON \
+            -DFX2D_BUILD_EXAMPLES=OFF \
+            -DFX2D_NATIVE=OFF \
+            -DFX2D_IPO=OFF \
+            -DFX2D_WERROR=ON
+
+      - name: Build
+        run: cmake --build build-ci --target Fx2DTests -j"$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build-ci --output-on-failure

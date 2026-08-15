@@ -2,6 +2,8 @@
 #include "Fx2D/Scene.h"
 #include "Fx2D/YamlUtils.h"
 
+#include "test_harness.h"
+
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -11,12 +13,6 @@ namespace {
 
 bool approx_equal(float lhs, float rhs, float eps = 1e-4f) {
     return std::fabs(lhs - rhs) <= eps;
-}
-
-void require(bool condition, const char* message) {
-    if (!condition) {
-        throw std::runtime_error(message);
-    }
 }
 
 std::shared_ptr<FxEntity> make_entity(const std::string& name) {
@@ -263,20 +259,7 @@ void test_entity_registry_remove_keeps_broad_phase_consistent() {
 
 } // namespace
 
-void run_aabb_tree_tests(); // defined in test_aabb_tree.cpp
-void run_ccd_tests(); // defined in test_ccd.cpp
-void run_capsule_tests(); // defined in test_capsule_collision.cpp
-void run_edge_tests(); // defined in test_collisions_edge.cpp
-void run_angle_precision_tests(); // defined in test_angle_precision.cpp
-void run_resting_stability_tests(); // defined in test_resting_stability.cpp
-
-int main() {
-    run_aabb_tree_tests();
-    run_ccd_tests();
-    run_capsule_tests();
-    run_edge_tests();
-    run_angle_precision_tests();
-    run_resting_stability_tests();
+void run_joint_tests() {
     test_pid_round_trip();
     test_effort_aliases();
     test_effort_mode_applies_direct_effort();
@@ -285,5 +268,4 @@ int main() {
     test_entity_registry_remove_keeps_broad_phase_consistent();
 
     std::cout << "Joint tests passed." << std::endl;
-    return 0;
 }

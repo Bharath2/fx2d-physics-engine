@@ -3,16 +3,14 @@
 #include "Fx2D/Solver.h"
 #include "Fx2D/YamlUtils.h"
 
+#include "test_harness.h"
+
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 
 namespace {
-
-void require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
-}
 
 bool approx(float a, float b, float eps = 1e-3f) {
     return std::fabs(a - b) <= eps;

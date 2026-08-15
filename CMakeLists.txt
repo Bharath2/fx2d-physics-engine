@@ -14,6 +14,11 @@ option(FX2D_WARNINGS "Enable extra warnings" ON)
 option(FX2D_WERROR   "Treat warnings as errors" OFF)
 option(FX2D_BUILD_TESTS "Build unit tests" ON)
 
+# Headless builds the physics core and tests without raylib/ImGui, which are not
+# vendored in the repo. Renderer.cpp, the viewer executable, and the visual
+# examples are excluded. This is what CI builds.
+option(FX2D_HEADLESS "Build without the renderer (no raylib/ImGui)" OFF)
+
 # Helpful on MSYS2/MinGW users (optional): prefer common prefixes
 list(APPEND CMAKE_PREFIX_PATH
   "C:/msys64/mingw64"
@@ -24,6 +29,7 @@ list(APPEND CMAKE_PREFIX_PATH
 # Dependencies (prefer imported targets; fall back to pkg-config)
 # ============================================================
 # --- raylib ---
+if (NOT FX2D_HEADLESS)
 find_package(raylib CONFIG QUIET)
 if (raylib_FOUND)
   if (TARGET raylib)
@@ -40,6 +46,7 @@ else()
   target_include_directories(raylib_pkg INTERFACE ${RAYLIB_INCLUDE_DIRS})
   target_link_libraries(raylib_pkg INTERFACE ${RAYLIB_LINK_LIBRARIES})
   set(RAYLIB_TARGET raylib_pkg)
+endif()
 endif()
 
 # --- yaml-cpp ---
@@ -68,6 +75,7 @@ find_package(Eigen3 3.3 REQUIRED)
 # ImGui + rlImGui
 # These folders are kept as placeholders in Git and should be populated locally.
 # ============================================================
+if (NOT FX2D_HEADLESS)
 set(FX2D_IMGUI_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui"   CACHE PATH "Path to Dear ImGui sources")
 set(FX2D_RLIMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/rlImGui" CACHE PATH "Path to rlImGui sources")
 
@@ -96,19 +104,25 @@ target_include_directories(rlimgui_library PUBLIC
 
 # rlImGui needs raylib headers/types
 target_link_libraries(rlimgui_library PUBLIC ${RAYLIB_TARGET})
+endif()
 
 # ============================================================
 # Fx2D Library
 # ============================================================
-add_library(Fx2Dlib STATIC
+set(FX2D_CORE_SOURCES
   src/Entity.cpp
   src/Scene.cpp
   src/Collisions.cpp
   src/Constraints.cpp
   src/Joints.cpp
-  src/Renderer.cpp
   src/YamlUtils.cpp
 )
+
+if (NOT FX2D_HEADLESS)
+  list(APPEND FX2D_CORE_SOURCES src/Renderer.cpp)
+endif()
+
+add_library(Fx2Dlib STATIC ${FX2D_CORE_SOURCES})
 
 target_include_directories(Fx2Dlib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
@@ -117,11 +131,20 @@ target_include_directories(Fx2Dlib PUBLIC
 
 # Link dependencies to the library
 target_link_libraries(Fx2Dlib PUBLIC
-  rlimgui_library
   Eigen3::Eigen
   ${YAMLCPP_TARGET}
-  ${RAYLIB_TARGET}
 )
+
+if (NOT FX2D_HEADLESS)
+  target_link_libraries(Fx2Dlib PUBLIC rlimgui_library ${RAYLIB_TARGET})
+endif()
+
+# libstdc++ implements the parallel std::execution policies on top of TBB, so
+# the std::execution::par calls in Scene.cpp need it linked explicitly.
+find_package(TBB QUIET)
+if (TARGET TBB::tbb)
+  target_link_libraries(Fx2Dlib PUBLIC TBB::tbb)
+endif()
 
 # Compile definitions for the library
 target_compile_definitions(Fx2Dlib PUBLIC
@@ -133,12 +156,10 @@ target_compile_definitions(Fx2Dlib PUBLIC
 # ============================================================
 # Main executable
 # ============================================================
-add_executable(${TARGET_NAME}
-  src/main.cpp
-)
-
-# Link the library to the executable
-target_link_libraries(${TARGET_NAME} PRIVATE Fx2Dlib)
+if (NOT FX2D_HEADLESS)
+  add_executable(${TARGET_NAME} src/main.cpp)
+  target_link_libraries(${TARGET_NAME} PRIVATE Fx2Dlib)
+endif()
 
 # ============================================================
 # Build configuration options
@@ -195,7 +216,9 @@ endfunction()
 # Apply tuning to targets
 # ============================================================
 fx2d_tune_target(Fx2Dlib)
-fx2d_tune_target(${TARGET_NAME})
+if (NOT FX2D_HEADLESS)
+  fx2d_tune_target(${TARGET_NAME})
+endif()
 
 # ============================================================
 # Examples
@@ -203,6 +226,10 @@ fx2d_tune_target(${TARGET_NAME})
 # Each example resolves its Scene.yml relative to the working directory, so run
 # the resulting binaries from the repo root.
 option(FX2D_BUILD_EXAMPLES "Build the example programs" OFF)
+
+if (FX2D_BUILD_EXAMPLES AND FX2D_HEADLESS)
+  message(FATAL_ERROR "The example programs need the renderer; FX2D_BUILD_EXAMPLES and FX2D_HEADLESS are mutually exclusive.")
+endif()
 
 if (FX2D_BUILD_EXAMPLES)
   add_executable(example_truck         examples/truck/main.cpp)
@@ -219,6 +246,7 @@ if (FX2D_BUILD_TESTS)
   enable_testing()
 
   add_executable(Fx2DTests
+    tests/main.cpp
     tests/test_aabb_tree.cpp
     tests/test_joints.cpp
     tests/test_ccd.cpp

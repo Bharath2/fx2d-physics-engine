@@ -24,12 +24,11 @@ build() {
 build truck_headless      examples/truck/main_headless.cpp
 build joint_control_demo  examples/joint_control_demo/main.cpp
 
-# The test suite is renderer-free too, so it builds the same way.
+# The test suite is renderer-free too, so it builds the same way. Globbed rather than listed,
+# so adding a tests/test_*.cpp file never silently leaves this script behind.
 echo "==> fx2d_tests"
-"$CXX" "${FLAGS[@]}" tests/test_aabb_tree.cpp tests/test_joints.cpp tests/test_ccd.cpp \
-    tests/test_capsule_collision.cpp tests/test_collisions_edge.cpp \
-    tests/test_angle_precision.cpp tests/test_resting_stability.cpp \
-    "${CORE[@]}" "${LIBS[@]}" -o "$OUT/fx2d_tests"
+TESTS=(tests/main.cpp tests/test_*.cpp)
+"$CXX" "${FLAGS[@]}" "${TESTS[@]}" "${CORE[@]}" "${LIBS[@]}" -o "$OUT/fx2d_tests"
 
 echo
 echo "Built in $OUT/ — run from the repo root so Scene.yml paths resolve."

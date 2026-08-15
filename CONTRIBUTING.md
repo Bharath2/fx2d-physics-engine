@@ -50,5 +50,30 @@ ctest --test-dir build --output-on-failure
 
 The suite covers the AABB tree, joints and motor control, CCD, capsule and
 edge collisions, angle precision, and resting-contact stability
-(`tests/test_*.cpp`). New solver or collision work should land with a
-matching regression test.
+(`tests/test_*.cpp`). New solver or collision work should
+land with a matching regression test.
+
+### Writing a test
+
+Each `tests/test_*.cpp` exposes one `run_*_tests()` entry point, registered in
+the `kSuites` table in `tests/main.cpp`. Every suite runs even if an earlier one
+fails, so one run reports every broken area rather than only the first.
+
+Assert with `require()` / `require_near()` from `tests/test_harness.h`, never
+with `assert()` from `<cassert>`. Release builds define `NDEBUG`, which expands
+`assert()` to nothing — an assert-based test silently passes without checking
+anything. CI fails the build if `assert(` reappears under `tests/`.
+
+### What CI runs
+
+`.github/workflows/tests.yml` builds and runs the suite on every push and pull
+request, in both Release and Debug (Debug enables ASan and UBSan), with
+`-Werror`. It configures with `-DFX2D_HEADLESS=ON`, which drops the renderer so
+the physics core and tests build without raylib or ImGui. You can reproduce it
+locally with:
+
+```bash
+cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Debug -DFX2D_HEADLESS=ON -DFX2D_WERROR=ON
+cmake --build build-ci -j --target Fx2DTests
+ctest --test-dir build-ci --output-on-failure
+```

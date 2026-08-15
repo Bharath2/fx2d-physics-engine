@@ -2,6 +2,8 @@
 
 #include "Fx2D/Physics.h"
 
+#include "test_harness.h"
+
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -9,10 +11,6 @@
 #include <string>
 
 namespace {
-
-void require(bool condition, const std::string& message) {
-    if (!condition) throw std::runtime_error("resting stability: " + message);
-}
 
 // Static collider: zero inverse mass, unaffected by gravity or impulses.
 std::shared_ptr<FxEntity> make_ground(FxScene& scene, float cx, float cy, float w, float h,
