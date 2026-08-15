@@ -139,8 +139,9 @@ if (NOT FX2D_HEADLESS)
   target_link_libraries(Fx2Dlib PUBLIC rlimgui_library ${RAYLIB_TARGET})
 endif()
 
-# libstdc++ implements the parallel std::execution policies on top of TBB, so
-# the std::execution::par calls in Scene.cpp need it linked explicitly.
+# libstdc++ implements the parallel std::execution policies on top of TBB. The engine itself
+# runs sequentially (see the note above FxScene::step), but for_each_entity/transform_entities
+# take a policy from the caller, so TBB stays linked to keep std::execution::par usable.
 find_package(TBB QUIET)
 if (TARGET TBB::tbb)
   target_link_libraries(Fx2Dlib PUBLIC TBB::tbb)
@@ -240,6 +241,19 @@ if (FX2D_BUILD_EXAMPLES)
     target_link_libraries(${example_target} PRIVATE Fx2Dlib)
     fx2d_tune_target(${example_target})
   endforeach()
+endif()
+
+# ============================================================
+# Benchmark
+# ============================================================
+# Renderer-free, so it builds headless. ToDo item 7 requires an A/B measurement before any
+# threading change lands; this is what produces it.
+option(FX2D_BUILD_BENCH "Build the step-time benchmark" OFF)
+
+if (FX2D_BUILD_BENCH)
+  add_executable(Fx2DBench bench/main.cpp)
+  target_link_libraries(Fx2DBench PRIVATE Fx2Dlib)
+  fx2d_tune_target(Fx2DBench)
 endif()
 
 if (FX2D_BUILD_TESTS)
