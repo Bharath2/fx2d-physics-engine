@@ -68,6 +68,7 @@ void FxScene::reset() {
     m_prev_contact_index.clear();
     m_begin_contacts.clear();
     m_end_contacts.clear();
+    m_input.clear();
     for_each_entity(std::execution::seq, [](auto entity) {
         entity->reset(); // Apply reset() to each entity
     });
