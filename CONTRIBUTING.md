@@ -70,6 +70,24 @@ with `assert()` from `<cassert>`. Release builds define `NDEBUG`, which expands
 `assert()` to nothing — an assert-based test silently passes without checking
 anything. CI fails the build if `assert(` reappears under `tests/`.
 
+## Benchmarking
+
+Performance claims need numbers. The step benchmark is a separate target, off by default:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFX2D_BUILD_BENCH=ON
+cmake --build build -j --target Fx2DBench
+./build/Fx2DBench            # or: ./build/Fx2DBench 500  to change steps per size
+```
+
+It sweeps a settling-boxes scene from 10 to 3000 bodies and reports wall time, CPU time and
+their ratio per step. Report **both**: a change that halves wall time while spending eight
+times the CPU is usually the wrong trade for a library that may be one subsystem among many,
+and a bad trade for RL rollouts where many independent sims already saturate the machine. A
+`cpu/wall` ratio near 1.0 means serial; well above 1.0 is only a win if wall time actually
+fell. Any threading change needs a before/after from this target — see item 7 in
+[docs/ToDo.md](docs/ToDo.md).
+
 ### What CI runs
 
 `.github/workflows/tests.yml` builds and runs the suite on every push and pull
