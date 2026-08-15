@@ -41,6 +41,8 @@ class FxRylbRenderer {
     void init(int fps = 60);
     void draw_ui(double curr_rt_factor);
     void draw_scene();
+    // Polls keyboard and mouse into m_scene.input(), once per rendered frame.
+    void poll_input();
 
   public:
     FxRylbRenderer(FxScene& scene, int fps = 60, unsigned int scale = 100);
@@ -51,4 +53,8 @@ class FxRylbRenderer {
     void set_background(const std::string& filepath);
     void set_real_time_factor(const double& rt_factor);
     double get_real_time_factor() const { return m_real_time_factor; }
+
+    // Convert between window pixels and scene units.
+    FxVec2f screen_to_world(const FxVec2f& screen) const;
+    FxVec2f world_to_screen(const FxVec2f& world) const;
 };

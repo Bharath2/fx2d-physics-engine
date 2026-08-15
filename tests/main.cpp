@@ -23,6 +23,7 @@ void run_angle_precision_tests();
 void run_resting_stability_tests();
 void run_contact_event_tests();
 void run_yaml_inertia_tests();
+void run_input_tests();
 void run_adversarial_tests();
 void run_joint_tests();
 
@@ -43,6 +44,7 @@ const Suite kSuites[] = {
     {"resting_stability", run_resting_stability_tests, false},
     {"contact_events", run_contact_event_tests, false},
     {"yaml_inertia", run_yaml_inertia_tests, false},
+    {"input", run_input_tests, false},
     {"adversarial", run_adversarial_tests, true},
     {"joints", run_joint_tests, false},
 };

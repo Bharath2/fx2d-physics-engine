@@ -4,8 +4,8 @@ This file tracks the next feature and robustness targets for Fx2D. Delivered
 targets are removed; see git history for what already landed (shapes unified
 under `vertices[] + skin_radius`, capsules/edges/rounded variants, speculative-
 contact CCD, broad-phase hardening, the test suite, joint-control examples,
-the `FxAngleWrap` precision fix, contacts/events/sensors, and the YAML inertia
-ordering fix).
+the `FxAngleWrap` precision fix, contacts/events/sensors, the YAML inertia
+ordering fix, the adversarial scene suite, and keyboard/mouse input).
 
 ## Priority Targets
 
@@ -90,15 +90,26 @@ ordering fix).
      further per unit time. Fixing this means accumulating constraint corrections in double
      precision, or solving in body-relative coordinates rather than world coordinates.
 
-6. Add renderer-level input hooks (keyboard/mouse).
-   There is currently nothing: the renderer only has ImGui panel widgets, no key
-   polling exists anywhere, and the examples drive motors programmatically.
-   Practically, since raylib is linked anyway, `IsKeyDown(KEY_RIGHT)` can already
-   be called inside `set_step_callback` to set joint targets — that works today
-   for a quick game. The clean version is a proper renderer-level input hook, or
-   an input-state struct passed to the step callback, so gameplay code does not
-   have to reach into raylib directly (and headless scenes can be driven by the
-   same interface).
+6. Build on the input layer.
+   Delivered. `FxScene::input()` exposes keyboard and mouse through `FxInput`
+   (`include/Fx2D/Input.h`), which knows nothing about raylib, so the same gameplay code
+   compiles windowed and headless. `FxRylbRenderer` polls once per rendered frame and
+   yields to ImGui when a panel has focus; a headless scene reports `available() == false`
+   until user code injects state through the same producer API, which is the event-trigger
+   path for scripted demos and RL agents. Documented in [input.md](input.md) and covered by
+   `tests/test_input.cpp`. Mouse position is reported in scene units so picking needs no
+   conversion.
+
+   What could follow, none of it blocking:
+   - **Gamepad support.** Same shape as the keyboard table: an `FxGamepadButton` enum plus
+     axis state, filled from raylib's gamepad API in the renderer.
+   - **Text input.** Character-stream rather than key state, for scenes that want naming or
+     console entry. Deliberately excluded so far since ImGui already handles panel text.
+   - **Per-step input.** Edge events currently last a whole rendered frame, which may span
+     several physics steps; `input.md` documents the latch pattern that works around it. If
+     that proves awkward in a real game, feed input per step instead of per frame.
+   - **A worked playable example.** The strongest proof the layer is usable — a small
+     keyboard-driven scene under `examples/`, which would also cover item 4.
 
 7. Opt-in multithreading, only where A/B testing shows it wins.
    The engine is single-threaded today, deliberately. It previously ran the entity
@@ -210,6 +221,6 @@ ordering fix).
 - Chain colliders finish practical scene authoring for static level geometry.
 - Query APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop. Contacts and events (slice a) covered the reward/game-logic half; ray and overlap queries cover the observation half.
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
-- Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
+- Input hooks turned the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib — and the same interface drives headless scenes from scripted triggers.
 - Threading is worth having only where it is measured to pay. The parallel policies the engine used to carry were slower than sequential at every body count while burning up to 32x the CPU, so the discipline — A/B first, opt-in, off by default — matters more than the parallelism itself.
 - Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns. The scenes now exist, and the solver cleared them: the outcome is a measured envelope rather than a bug list.

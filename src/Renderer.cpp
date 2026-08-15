@@ -51,12 +51,140 @@ void FxRylbRenderer::init(int fps) {
     }
 }
 
+namespace {
+
+// Fx2D key -> raylib key. Kept as a table so Input.h stays free of raylib.
+struct KeyBinding {
+    FxKey fx;
+    int raylib;
+};
+
+const KeyBinding kKeyBindings[] = {
+    {FxKey::A, KEY_A},
+    {FxKey::B, KEY_B},
+    {FxKey::C, KEY_C},
+    {FxKey::D, KEY_D},
+    {FxKey::E, KEY_E},
+    {FxKey::F, KEY_F},
+    {FxKey::G, KEY_G},
+    {FxKey::H, KEY_H},
+    {FxKey::I, KEY_I},
+    {FxKey::J, KEY_J},
+    {FxKey::K, KEY_K},
+    {FxKey::L, KEY_L},
+    {FxKey::M, KEY_M},
+    {FxKey::N, KEY_N},
+    {FxKey::O, KEY_O},
+    {FxKey::P, KEY_P},
+    {FxKey::Q, KEY_Q},
+    {FxKey::R, KEY_R},
+    {FxKey::S, KEY_S},
+    {FxKey::T, KEY_T},
+    {FxKey::U, KEY_U},
+    {FxKey::V, KEY_V},
+    {FxKey::W, KEY_W},
+    {FxKey::X, KEY_X},
+    {FxKey::Y, KEY_Y},
+    {FxKey::Z, KEY_Z},
+    {FxKey::Num0, KEY_ZERO},
+    {FxKey::Num1, KEY_ONE},
+    {FxKey::Num2, KEY_TWO},
+    {FxKey::Num3, KEY_THREE},
+    {FxKey::Num4, KEY_FOUR},
+    {FxKey::Num5, KEY_FIVE},
+    {FxKey::Num6, KEY_SIX},
+    {FxKey::Num7, KEY_SEVEN},
+    {FxKey::Num8, KEY_EIGHT},
+    {FxKey::Num9, KEY_NINE},
+    {FxKey::Left, KEY_LEFT},
+    {FxKey::Right, KEY_RIGHT},
+    {FxKey::Up, KEY_UP},
+    {FxKey::Down, KEY_DOWN},
+    {FxKey::Space, KEY_SPACE},
+    {FxKey::Enter, KEY_ENTER},
+    {FxKey::Escape, KEY_ESCAPE},
+    {FxKey::Tab, KEY_TAB},
+    {FxKey::Backspace, KEY_BACKSPACE},
+    {FxKey::Delete, KEY_DELETE},
+    {FxKey::LeftShift, KEY_LEFT_SHIFT},
+    {FxKey::RightShift, KEY_RIGHT_SHIFT},
+    {FxKey::LeftCtrl, KEY_LEFT_CONTROL},
+    {FxKey::RightCtrl, KEY_RIGHT_CONTROL},
+    {FxKey::LeftAlt, KEY_LEFT_ALT},
+    {FxKey::RightAlt, KEY_RIGHT_ALT},
+    {FxKey::F1, KEY_F1},
+    {FxKey::F2, KEY_F2},
+    {FxKey::F3, KEY_F3},
+    {FxKey::F4, KEY_F4},
+    {FxKey::F5, KEY_F5},
+    {FxKey::F6, KEY_F6},
+    {FxKey::F7, KEY_F7},
+    {FxKey::F8, KEY_F8},
+    {FxKey::F9, KEY_F9},
+    {FxKey::F10, KEY_F10},
+    {FxKey::F11, KEY_F11},
+    {FxKey::F12, KEY_F12},
+};
+
+const std::pair<FxMouseButton, int> kMouseBindings[] = {
+    {FxMouseButton::Left, MOUSE_BUTTON_LEFT},
+    {FxMouseButton::Right, MOUSE_BUTTON_RIGHT},
+    {FxMouseButton::Middle, MOUSE_BUTTON_MIDDLE},
+};
+
+} // namespace
+
+FxVec2f FxRylbRenderer::screen_to_world(const FxVec2f& screen) const {
+    const float scale = static_cast<float>(m_scale);
+    return {screen.x() / scale, (static_cast<float>(m_display_h) - screen.y()) / scale};
+}
+
+FxVec2f FxRylbRenderer::world_to_screen(const FxVec2f& world) const {
+    const float scale = static_cast<float>(m_scale);
+    return {scale * world.x(), static_cast<float>(m_display_h) - scale * world.y()};
+}
+
+void FxRylbRenderer::poll_input() {
+    FxInput& input = m_scene.input();
+    input.begin_frame();
+
+    // ImGui owns the keyboard while a panel has focus, and the mouse while the cursor is over
+    // one. Forwarding those to gameplay would make typing in a field also drive the scene.
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool ui_has_keyboard = io.WantCaptureKeyboard;
+    const bool ui_has_mouse = io.WantCaptureMouse;
+
+    if (!ui_has_keyboard) {
+        for (const KeyBinding& binding : kKeyBindings)
+            input.set_key(binding.fx, IsKeyDown(binding.raylib));
+    } else {
+        for (const KeyBinding& binding : kKeyBindings)
+            input.set_key(binding.fx, false);
+    }
+
+    const Vector2 mouse = GetMousePosition();
+    const FxVec2f screen{mouse.x, mouse.y};
+    input.set_mouse_position(screen_to_world(screen), screen);
+
+    if (!ui_has_mouse) {
+        for (const auto& [fx_button, raylib_button] : kMouseBindings)
+            input.set_mouse_button(fx_button, IsMouseButtonDown(raylib_button));
+        input.set_wheel_delta(GetMouseWheelMove());
+    } else {
+        for (const auto& [fx_button, raylib_button] : kMouseBindings)
+            input.set_mouse_button(fx_button, false);
+        input.set_wheel_delta(0.0f);
+    }
+}
+
 void FxRylbRenderer::run(bool play) {
     double curr_rt_factor = 0.0;
     m_play = play;
     m_scene.step(m_min_time_step);
     // Main loop
     while (!WindowShouldClose()) {
+        // Polled before stepping so the callbacks in this frame's steps see current input.
+        poll_input();
         double org_frame_dt = static_cast<double>(GetFrameTime());
         double frame_dt = std::min(org_frame_dt, 0.2);
         double sim_in_dt = frame_dt * m_real_time_factor;

@@ -271,6 +271,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_contact_events.cpp
     tests/test_yaml_inertia.cpp
     tests/test_adversarial.cpp
+    tests/test_input.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

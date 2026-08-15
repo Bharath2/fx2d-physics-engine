@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "Fx2D/Entity.h"
+#include "Fx2D/Input.h"
 #include "Fx2D/Joints.h"
 #include "Fx2D/Math.h"
 #include "Fx2D/Registry.h"
@@ -121,6 +122,15 @@ class FxScene {
     // Returns the joint pointer if found; otherwise returns nullptr.
     std::shared_ptr<FxJoint> get_joint(const std::string& name) const;
 
+    // Keyboard and mouse state for this frame.
+    //
+    // A windowed scene has it filled in by FxRylbRenderer once per rendered frame, so a step
+    // callback can drive gameplay without touching raylib. A headless scene has no window and
+    // therefore no input: every query reads false and available() is false, until user code
+    // injects state through the same object, which is how a headless scene scripts triggers.
+    const FxInput& input() const { return m_input; }
+    FxInput& input() { return m_input; }
+
     // Contacts from the most recent step, one entry per touching pair, in broad-phase order
     // (unspecified, but reproducible across identical runs). Valid until the next call to step()
     // or reset(). Pairs involving a sensor appear here with zero impulses; every other pair
@@ -175,4 +185,8 @@ class FxScene {
 
     // custom callback function invoked in the step method
     std::function<void(FxScene&, double dt)> m_func_step_callback;
+
+    // Filled by the renderer each frame, or by user code in a headless scene. Never read by
+    // the solver — input only reaches the simulation through user callbacks.
+    FxInput m_input;
 };
