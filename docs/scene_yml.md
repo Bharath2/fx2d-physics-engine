@@ -125,7 +125,7 @@ Controls how the entity responds to forces, gravity, and collisions.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `mass` | float | `1.0` | Mass in kg. Set to `0` for a static (immovable) body |
-| `inertia` | float | computed | Rotational inertia. If omitted, calculated from the visual geometry |
+| `inertia` | float | computed | Rotational inertia about the centre of mass. If omitted, computed from the **visual** geometry and mass |
 | `gravity_scale` | float | `1.0` | Multiplier on scene gravity. `0.0` disables gravity for this entity |
 | `vel_damping` | float | `0.0` | Linear/angular velocity damping applied each step |
 | `elasticity` | float | `1.0` | Coefficient of restitution (0 = inelastic, 1 = perfectly elastic) |
@@ -133,6 +133,7 @@ Controls how the entity responds to forces, gravity, and collisions.
 | `dynamic_friction` | float | `0.0` | Kinetic friction coefficient used in contact force calculation |
 | `external_forces_enabled` | bool | `true` | If `false`, the entity ignores external forces and collisions (gravity still applies) |
 | `ccd` | bool | `false` | If `true`, enables speculative contacts for this entity to prevent tunneling at high speeds |
+| `sensor` | bool | `false` | If `true`, the entity detects overlaps but applies no impulses. Bodies pass straight through it, and its contacts are reported only through `FxScene::contacts()` and the begin/end contact events |
 
 ```yaml
 physics:
@@ -144,11 +145,14 @@ physics:
     dynamic_friction: 0.3
     external_forces_enabled: true
     ccd: false
+    sensor: false
 ```
 
 > **Static bodies:** set `mass: 0` (which sets `inv_mass = 0`) and `gravity_scale: 0.0`. The body will participate in collision detection but receive no correction from the solver.
 
-> **Inertia:** if `inertia` is omitted, it is automatically computed from the visual geometry and mass. Specify it explicitly only when you need a custom value.
+> **Inertia:** if `inertia` is omitted, it is computed from the **visual** geometry and the mass — not from the collision shape. Where the two differ (a simplified hitbox, or an oversized invisible collider), the visual shape is what determines how the body rotates. Specify `inertia` explicitly only when you need a custom value; an explicit value always wins over the computed one.
+>
+> Because the calculation needs the shape, it runs after the `visual:` block is read, regardless of where `physics:` appears in the file. An entity with **no** `visual:` block has nothing to measure and gets zero inertia; so does one with `mass: 0`, and so does an `edge`, which has no area.
 
 ---
 
@@ -279,6 +283,23 @@ geometry:
 ```
 
 A `radius: 0` (or omitted) is the legacy sharp-corner behaviour. Internally, circle / capsule / rounded-polygon all share the same skin-radius mechanism, so contact normals, AABBs, and inertia are computed consistently.
+
+> The top-level `radius:` key applies **only** to `rectangle` and `polygon`. `circle` and `capsule` carry their own radius in their own value, and `edge` is zero-thickness by definition, so a `radius:` alongside any of those three is silently ignored.
+
+### Geometry key summary
+
+Exactly one geometry key is read per `geometry:` block, in this order — the first one present wins and the rest are ignored.
+
+| Key | Value | Produces |
+|---|---|---|
+| `circle` | `0.5` | circle of that radius |
+| `capsule` | `[length, radius]`, or a map with `length:` and `radius:` | capsule along the local x-axis |
+| `rectangle` | `[width, height]` | 4-vertex polygon, rounded if `radius:` is given |
+| `polygon` | list of `[x, y]` vertices | convex polygon, rounded if `radius:` is given |
+| `edge` | `[[x1, y1], [x2, y2]]` | zero-thickness segment |
+| `radius` | `0.25` | modifier for `rectangle` / `polygon` only |
+
+Anything else throws `Unknown geometry type in shape config.` Note the key is `rectangle`, not `box`, and the rounding modifier is `radius`, not `skin_radius`.
 
 ---
 

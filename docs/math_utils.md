@@ -201,3 +201,98 @@ pts.perp();                      // returns perpendicular copy
 FxArray<float> d = pts.dot(FxVec2f(1,0));  // dot each vector with a fixed vector
 FxArray<float> d = pts.dot(other_pts);     // element-wise dot with another FxVec2fArray
 ```
+
+---
+
+## FxShape
+
+`FxShape` is the single collision/visual geometry type. Every shape — circle, capsule,
+edge, polygon, rounded polygon — is stored the same way: **a vertex list plus a skin
+radius**, where the skin is a Minkowski sum of the vertex core with a disc of that radius.
+
+```cpp
+enum class FxShapeType { Circle, Capsule, Polygon };
+```
+
+| Shape | Type | Vertices | Skin radius |
+|---|---|---|---|
+| Circle | `Circle` | 0 | the radius |
+| Capsule | `Capsule` | 2 (segment endpoints) | end-cap radius |
+| Edge | `Capsule` | 2 (segment endpoints) | 0 |
+| Polygon | `Polygon` | ≥ 3 | 0 (sharp) or > 0 (rounded corners) |
+
+An **edge is not a separate type** — it is a capsule whose skin radius is zero, which is
+what `is_edge()` tests. Because circle, capsule, and rounded polygon all share the skin
+mechanism, contact normals, AABBs, area, and inertia follow one consistent code path.
+
+### Constructors
+
+```cpp
+FxShape();                                          // circle, radius 0.5
+FxShape(float radius);                              // circle
+FxShape(float length, float radius);                // capsule along local +x
+FxShape(const FxVec2f& a, const FxVec2f& b);        // edge (zero-skin capsule)
+FxShape(const FxVec2fArray& vertices, float skin_radius = 0.0f);  // polygon
+FxShape(const FxVec2f& size, float skin_radius = 0.0f);           // rectangle -> polygon
+```
+
+The overloads are distinguished only by argument count and type, so watch the two-float
+case: `FxShape(0.5f)` is a circle, `FxShape(2.0f, 0.3f)` is a capsule. Likewise
+`FxShape(a, b)` with two `FxVec2f` is an edge, while `FxShape(size, 0.1f)` is a rectangle.
+
+All constructors validate their input and throw `std::invalid_argument` on degenerate
+geometry: a non-positive circle radius, a capsule with both length and radius at zero, a
+zero-length edge, or a polygon that has fewer than 3 vertices, negligible area, or is
+non-convex.
+
+Polygons and rectangles are **recentred on their centroid** at construction, so the stored
+vertices are relative to the centre of area. Edges are the exception: their endpoints are
+kept exactly as authored, which is what makes them usable as level geometry placed by
+absolute coordinates.
+
+### Queries
+
+```cpp
+FxShapeType shape_type() const;
+bool is_circle() const;
+bool is_capsule() const;
+bool is_polygon() const;
+bool is_edge() const;      // capsule with skin_radius <= 1e-6
+
+float radius() const;       // bounding radius from the centroid, skin included
+float skin_radius() const;
+FxVec2fArray vertices() const;    // world-space vertices
+FxVec2fArray __vertices() const;  // local vertices, centroid at the origin
+FxVec2f centroid() const;         // world-space centroid
+
+float area() const;                     // skin included
+float calc_inertia(float mass) const;   // about the centroid
+```
+
+`area()` and `calc_inertia()` account for the skin: a capsule is a rectangle plus a full
+disc, and a rounded polygon is its core plus a perimeter band plus a disc. A zero-skin
+capsule (an edge) therefore has **zero area and zero inertia**, which is why edges should
+be paired with `mass: 0` and used as static geometry.
+
+For rounded polygons `calc_inertia()` is an approximation: the core is taken at reduced
+density and the skin mass is treated as a ring. Sharp polygons use the exact shoelace
+second moment.
+
+### Placement
+
+```cpp
+void set_offset_pose(const FxVec3f& pose);   // shape pose relative to the entity
+FxVec3f offset_pose() const;
+FxArray<float> set_world_pose(const FxVec3f& world_pose);  // returns the AABB
+```
+
+`set_world_pose()` transforms the local vertices into world space and returns the
+axis-aligned bounding box, inflated by the skin radius on all sides. `FxEntity::step()`
+calls it every substep, so `vertices()` and `centroid()` always reflect the current pose.
+
+> **Inertia is computed from the *visual* shape.** `FxEntity::set_inertia()` reads
+> `visual_geometry()`, not the collision shape, and returns zero if no visual shape is
+> attached or if mass is zero. Attach the visual geometry **before** calling it.
+
+See [scene_yml.md](scene_yml.md) for the YAML spelling of every shape, and
+[collision_resolution.md](collision_resolution.md) for how each pair is tested.
