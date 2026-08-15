@@ -185,14 +185,24 @@ std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML
             {init_velocity_array[0], init_velocity_array[1], init_velocity_array[2]});
     }
 
+    // Two settings are deferred to the end of this function, after the geometry is attached.
+    // The implicit inertia calculation reads the visual shape, so computing it here would
+    // silently measure the entity's default shape instead of the authored one. And
+    // enable_external_forces() zeroes inv_mass / inv_inertia, so it has to be applied after
+    // any inertia assignment or a static body would regain the ability to spin.
+    bool inertia_from_visual_shape = false;
+    bool external_forces_enabled = true;
+    bool has_physics_block = false;
+
     // Read physics properties
     auto physics = config["physics"];
     if (physics) {
+        has_physics_block = true;
         entity->set_mass(physics["mass"].as<float>(1.0f)); // default to 1.0 if not specified
         if (physics["inertia"]) {
             entity->set_inertia(physics["inertia"].as<float>());
         } else {
-            entity->set_inertia(); // call empty set_inertia to calculate from visual shape
+            inertia_from_visual_shape = true; // computed below, once the shape exists
         }
         entity->gravity_scale = physics["gravity_scale"].as<float>(1.0f); // default to 1.0 if not
                                                                           // specified
@@ -204,8 +214,9 @@ std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML
                                                                               // not specified
         entity->dynamic_friction = physics["dynamic_friction"].as<float>(0.0f); // default to 0.2 if
                                                                                 // not specified
-        entity->enable_external_forces(
-            physics["external_forces_enabled"].as<bool>(true)); // default to true if not specified
+        external_forces_enabled = physics["external_forces_enabled"].as<bool>(true); // applied
+                                                                                     // below, after
+                                                                                     // inertia
         entity->enable_ccd = physics["ccd"].as<bool>(false); // default to false if not specified
         entity->is_sensor = physics["sensor"].as<bool>(false); // default to false if not specified
     }
@@ -225,6 +236,17 @@ std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML
         entity->set_collision_geometry(collision_shape);
     } else {
         entity->del_collision_geometry();
+    }
+
+    // Deferred from the physics block: inertia is derived from the visual shape and mass, so
+    // it can only be computed now that the shape is attached. An explicit physics.inertia was
+    // already applied above and is left alone.
+    if (inertia_from_visual_shape) {
+        entity->set_inertia();
+    }
+    // Must come last: it zeroes inv_mass / inv_inertia, and would be undone by set_inertia().
+    if (has_physics_block) {
+        entity->enable_external_forces(external_forces_enabled);
     }
     return entity;
 }

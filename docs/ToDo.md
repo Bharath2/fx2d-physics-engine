@@ -4,7 +4,8 @@ This file tracks the next feature and robustness targets for Fx2D. Delivered
 targets are removed; see git history for what already landed (shapes unified
 under `vertices[] + skin_radius`, capsules/edges/rounded variants, speculative-
 contact CCD, broad-phase hardening, the test suite, joint-control examples,
-and the `FxAngleWrap` precision fix).
+the `FxAngleWrap` precision fix, contacts/events/sensors, and the YAML inertia
+ordering fix).
 
 ## Priority Targets
 
@@ -18,31 +19,25 @@ and the `FxAngleWrap` precision fix).
    geometry that a polygon approximates awkwardly. Edge-vs-edge pairs and CCD
    on edges are intentionally skipped today; chains inherit that.
 
-2. Add higher-level query and event systems.
-   This is the gap between a physics demo and a game/RL substrate. The data already
-   exists — `FxContact` carries up to 2 world-space contact points, the normal,
-   penetration depth, applied impulses, and both entity pointers — but the contact
-   list is a local variable inside `FxScene::step()` (`src/Scene.cpp`): computed,
-   solved against, and thrown away every substep. The step callback fires after all
-   that, so user code can never see a collision — "did the ball touch the goal?" is
-   unanswerable today without re-doing collision math yourself.
+2. Add higher-level spatial query APIs.
+   Slice (a) — buffered contacts, begin/end contact events, and sensors — has
+   landed. `FxScene::contacts()`, `begin_contact_events()`, `end_contact_events()`,
+   and `FxEntity::is_sensor` (YAML `sensor:`) are documented in
+   [contacts_and_events.md](contacts_and_events.md) and covered by
+   `tests/test_contact_events.cpp`. Reward functions and "did the ball reach the
+   goal?" are answerable now.
 
-   Build public scene/world APIs for:
-   - buffered contact list exposed after each step (retain what `step()` already
-     computes instead of discarding it)
-   - begin/end contact events — the scene already keys contact pairs by a `uint64`
-     id for warm-starting (`m_contact_cache`), so diffing pair ids across steps
-     gives begin/end for little extra cost
-   - sensors / trigger-only fixtures — a trigger is a contact that generates an
-     event but no impulse; the plumbing is ~90% shared with the above
+   Remaining is slice (b), the observation half, which nothing else is blocked on:
    - ray casts — lidar-style observations for RL, "what's under the mouse click"
      for a game
-   - overlap queries
-   - shape queries
+   - overlap queries — which entities intersect this box/circle
+   - shape queries — sweep an arbitrary shape and report what it hits
 
-   Suggested slices: (a) buffered contacts + begin/end events + triggers, which
-   unblocks games and RL reward functions; then (b) ray/overlap/shape queries,
-   which unblocks RL observations.
+   All three want the same entry point the broad phase already has: the dynamic
+   AABB tree in `FxEntityRegistry` (`include/Fx2D/Registry.h`) supports descent
+   from a query volume, so a ray cast is a tree walk plus a narrow-phase segment
+   test per candidate. The per-shape segment tests partly exist already: edges use
+   a dedicated line-reference query in `src/Collisions.cpp`.
 
 3. Make the collision pipeline faster and continuous.
    Two halves of the same pipeline: the broad phase decides *which pairs get
@@ -79,7 +74,9 @@ and the `FxAngleWrap` precision fix).
    - fast-body or bullet-style handling for selected entities
 
 4. Add more examples and docs around newer features.
-   - query/event examples — blocked on item 2 (query/event APIs not implemented yet)
+   - a worked contact-event example — a sensor goal region plus impact-strength
+     readout, now that item 2 slice (a) makes it expressible
+   - ray-cast / overlap examples — still blocked on item 2 slice (b)
 
 5. Remove the float precision floor in position-level solving.
    Found while validating the joint example, where motors appeared dead at small
@@ -165,7 +162,7 @@ and the `FxAngleWrap` precision fix).
 ## Why These Matter
 
 - Chain colliders finish practical scene authoring for static level geometry.
-- Query and event APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop.
+- Query APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop. Contacts and events (slice a) covered the reward/game-logic half; ray and overlap queries cover the observation half.
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
 - Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
 - Parallelism raises the body-count ceiling without touching solver behavior — narrow phase first because it is embarrassingly parallel, islands second because they preserve Gauss-Seidel convergence.

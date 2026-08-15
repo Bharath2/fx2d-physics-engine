@@ -22,7 +22,8 @@ entities:
         pose: [7.0, 4.0, 0.0]
         physics:
             mass: 1.0
-            inertia: 0.5        # explicit: required for angular response (see docs/joint_control.md)
+            inertia: 0.5        # explicit tuning value; overrides the value computed from the
+                                # visual shape, and is what the PID gains below are tuned against
             gravity_scale: 0.0  # prevent gravity (10 N*m) from overpowering the P=6.0 motor (6 N*m)
         visual:
             geometry:
