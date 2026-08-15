@@ -132,32 +132,51 @@ ordering fix).
    - Out of scope for now: SoA/SIMD batch solving of contacts (Box2D v3 style)
      — a large refactor that only matters after the above land.
 
-8. Prove the solver against adversarial scenes.
-   The solver's *design* is contemporary — 11 substeps × position solve + 8
-   velocity passes with warm-starting, normal-flip detection on the friction
-   basis, a restitution speed floor, and accumulated normal/tangent impulses is
-   the same substepping-with-soft-constraints generation Box2D v3 moved to.
-   What is missing is not architecture but *proof*: the stability suite covers
-   no-jitter, no-creep, a three-box equal-mass stack, bounce energy, friction
-   stop, and bounded penetration — all correct things to test, and all easy
-   mode. The proven envelope today is small scenes at benign mass ratios.
-   Add the scenes mature engines burned years on, as regression tests, and fix
-   what falls out:
-   - **Tall stacks** — 10/20/30 boxes and pyramid stacks. Substepping should
-     handle these well; "should" is untested.
-   - **High mass ratios** — a 100:1 anvil on a feather box; a heavy body atop
-     a light stack. The classic solver killer; nothing in the suite goes
-     beyond ~equal masses.
-   - **Chains under tension** — long revolute chains (rope, bridge) with a
-     weight at the end; joint stretch and motor authority under load. Item 5's
-     float-precision finding (motor authority dying with distance from origin)
-     was discovered *by accident* in this class — direct evidence it holds
-     more landing mines.
-   - **The rest of the classics** — degenerate geometry (thin slivers),
-     restitution chains (Newton's cradle), fast-spinning bodies, kinematic
-     platforms.
-   Item 5's remaining half is the first known bug this suite would pin down;
-   expect it to surface others. Tractable, just grinding.
+8. Fix what the adversarial scenes found.
+   The scenes themselves have landed (`tests/test_adversarial.cpp`): tall stacks,
+   pyramids, mass ratios, thin slivers, a restitution chain, spinning bodies, and
+   a kinematic platform. They pin the envelope the solver provably owns, and the
+   thresholds in them are measured rather than aspirational. What they proved:
+
+   **Works.** Columns up to 15 boxes and a 5-wide pyramid hold at the default 11
+   substeps. A 20-box column holds at 22. Raising substeps monotonically reduces
+   sink, so the knob users reach for genuinely works. 10:1 mass ratios are
+   near-exact and 100:1 holds to within 0.073 of a unit box height. Thin slivers
+   (down to 0.02 thick) rest without jitter or tilt. Newton's cradle transfers
+   momentum correctly, leaving the middle balls in place. A box rides a
+   velocity-driven kinematic platform.
+
+   Remaining, in the order the evidence justifies:
+
+   - **Spin injects energy into the contact solve.** A unit box spun in place on
+     the ground may legitimately rise to corner-pivot height (centre at
+     `1.5 + sqrt(2)/2 = 2.207`). Up to 15 rad/s it reaches exactly that and no
+     more. From 20 rad/s it climbs past it — 2.31 at 20, 2.67 at 30, 3.74 at 50,
+     8.89 at 100 — so the solver is manufacturing height out of rotation. At
+     100 rad/s the box launches to y ≈ 8.9 while angular velocity drops 100 → 28.6:
+     roughly 70% of the spin is converted into a 6.7 m/s upward throw. It then
+     falls back at ~13 m/s and tunnels through the 1-unit-thick floor. This is the
+     clearest correctness bug the suite found, and the tunneling is only its
+     symptom — fixing the energy gain removes the fall-through with it. Note CCD
+     makes no difference, because `speculative_contact_check()` computes closing
+     speed from linear velocity alone and ignores angular velocity entirely.
+   - **High mass ratios creep without converging.** A 100 kg box dropped on a
+     stack of five 1 kg boxes sinks continuously rather than settling: over 120
+     steps the whole stack descends steadily and never reaches equilibrium, ending
+     collapsed into the ground. A static 1000:1 pair is similar, burying the light
+     box half its height. The 100:1 resting pair is fine, so the failure is about
+     accumulated load through a chain of contacts, not the ratio alone.
+   - **Chains under tension are still untested.** The one class from the original
+     list not yet covered — long revolute chains (rope, bridge) with a weight at
+     the end, testing joint stretch and motor authority under load. Item 5's
+     float-precision finding was discovered *by accident* in this class, which is
+     direct evidence it holds more. Worth resolving the duplicate-constraint
+     warning (`FxNamedRegistry: Item 'base_link_Anchor' already exists.`, printed
+     by the joint tests) first, since chain tests depend on joint constraints
+     registering the way the author expects.
+
+   Note the suite is marked slow and skipped when `FX2D_SKIP_SLOW_TESTS=1`, which
+   CI sets for its Debug/sanitizer job only. Release runs it on every push.
 
 ## Why These Matter
 
@@ -166,4 +185,4 @@ ordering fix).
 - The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
 - Input hooks turn the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib.
 - Parallelism raises the body-count ceiling without touching solver behavior — narrow phase first because it is embarrassingly parallel, islands second because they preserve Gauss-Seidel convergence.
-- Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns.
+- Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns. The scenes now exist and have already located a real energy-injection bug in the contact solve.

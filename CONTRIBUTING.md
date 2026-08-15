@@ -59,6 +59,12 @@ Each `tests/test_*.cpp` exposes one `run_*_tests()` entry point, registered in
 the `kSuites` table in `tests/main.cpp`. Every suite runs even if an earlier one
 fails, so one run reports every broken area rather than only the first.
 
+A suite can be marked `slow` in that table. Slow suites are skipped when
+`FX2D_SKIP_SLOW_TESTS=1`, and the skip is printed rather than silent. Only
+`adversarial` is slow today: it simulates tall stacks for hundreds of steps,
+which is seconds in Release but minutes under ASan/UBSan. CI sets the variable
+for its Debug job alone, so those scenes still run on every push in Release.
+
 Assert with `require()` / `require_near()` from `tests/test_harness.h`, never
 with `assert()` from `<cassert>`. Release builds define `NDEBUG`, which expands
 `assert()` to nothing — an assert-based test silently passes without checking
