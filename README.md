@@ -112,7 +112,7 @@ Headless examples skip the graphics stack entirely:
 
 ![2D joint motor control demo](./examples/joint_control_demo/play.gif)
 
-**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute and prismatic joint motor control (position, velocity, and effort modes)
+**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute and prismatic joint motor control (position, velocity, and effort modes) · [angry_boxes](./examples/angry_boxes/) — mouse-driven slingshot: drag the ball back, release, topple the tower
 
 ## Documentation
 

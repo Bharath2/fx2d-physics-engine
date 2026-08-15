@@ -1,0 +1,144 @@
+scene:
+    size: [16, 9]
+    gravity: [0, -10]
+    background: [176, 216, 232, 255]
+
+entities:
+    # ---------------------------------------------------------------- terrain
+    ground:
+        pose: [8, 0.5, 0]
+        physics:
+            mass: 0.0
+            elasticity: 0.2
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.8
+            dynamic_friction: 0.7
+        visual:
+            geometry:
+                rectangle: [16, 1.0]
+            texture: [104, 152, 88, 255]
+        collision:
+            geometry:
+                rectangle: [16, 1.0]
+
+    # The platform the tower is built on, so the stack starts clear of the ground seam.
+    platform:
+        pose: [11.5, 1.15, 0]
+        physics:
+            mass: 0.0
+            elasticity: 0.2
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.8
+            dynamic_friction: 0.7
+        visual:
+            geometry:
+                rectangle: [5.0, 0.3]
+            texture: [140, 120, 90, 255]
+        collision:
+            geometry:
+                rectangle: [5.0, 0.3]
+
+    # ---------------------------------------------------------------- the tower
+    # Two columns with a lintel across the top, twice over. Light enough to topple,
+    # heavy enough not to be blown apart by a graze.
+    box_l1:
+        pose: [10.5, 1.7, 0]
+        physics: &crate
+            mass: 0.6
+            elasticity: 0.05
+            static_friction: 0.7
+            dynamic_friction: 0.6
+        visual: &crate_visual
+            geometry:
+                rectangle: [0.5, 0.8]
+            texture: [196, 148, 92, 255]
+            border_color: [90, 62, 34, 255]
+            border_thickness: 2.0
+        collision: &crate_collision
+            geometry:
+                rectangle: [0.5, 0.8]
+
+    box_r1:
+        pose: [12.5, 1.7, 0]
+        physics: *crate
+        visual: *crate_visual
+        collision: *crate_collision
+
+    lintel1:
+        pose: [11.5, 2.25, 0]
+        physics:
+            mass: 0.8
+            elasticity: 0.05
+            static_friction: 0.7
+            dynamic_friction: 0.6
+        visual: &lintel_visual
+            geometry:
+                rectangle: [2.6, 0.3]
+            texture: [168, 124, 76, 255]
+            border_color: [90, 62, 34, 255]
+            border_thickness: 2.0
+        collision: &lintel_collision
+            geometry:
+                rectangle: [2.6, 0.3]
+
+    box_l2:
+        pose: [10.8, 2.8, 0]
+        physics: *crate
+        visual: *crate_visual
+        collision: *crate_collision
+
+    box_r2:
+        pose: [12.2, 2.8, 0]
+        physics: *crate
+        visual: *crate_visual
+        collision: *crate_collision
+
+    lintel2:
+        pose: [11.5, 3.35, 0]
+        physics:
+            mass: 0.8
+            elasticity: 0.05
+            static_friction: 0.7
+            dynamic_friction: 0.6
+        visual: *lintel_visual
+        collision: *lintel_collision
+
+    # The one to knock off the top.
+    target:
+        pose: [11.5, 3.85, 0]
+        physics:
+            mass: 0.4
+            elasticity: 0.1
+            static_friction: 0.6
+            dynamic_friction: 0.5
+        visual:
+            geometry:
+                circle: 0.35
+            texture: [220, 92, 84, 255]
+            border_color: [120, 40, 36, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                circle: 0.35
+
+    # ---------------------------------------------------------------- the projectile
+    # Starts parked at the slingshot anchor; main.cpp holds it there until launch.
+    ball:
+        pose: [3.0, 3.0, 0]
+        physics:
+            mass: 1.6
+            elasticity: 0.25
+            static_friction: 0.5
+            dynamic_friction: 0.4
+            ccd: true          # it moves fast after release; anticipate contacts
+        visual:
+            geometry:
+                circle: 0.32
+            texture: [70, 70, 78, 255]
+            border_color: [25, 25, 30, 255]
+            border_thickness: 2.5
+        collision:
+            geometry:
+                circle: 0.32

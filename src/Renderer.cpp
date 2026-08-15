@@ -211,6 +211,7 @@ void FxRylbRenderer::run(bool play) {
         }
 
         draw_scene();
+        if (m_func_draw_callback) m_func_draw_callback(*this);
         rlImGuiBegin();
         draw_ui(curr_rt_factor);
         rlImGuiEnd();
