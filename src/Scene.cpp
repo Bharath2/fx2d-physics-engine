@@ -68,7 +68,7 @@ void FxScene::reset() {
     m_prev_contact_index.clear();
     m_begin_contacts.clear();
     m_end_contacts.clear();
-    for_each_entity(std::execution::par, [](auto entity) {
+    for_each_entity(std::execution::seq, [](auto entity) {
         entity->reset(); // Apply reset() to each entity
     });
 }
@@ -195,6 +195,16 @@ void FxScene::sweep_dead_joints() {
     }
 }
 
+// The entity loops below run with std::execution::seq deliberately. They used to use ::par,
+// which measured slower at every body count from 10 to 3000 (the registry cap is 4096) while
+// burning up to 32x the CPU: 0.71 -> 0.22 ms/step at 10 bodies, 22.6 -> 19.9 at 800, and
+// 59.3 -> 48.6 at 3000. The work is memory-bound over shared_ptr-indirected entities and is
+// dispatched once per substep, so thread hand-off and cache traffic cost more than the
+// arithmetic saves. Sequential is also deterministic, which the RL story depends on.
+//
+// Do not reintroduce a parallel policy here without an A/B measurement showing it wins on the
+// scene sizes that matter — see item 7 in docs/ToDo.md.
+
 // simulation step
 void FxScene::step(double step_dt) {
     // Throw an error if dt is negative
@@ -230,7 +240,8 @@ void FxScene::step(double step_dt) {
         m_joints.for_each(std::execution::seq,
                           [&](auto joint) { joint->apply_controls(substep_dt); });
 
-        m_entities.for_each(std::execution::par, [&](auto entity) {
+        // Sequential by measurement, not by omission: see the note above step().
+        m_entities.for_each(std::execution::seq, [&](auto entity) {
             if (!entity->enabled || entity->is_sleeping())
                 return; // Skip disabled/sleeping entities
             entity->step(gravity, substep_dt);
@@ -309,7 +320,7 @@ void FxScene::step(double step_dt) {
                                [&](auto constraint) { constraint->resolve(substep_dt); });
 
         // Update velocities from positions - skip disabled/sleeping entities
-        m_entities.for_each(std::execution::par, [&](auto entity) {
+        m_entities.for_each(std::execution::seq, [&](auto entity) {
             if (!entity->enabled || entity->is_sleeping())
                 return; // Skip disabled/sleeping entities
             FxVec3f delta = (entity->pose - entity->prev_pose);
