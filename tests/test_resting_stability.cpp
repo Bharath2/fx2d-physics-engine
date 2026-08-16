@@ -1,6 +1,6 @@
 // Resting-contact stability: no jitter/creep, stacks sleep; bounce/friction still work.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 #include "test_harness.h"
 #include "test_scene_builders.h"

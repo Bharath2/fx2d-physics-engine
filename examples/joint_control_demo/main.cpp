@@ -2,7 +2,8 @@
 // Build: ./scripts/build_headless.sh && ./build-headless/joint_control_demo
 // Visual twin: examples/joint_control_demo/main_visual.cpp
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
+#include "Fx2D/YamlUtils.h"
 #include <iostream>
 #include <memory>
 

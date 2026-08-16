@@ -1,7 +1,7 @@
 // Adversarial scenes pinning the envelope the solver provably owns; thresholds are measured.
 // Assert invariants, not appearances: conserved energy over height, overlap over final height.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 #include "test_harness.h"
 #include "test_scene_builders.h"

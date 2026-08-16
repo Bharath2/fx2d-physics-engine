@@ -16,7 +16,6 @@
 #include "Fx2D/Input.h"
 #include "Fx2D/Joints.h"
 #include "Fx2D/Math.h"
-#include "Fx2D/Query.h"
 #include "Fx2D/Registry.h"
 #include "Fx2D/Solver.h"
 

@@ -1,6 +1,6 @@
 // Buffered contacts, begin/end contact events, and sensor (trigger) entities.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 #include "test_harness.h"
 #include "test_scene_builders.h"

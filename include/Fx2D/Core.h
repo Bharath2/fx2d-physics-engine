@@ -1,6 +1,8 @@
 #pragma once
 
-// Physics + raylib renderer. Prefer Fx2D/Physics.h for headless builds.
+// Everything, renderer included. Headless code should include Fx2D/Scene.h instead, which
+// pulls in no windowing dependency.
 
-#include "Fx2D/Physics.h"
 #include "Fx2D/Renderer.h"
+#include "Fx2D/Scene.h"
+#include "Fx2D/YamlUtils.h"
