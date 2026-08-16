@@ -19,25 +19,28 @@ ordering fix, the adversarial scene suite, and keyboard/mouse input).
    geometry that a polygon approximates awkwardly. Edge-vs-edge pairs and CCD
    on edges are intentionally skipped today; chains inherit that.
 
-2. Add higher-level spatial query APIs.
-   Slice (a) — buffered contacts, begin/end contact events, and sensors — has
-   landed. `FxScene::contacts()`, `begin_contact_events()`, `end_contact_events()`,
-   and `FxEntity::is_sensor` (YAML `sensor:`) are documented in
-   [contacts_and_events.md](contacts_and_events.md) and covered by
-   `tests/test_contact_events.cpp`. Reward functions and "did the ball reach the
-   goal?" are answerable now.
+2. Spatial query APIs — delivered.
+   Both slices have landed. Slice (a): buffered contacts, begin/end contact events and sensors
+   (`FxScene::contacts()`, `begin_contact_events()`, `end_contact_events()`,
+   `FxEntity::is_sensor`), documented in [contacts_and_events.md](contacts_and_events.md).
+   Slice (b): ray casts, overlap and point queries (`raycast()`, `raycast_all()`,
+   `overlap_circle/box/point/shape()`, `entity_at_point()`), documented in
+   [queries.md](queries.md) and covered by `tests/test_queries.cpp`.
 
-   Remaining is slice (b), the observation half, which nothing else is blocked on:
-   - ray casts — lidar-style observations for RL, "what's under the mouse click"
-     for a game
-   - overlap queries — which entities intersect this box/circle
-   - shape queries — sweep an arbitrary shape and report what it hits
+   Overlap runs the same narrow phase the simulation does, so a query and a contact cannot
+   disagree, with a containment check layered on because the solver reports nothing when one
+   shape lies wholly inside another. Rays are tested against shape boundaries directly, since
+   the narrow phase refuses zero-thickness segments.
 
-   All three want the same entry point the broad phase already has: the dynamic
-   AABB tree in `FxEntityRegistry` (`include/Fx2D/Registry.h`) supports descent
-   from a query volume, so a ray cast is a tree walk plus a narrow-phase segment
-   test per candidate. The per-shape segment tests partly exist already: edges use
-   a dedicated line-reference query in `src/Collisions.cpp`.
+   Possible follow-ups, none blocking:
+   - **Accelerate with the broad-phase tree.** Queries currently scan the entity list with a
+     bounding-circle rejection. The tree is only synced inside `step()`, so using it would
+     answer from stale boxes between steps; doing this properly means syncing on demand.
+   - **Shape sweeps.** `overlap_shape` is static. A swept version — move this shape along this
+     vector, report what it would hit and when — is what character controllers want, and shares
+     the time-of-impact machinery item 3 wants for CCD.
+   - **Query filtering.** A category or mask so a ray can ignore whole classes of body, rather
+     than the caller filtering the results.
 
 3. Make the collision pipeline faster and continuous.
    Two halves of the same pipeline: the broad phase decides *which pairs get

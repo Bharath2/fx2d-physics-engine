@@ -115,6 +115,7 @@ set(FX2D_CORE_SOURCES
   src/Collisions.cpp
   src/Constraints.cpp
   src/Joints.cpp
+  src/Query.cpp
   src/YamlUtils.cpp
 )
 
@@ -273,6 +274,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_yaml_inertia.cpp
     tests/test_adversarial.cpp
     tests/test_input.cpp
+    tests/test_queries.cpp
     tests/test_slingshot.cpp
   )
 

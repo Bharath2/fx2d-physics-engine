@@ -54,7 +54,7 @@ void FxEntity::reset() {
     m_sleep_timer = 0.0f;
     // Push the restored pose into the shapes so bounding boxes and the broad-phase tree do not
     // keep describing where the entity used to be until the next step.
-    if (m_collision) m_collision->set_world_pose(pose);
+    if (m_collision) m_bounding_box = m_collision->set_world_pose(pose);
     if (m_visual) m_visual->set_world_pose(pose);
 }
 
