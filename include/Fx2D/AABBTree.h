@@ -1,5 +1,5 @@
 #pragma once
-#include "Fx2D/Math.h"
+#include "Fx2D/Geometry.h"
 #include <cstdint>
 #include <limits>
 #include <utility>
