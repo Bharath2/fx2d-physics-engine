@@ -58,6 +58,14 @@ void FxScene::build_contact_events() {
     std::sort(m_end_contacts.begin(), m_end_contacts.end(), by_entity_id);
 }
 
+// Records the composition that reset() restores.
+void FxScene::capture_initial_state() {
+    m_initial_entities = m_entities.items();
+    m_initial_constraints = m_constraints.items();
+    m_initial_joints = m_joints.items();
+    m_has_initial_snapshot = true;
+}
+
 // calls reset of all entities
 void FxScene::reset() {
     m_time_elapsed = 0.0; // Reset elapsed time
@@ -69,9 +77,34 @@ void FxScene::reset() {
     m_begin_contacts.clear();
     m_end_contacts.clear();
     m_input.clear();
+    m_entities_dirty = false;
+
+    // Put the cast back exactly as it was: entities added since the snapshot go, entities
+    // deleted since come back. Rebuilding rather than patching also clears the AABB tree,
+    // entity ids and collision-exclusion pairs, so nothing survives that shouldn't.
+    if (m_has_initial_snapshot) {
+        m_entities.clear();
+        m_constraints.clear();
+        m_joints.clear();
+        for (const auto& entity : m_initial_entities)
+            m_entities.add(entity);
+        // Joints re-register their own constraints, so they go back before the loose ones.
+        for (const auto& joint : m_initial_joints)
+            add_joint(joint);
+        for (const auto& constraint : m_initial_constraints) {
+            if (!m_constraints.get_rawptr(constraint->get_name())) add_constraint(constraint);
+        }
+    }
+
     for_each_entity(std::execution::seq, [](auto entity) {
-        entity->reset(); // Apply reset() to each entity
+        entity->reset(); // pose, velocity, accumulated forces, sleep state
     });
+    // Motors carry integrator windup across a reset otherwise.
+    m_joints.for_each(std::execution::seq, [](auto joint) { joint->reset(); });
+    // Last, so user state is restored against a scene already back at its initial pose.
+    if (m_func_reset_callback) {
+        m_func_reset_callback(*this);
+    }
 }
 
 // Returns true if added; false if an entity with the name already exists.
@@ -214,6 +247,10 @@ void FxScene::step(double step_dt) {
     }
     double clamped_dt = std::clamp(step_dt, m_min_time_step, m_max_time_step);
     const double substep_dt = clamped_dt / static_cast<double>(m_substeps);
+
+    // Whatever the scene looks like when it first runs is what reset() restores, unless the
+    // caller already said otherwise with capture_initial_state().
+    if (!m_has_initial_snapshot) capture_initial_state();
 
     // Sweep dead constraints and joints if needed
     if (m_entities_dirty) {

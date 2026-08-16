@@ -83,8 +83,18 @@ class FxScene {
     FxScene(FxVec2ui SceneSize) : m_entities(m_enitities_limit), size(SceneSize) {}
     ~FxScene() = default;
 
-    // calls reset of all entities
+    // Restores the scene to its initial state: every entity, constraint and joint that existed
+    // when the scene was captured is present again and back at its starting pose, anything
+    // added since is gone, anything deleted since is back, sleep and PID state are cleared,
+    // and the contact caches and input are dropped. A reset is unconditional — no running
+    // scene, callback or held body can decline it.
+    //
+    // The snapshot is taken by capture_initial_state(), automatically on the first step() if
+    // it has not been taken explicitly. Build the scene, then let it step.
     void reset();
+    // Marks the current composition as the state reset() restores. Call it explicitly after
+    // building a scene if you intend to add or remove entities before the first step.
+    void capture_initial_state();
     // simulation step
     void step(double step_dt);
     // get total time elapsed since scene start
@@ -94,6 +104,12 @@ class FxScene {
     // custom call back function called after every time step, user gets access to the scene.
     void set_step_callback(const std::function<void(FxScene&, double dt)>& callback) {
         m_func_step_callback = callback;
+    }
+    // Called at the end of reset(), once entities are back at their initial state. Anything the
+    // user layered on top of the scene — a held projectile, a score, a game phase — lives
+    // outside the scene and would otherwise survive a reset that is meant to undo everything.
+    void set_reset_callback(const std::function<void(FxScene&)>& callback) {
+        m_func_reset_callback = callback;
     }
     // Method to set a fillColor
     void set_fillColor(const FxVec4ui8& color) {
@@ -185,6 +201,14 @@ class FxScene {
 
     // custom callback function invoked in the step method
     std::function<void(FxScene&, double dt)> m_func_step_callback;
+    std::function<void(FxScene&)> m_func_reset_callback;
+
+    // The composition reset() restores. Held as shared_ptr so an entity deleted at runtime can
+    // be put back rather than merely forgotten.
+    std::vector<std::shared_ptr<FxEntity>> m_initial_entities;
+    std::vector<std::shared_ptr<FxConstraint>> m_initial_constraints;
+    std::vector<std::shared_ptr<FxJoint>> m_initial_joints;
+    bool m_has_initial_snapshot = false;
 
     // Filled by the renderer each frame, or by user code in a headless scene. Never read by
     // the solver — input only reaches the simulation through user callbacks.

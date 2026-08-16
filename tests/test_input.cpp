@@ -219,9 +219,167 @@ void test_scene_reset_clears_input() {
     require(!scene.input().key_down(FxKey::A), "reset must drop held keys");
 }
 
+// reset() must give user code a chance to restore state the scene does not own.
+void test_reset_callback_fires_after_entities_are_restored() {
+    FxScene scene({20.0f, 20.0f});
+
+    auto body = std::make_shared<FxEntity>("body");
+    body->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
+    body->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
+    body->set_init_pose(FxVec3f{5.0f, 5.0f, 0.0f});
+    body->set_mass(1.0f);
+    body->set_inertia();
+    scene.add_entity(body);
+    body->reset();
+
+    int fired = 0;
+    float body_x_seen_by_callback = -1.0f;
+    scene.set_reset_callback([&](FxScene& s) {
+        ++fired;
+        // The callback must run after entities are back, so it can build on a clean scene.
+        body_x_seen_by_callback = s.get_entity("body")->pose.x();
+    });
+
+    require(fired == 0, "the reset callback must not fire before reset() is called");
+
+    // Move the body away, then reset.
+    body->pose.x() = 17.0f;
+    scene.reset();
+
+    require(fired == 1, "reset() must fire the reset callback exactly once");
+    require_near(body_x_seen_by_callback, 5.0f, 1e-4f,
+                 "the callback must see entities already restored to their initial pose");
+
+    scene.reset();
+    require(fired == 2, "each reset() must fire the callback again");
+}
+
+// reset() is a full reload: the composition goes back to the captured one, so an entity added
+// since is gone and one deleted since is back.
+void test_reset_restores_scene_composition() {
+    FxScene scene({20.0f, 20.0f});
+    scene.set_gravity(FxVec2f{0.0f, 0.0f});
+
+    auto keeper = std::make_shared<FxEntity>("keeper");
+    keeper->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
+    keeper->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
+    keeper->set_init_pose(FxVec3f{5.0f, 5.0f, 0.0f});
+    keeper->set_mass(1.0f);
+    keeper->set_inertia();
+    scene.add_entity(keeper);
+
+    auto doomed = std::make_shared<FxEntity>("doomed");
+    doomed->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
+    doomed->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
+    doomed->set_init_pose(FxVec3f{9.0f, 5.0f, 0.0f});
+    doomed->set_mass(1.0f);
+    doomed->set_inertia();
+    scene.add_entity(doomed);
+
+    scene.step(kFrame); // captures the initial composition
+    require(scene.entity_count() == 2, "the scene must start with both entities");
+
+    // Mutate the scene the way a running game would.
+    scene.delete_entity("doomed");
+    auto spawned = std::make_shared<FxEntity>("spawned");
+    spawned->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
+    spawned->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
+    spawned->set_init_pose(FxVec3f{12.0f, 5.0f, 0.0f});
+    spawned->set_mass(1.0f);
+    spawned->set_inertia();
+    scene.add_entity(spawned);
+    scene.step(kFrame);
+
+    require(scene.entity_count() == 2, "after the edit there should still be two entities");
+    require(!scene.entity_exists("doomed"), "doomed must be gone before the reset");
+    require(scene.entity_exists("spawned"), "spawned must be present before the reset");
+
+    scene.reset();
+
+    require(scene.entity_count() == 2, "reset must restore the original entity count");
+    require(scene.entity_exists("keeper"), "the original entity must survive the reset");
+    require(scene.entity_exists("doomed"), "a deleted entity must come back on reset");
+    require(!scene.entity_exists("spawned"), "an entity added at runtime must be gone on reset");
+}
+
+// A sleeping body must wake on reset, or the reloaded scene starts frozen.
+void test_reset_wakes_sleeping_bodies() {
+    FxScene scene({20.0f, 20.0f});
+    scene.set_gravity(FxVec2f{0.0f, -10.0f});
+
+    auto ground = std::make_shared<FxEntity>("ground");
+    ground->set_visual_geometry(FxVisualShape(FxVec2f{18.0f, 1.0f}));
+    ground->set_collision_geometry(FxCollisionShape(FxVec2f{18.0f, 1.0f}));
+    ground->set_init_pose(FxVec3f{10.0f, 1.0f, 0.0f});
+    ground->set_mass(0.0f);
+    ground->set_inertia(0.0f);
+    ground->enable_external_forces(false);
+    ground->gravity_scale = 0.0f;
+    scene.add_entity(ground);
+
+    auto box = std::make_shared<FxEntity>("box");
+    box->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
+    box->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
+    box->set_init_pose(FxVec3f{10.0f, 2.0f, 0.0f});
+    box->set_mass(1.0f);
+    box->set_inertia();
+    box->elasticity = 0.0f;
+    scene.add_entity(box);
+    box->reset();
+
+    for (int i = 0; i < 240 && !box->is_sleeping(); ++i)
+        scene.step(kFrame);
+    require(box->is_sleeping(), "the box must fall asleep before the reset is meaningful");
+
+    scene.reset();
+    require(!box->is_sleeping(), "reset must wake every body, or the scene reloads frozen");
+}
+
+// Nothing a running scene does can decline a reset: time, contacts and input all go too.
+void test_reset_clears_accumulated_scene_state() {
+    FxScene scene({20.0f, 20.0f});
+    scene.set_gravity(FxVec2f{0.0f, -10.0f});
+
+    auto ground = std::make_shared<FxEntity>("ground");
+    ground->set_visual_geometry(FxVisualShape(FxVec2f{18.0f, 1.0f}));
+    ground->set_collision_geometry(FxCollisionShape(FxVec2f{18.0f, 1.0f}));
+    ground->set_init_pose(FxVec3f{10.0f, 1.0f, 0.0f});
+    ground->set_mass(0.0f);
+    ground->set_inertia(0.0f);
+    ground->enable_external_forces(false);
+    ground->gravity_scale = 0.0f;
+    scene.add_entity(ground);
+
+    auto box = std::make_shared<FxEntity>("box");
+    box->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
+    box->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
+    box->set_init_pose(FxVec3f{10.0f, 2.0f, 0.0f});
+    box->set_mass(1.0f);
+    box->set_inertia();
+    scene.add_entity(box);
+    box->reset();
+
+    for (int i = 0; i < 60; ++i)
+        scene.step(kFrame);
+    require(scene.time_elapsed() > 0.5, "time must have advanced before the reset");
+    require(!scene.contacts().empty(), "the box must be resting on the ground before the reset");
+
+    scene.reset();
+
+    require(scene.time_elapsed() == 0.0, "reset must put the clock back to zero");
+    require(scene.contacts().empty(), "reset must drop the contact buffer");
+    require(scene.begin_contact_events().empty(), "reset must drop begin events");
+    require(!scene.input().available(), "reset must drop input");
+    require_near(box->pose.y(), 2.0f, 1e-4f, "reset must put the box back at its initial pose");
+}
+
 } // namespace
 
 void run_input_tests() {
+    test_reset_callback_fires_after_entities_are_restored();
+    test_reset_restores_scene_composition();
+    test_reset_wakes_sleeping_bodies();
+    test_reset_clears_accumulated_scene_state();
     test_unfed_input_is_inert();
     test_key_edges_fire_once();
     test_keys_are_independent();
