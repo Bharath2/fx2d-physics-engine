@@ -284,8 +284,10 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
     // Get broad phase pairs for collision detection using the dynamic AABB tree.
     // substep_dt > 0: CCD-enabled entities get a swept AABB (union of current + displaced by v*dt)
     // so fast movers are paired even when the tight AABB doesn't yet overlap the target's fat AABB.
-    std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs(float substep_dt = 0.0f) const {
-        // First sync the tree with the latest entity transforms and enable/disable state.
+    // Sync every tree proxy from current entity state. Moving bodies' boxes are swept by
+    // their travel over sweep_dt, so one sync per step keeps per-substep queries a superset
+    // of what per-substep syncing found.
+    void sync_broad_phase(float sweep_dt = 0.0f) const {
         for (size_t i = 0; i < m_items_vec.size(); ++i) {
             const auto& e = m_items_vec[i];
             uint32_t eid = e->get_entity_id();
@@ -315,13 +317,17 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             }
             if (!tight.is_valid()) continue;
 
-            // For CCD bodies, extend the insertion AABB to cover the swept path this substep.
+            // Only CCD bodies sweep their box: sweeping all movers was measured to flood the
+            // tree with false pairs when many bodies fall together.
             FxAABB query_aabb = tight;
-            if (e->enable_ccd && substep_dt > 0.0f) {
-                float dx = e->velocity.x() * substep_dt;
-                float dy = e->velocity.y() * substep_dt;
-                FxAABB swept{tight.minX + dx, tight.minY + dy, tight.maxX + dx, tight.maxY + dy};
-                query_aabb = FxAABB::combine(tight, swept);
+            if (e->enable_ccd && sweep_dt > 0.0f) {
+                float dx = e->velocity.x() * sweep_dt;
+                float dy = e->velocity.y() * sweep_dt;
+                if (dx != 0.0f || dy != 0.0f) {
+                    FxAABB swept{tight.minX + dx, tight.minY + dy, tight.maxX + dx,
+                                 tight.maxY + dy};
+                    query_aabb = FxAABB::combine(tight, swept);
+                }
             }
 
             if (!in_tree) {
@@ -332,8 +338,17 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
                 m_aabb_tree.update(m_entity_node_map.at(eid), query_aabb);
             }
         }
+    }
 
-        // Then ask the tree for raw entity-id pairs.
+    // Back-compat: sync then query in one call.
+    std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs(float sweep_dt = 0.0f) const {
+        sync_broad_phase(sweep_dt);
+        return query_broad_phase_pairs();
+    }
+
+    // Pair collection against the already-synced tree.
+    std::vector<std::pair<size_t, size_t>> query_broad_phase_pairs() const {
+        // Ask the tree for raw entity-id pairs.
         std::vector<std::pair<int32_t, int32_t>> tree_pairs;
         m_aabb_tree.query_pairs(tree_pairs);
 

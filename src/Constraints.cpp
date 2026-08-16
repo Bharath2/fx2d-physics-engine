@@ -341,12 +341,30 @@ void init_velocity_pass(FxContact& contact) {
     FxEntity& A = *contact.entity1;
     FxEntity& B = *contact.entity2;
     const FxVec2f n = contact.normal;
+    const FxVec2f t(-n.y(), n.x());
 
-    auto rA = contact.position - A.pose.get_xy();
-    auto rB = contact.position - B.pose.get_xy();
+    contact.wA = eff_inv_mass(A);
+    contact.wB = eff_inv_mass(B);
+    contact.IA = eff_inv_inertia(A);
+    contact.IB = eff_inv_inertia(B);
+
+    const FxVec2f pA = A.pose.get_xy();
+    const FxVec2f pB = B.pose.get_xy();
     for (size_t i = 0; i < contact.count; ++i) {
-        const FxVec2f vA = A.velocity_at_local_point(rA[i]);
-        const FxVec2f vB = B.velocity_at_local_point(rB[i]);
+        const FxVec2f p = contact.position[i];
+        contact.rA[i] = p - pA;
+        contact.rB[i] = p - pB;
+        contact.ra_n[i] = contact.rA[i].cross(n);
+        contact.rb_n[i] = contact.rB[i].cross(n);
+        contact.ra_t[i] = contact.rA[i].cross(t);
+        contact.rb_t[i] = contact.rB[i].cross(t);
+        contact.K_n[i] = contact.wA + contact.wB + contact.IA * contact.ra_n[i] * contact.ra_n[i] +
+                         contact.IB * contact.rb_n[i] * contact.rb_n[i];
+        contact.K_t[i] = contact.wA + contact.wB + contact.IA * contact.ra_t[i] * contact.ra_t[i] +
+                         contact.IB * contact.rb_t[i] * contact.rb_t[i];
+
+        const FxVec2f vA = A.velocity_at_local_point(contact.rA[i]);
+        const FxVec2f vB = B.velocity_at_local_point(contact.rB[i]);
         contact.vn_pre[i] = (vB - vA).dot(n);
     }
 }
@@ -360,20 +378,14 @@ void warm_start(FxContact& contact) {
     FxVec2f n = contact.normal;
     FxVec2f t(-n.y(), n.x());
 
-    const float wA = eff_inv_mass(A), wB = eff_inv_mass(B);
-    const float IA = eff_inv_inertia(A), IB = eff_inv_inertia(B);
-
-    auto rA = contact.position - A.pose.get_xy();
-    auto rB = contact.position - B.pose.get_xy();
-
     for (size_t i = 0; i < contact.count; ++i) {
         const float jn = contact.jn_warm[i];
         const float jt = contact.jt_warm[i];
         FxVec2f impulse = n * jn + t * jt;
-        A.velocity.xy() -= wA * impulse;
-        B.velocity.xy() += wB * impulse;
-        A.velocity.theta() -= IA * (jn * rA[i].cross(n) + jt * rA[i].cross(t));
-        B.velocity.theta() += IB * (jn * rB[i].cross(n) + jt * rB[i].cross(t));
+        A.velocity.xy() -= contact.wA * impulse;
+        B.velocity.xy() += contact.wB * impulse;
+        A.velocity.theta() -= contact.IA * (jn * contact.ra_n[i] + jt * contact.ra_t[i]);
+        B.velocity.theta() += contact.IB * (jn * contact.rb_n[i] + jt * contact.rb_t[i]);
         // Book the warm-start as applied so excess can be released later.
         contact.jn_accumulated[i] = jn;
         contact.jt_accumulated[i] = jt;
@@ -391,31 +403,30 @@ void resolve_velocities(FxContact& contact) {
     FxVec2f n = (contact.normal);
     FxVec2f t(-n.y(), n.x()); // fixed tangent (no normalize of vRel_t)
 
-    // Mass, inertia and other properties
-    const float wA = eff_inv_mass(A), wB = eff_inv_mass(B);
-    const float IA = eff_inv_inertia(A), IB = eff_inv_inertia(B);
     // Restitution takes max so the liveliest surface sets the bounce and a bouncy body bounces
     // off anything; friction takes min so the slipperiest surface wins and ice stays slippery.
     const float e = std::clamp(std::max(A.elasticity, B.elasticity), 0.0f, 1.0f);
     const float mu_s = std::clamp(std::min(A.static_friction, B.static_friction), 0.0f, 10.0f);
     const float mu_k = std::clamp(std::min(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
 
-    auto rA = contact.position - A.pose.get_xy();
-    auto rB = contact.position - B.pose.get_xy();
+    // Lever arms and effective masses come from the per-substep cache in init_velocity_pass:
+    // this function sweeps every contact several times per substep, and none of them change
+    // between sweeps.
+    const float wA = contact.wA, wB = contact.wB, IA = contact.IA, IB = contact.IB;
 
     // Iteratively resolve normal impulses
     for (int iter = 0; iter < 2; iter++) {
         for (size_t i = 0; i < contact.count; i++) {
             size_t k = (i + iter) % contact.count;
-            auto vA = A.velocity_at_local_point(rA[k]);
-            auto vB = B.velocity_at_local_point(rB[k]);
+            auto vA = A.velocity_at_local_point(contact.rA[k]);
+            auto vB = B.velocity_at_local_point(contact.rB[k]);
 
             // Relative velocity and its normal component
             float vn = (vB - vA).dot(n);
 
             // --- Velocity Correction (Normal Impulse) ---
-            float ra_n = rA[k].cross(n), rb_n = rB[k].cross(n);
-            float K_n = wA + wB + IA * ra_n * ra_n + IB * rb_n * rb_n;
+            const float ra_n = contact.ra_n[k], rb_n = contact.rb_n[k];
+            const float K_n = contact.K_n[k];
 
             // Fixed restitution target from substep start (later sweeps must not cancel bounce).
             const float vn_target =
@@ -446,12 +457,12 @@ void resolve_velocities(FxContact& contact) {
 
     // Single pass friction resolution using accumulated normal impulses
     for (size_t i = 0; i < contact.count; i++) {
-        FxVec2f vA = A.velocity_at_local_point(rA[i]);
-        FxVec2f vB = B.velocity_at_local_point(rB[i]);
+        FxVec2f vA = A.velocity_at_local_point(contact.rA[i]);
+        FxVec2f vB = B.velocity_at_local_point(contact.rB[i]);
         float vt = (vB - vA).dot(t);
 
-        float ra_t = rA[i].cross(t), rb_t = rB[i].cross(t);
-        float Kt = wA + wB + IA * ra_t * ra_t + IB * rb_t * rb_t;
+        const float ra_t = contact.ra_t[i], rb_t = contact.rb_t[i];
+        const float Kt = contact.K_t[i];
         if (Kt <= 1e-8f) continue;
 
         float fresh_jt = -vt / Kt;

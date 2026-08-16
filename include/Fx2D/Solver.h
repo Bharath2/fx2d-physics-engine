@@ -27,8 +27,8 @@ struct FxContact {
 
   public:
     size_t count = 0; // True if contact is valid
-    FxVec2fArray position{{0.0f, 0.0f}, {0.0f, 0.0f}}; // upto to 2 Contact points in world
-                                                       // coordinates
+    FxVec2f position[2] = {{0.0f, 0.0f}, {0.0f, 0.0f}}; // up to 2 contact points in world
+                                                        // coordinates
     FxVec2f normal{0.0f, 0.0f}; // Contact normal (unit vector)
     float penetration_depth = FxInfinityf; // Penetration depth (positive if overlapping)
 
@@ -45,6 +45,15 @@ struct FxContact {
 
     // Closing speed at substep start — fixes restitution target for every sweep.
     float vn_pre[2] = {0.0f, 0.0f};
+
+    // Per-substep solver cache, filled by init_velocity_pass. Lever arms and effective masses
+    // are fixed for the whole substep, and the velocity passes sweep every contact many times.
+    FxVec2f rA[2]{{0.0f, 0.0f}, {0.0f, 0.0f}};
+    FxVec2f rB[2]{{0.0f, 0.0f}, {0.0f, 0.0f}};
+    float ra_n[2] = {0.0f, 0.0f}, rb_n[2] = {0.0f, 0.0f};
+    float ra_t[2] = {0.0f, 0.0f}, rb_t[2] = {0.0f, 0.0f};
+    float K_n[2] = {0.0f, 0.0f}, K_t[2] = {0.0f, 0.0f};
+    float wA = 0.0f, wB = 0.0f, IA = 0.0f, IB = 0.0f;
 
     // Constructor overloads
     FxContact() = default;
