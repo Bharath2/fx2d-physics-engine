@@ -6,17 +6,8 @@
 
 #include "Fx2D/Math.h"
 
-// Renderer-agnostic input state.
-//
-// This header deliberately knows nothing about raylib, so headless builds compile against the
-// same interface a windowed build uses. Gameplay code reads FxScene::input() from inside the
-// step callback and never reaches into a windowing library directly.
-//
-// Who fills it in:
-//   - Windowed: FxRylbRenderer polls the keyboard and mouse once per rendered frame.
-//   - Headless: nothing does, so every query reads false/zero and available() is false. A
-//     headless scene that wants scripted or event-driven control injects state itself through
-//     the producer API below, which is the headless equivalent of a key press.
+// Renderer-agnostic input state, so headless and windowed builds share one interface.
+// A renderer fills it each frame; headless callers inject through the producer API.
 
 enum class FxKey : uint8_t {
     Unknown = 0,
@@ -96,12 +87,10 @@ class FxInput {
 
     // ---------------------------------------------------------------- consumer API
 
-    // Held down right now. This is what continuous control wants — driving a motor while a
-    // key is held, for instance.
+    // Held down right now; what continuous control wants.
     bool key_down(FxKey key) const { return m_keys[index(key)]; }
-    // Went down since the last frame. Edge events last for the whole frame, which may span
-    // several physics steps when the renderer runs more than one step per frame; use
-    // key_down() for anything that must not be applied twice.
+    // Went down since the last frame. Edges last a whole frame, which may span several
+    // physics steps, so key_down() is safer for anything that must not repeat.
     bool key_pressed(FxKey key) const { return m_keys[index(key)] && !m_prev_keys[index(key)]; }
     bool key_released(FxKey key) const { return !m_keys[index(key)] && m_prev_keys[index(key)]; }
 
@@ -113,8 +102,7 @@ class FxInput {
         return !m_buttons[index(button)] && m_prev_buttons[index(button)];
     }
 
-    // Cursor in scene (world) units — the frame entity poses live in, so this can be compared
-    // against entity positions directly.
+    // Cursor in scene units, the same frame entity poses live in.
     const FxVec2f& mouse_position() const { return m_mouse_world; }
     // Cursor in pixels, origin at the top-left of the window.
     const FxVec2f& mouse_screen_position() const { return m_mouse_screen; }
@@ -123,15 +111,13 @@ class FxInput {
     // Scroll wheel movement this frame; positive is away from the user.
     float wheel_delta() const { return m_wheel_delta; }
 
-    // True once a producer has fed this input at least once. False for a headless scene that
-    // nobody drives, which lets shared gameplay code branch instead of silently doing nothing.
+    // False until something feeds this, distinguishing "no key held" from "no keyboard".
     bool available() const { return m_available; }
 
     // ---------------------------------------------------------------- producer API
-    // Called by the renderer each frame, or by user code to script a headless scene.
 
-    // Rolls the current state into the previous one so the pressed/released edges refer to the
-    // frame about to be described. Call once, before the set_* calls for that frame.
+    // Rolls current state into previous so edges describe the frame about to be set.
+    // Call once per frame, before the set_* calls.
     void begin_frame() {
         m_prev_keys = m_keys;
         m_prev_buttons = m_buttons;
@@ -148,14 +134,13 @@ class FxInput {
     }
     void set_wheel_delta(float delta) { m_wheel_delta = delta; }
 
-    // Drops every key and button without touching availability. Used when the UI takes focus,
-    // so gameplay sees a clean release rather than a key stuck down.
+    // Drops held keys and buttons but stays available; for when the UI takes focus.
     void release_all() {
         m_keys.fill(false);
         m_buttons.fill(false);
     }
 
-    // Full reset, including availability. Called by FxScene::reset().
+    // Full reset, including availability.
     void clear() {
         m_keys.fill(false);
         m_prev_keys.fill(false);

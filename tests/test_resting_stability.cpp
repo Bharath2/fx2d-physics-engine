@@ -271,10 +271,8 @@ void test_resting_penetration_stays_small() {
     require(overlap > -6e-3f, "a resting box must not hover above the ground");
 }
 
-// Restitution mixes with max, so the bounciest surface in a pair decides the bounce.
-//
-// Under the old min rule a lively ball inherited whatever dead thing it landed on and simply
-// stopped, which made "make this ball bouncy" mean nothing unless every surface agreed.
+// Restitution mixes with max, so the bounciest surface decides and a lively ball no longer
+// inherits whatever dead thing it lands on.
 void test_bouncy_body_bounces_off_a_dead_surface() {
     FxScene scene = make_scene();
     make_ground(scene, 6.0f, 1.0f, 8.0f, 0.5f, 0.0f); // completely inelastic floor

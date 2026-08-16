@@ -7,10 +7,7 @@
 #include <memory>
 
 // Mouse-driven slingshot: grab the ball, pull away from the anchor, release to launch.
-//
-// Kept in a header rather than inside main.cpp so the mechanic can be exercised headlessly by
-// tests/test_slingshot.cpp, which injects mouse state instead of a real cursor. That is the
-// same producer API the renderer uses, so the tested path is the played path.
+// Kept in a header so the mechanic can be exercised headlessly with injected mouse state.
 struct FxSlingshot {
     // --- configuration -------------------------------------------------------------
     FxVec2f anchor{3.0f, 3.0f}; // where the ball rests before launch, in scene units
@@ -47,9 +44,7 @@ struct FxSlingshot {
         if (!ball) return;
         const FxInput& in = scene.input();
 
-        // R re-arms the shot from any state — mid-flight, mid-drag or parked. It only touches
-        // the ball; the tower keeps whatever damage it has taken. Use the renderer's
-        // "Reset Simulation" to put the whole scene back.
+        // R re-arms from any state and only touches the ball; the scene keeps its damage.
         if (in.key_pressed(FxKey::R)) {
             reset(ball);
             return;
@@ -84,12 +79,9 @@ struct FxSlingshot {
     }
 
   private:
-    // Park the ball at a position with no residual motion.
-    //
-    // prev_pose is written alongside pose deliberately. FxScene::step() derives velocity as
-    // (pose - prev_pose) / dt, so moving pose alone would have the solver reconstruct a huge
-    // velocity from what is really a teleport, and the ball would fire itself the moment it
-    // was picked up.
+    // Park the ball with no residual motion. prev_pose is written alongside pose because
+    // velocity is derived as (pose - prev_pose) / dt, so moving pose alone reads as a teleport
+    // and the ball would fire itself the moment it was picked up.
     static void hold_at(const std::shared_ptr<FxEntity>& ball, const FxVec2f& position) {
         ball->gravity_scale = 0.0f;
         ball->pose.x() = position.x();

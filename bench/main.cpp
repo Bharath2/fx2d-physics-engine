@@ -1,16 +1,5 @@
-// Fx2D step-time benchmark.
-//
-// Build:  cmake -S . -B build -DFX2D_BUILD_BENCH=ON -DCMAKE_BUILD_TYPE=Release
-//         cmake --build build --target Fx2DBench
-// Run:    ./build/Fx2DBench [steps_per_size]
-//
-// Reports wall time and CPU time per step. Both matter: a change that halves wall time by
-// spending eight times the CPU is usually the wrong trade for a library that may be one
-// subsystem among many, and is a bad trade for RL rollouts where many independent sims
-// already saturate the machine. cpu/wall near 1.0 means serial; much above 1.0 means threads
-// are being spun up, and is only worth it if wall time actually fell.
-//
-// This exists because ToDo item 7 requires an A/B measurement before any threading change.
+// Fx2D step-time benchmark. Build with -DFX2D_BUILD_BENCH=ON, run as: Fx2DBench [steps]
+// Reports wall and CPU time per step, so speed bought with cores is visible as such.
 
 #include "Fx2D/Physics.h"
 
@@ -52,7 +41,7 @@ struct Result {
     double steps_per_second = 0.0;
 };
 
-// A loose grid of boxes settling onto the ground: contacts, stacking and sleeping all exercised.
+// A loose grid of boxes settling onto the ground.
 Result bench_settling_boxes(int body_count, int steps) {
     FxScene scene({400.0f, 400.0f});
     scene.set_gravity(FxVec2f{0.0f, -10.0f});

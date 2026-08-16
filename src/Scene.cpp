@@ -10,9 +10,7 @@ uint64_t pack_contact_key(uint32_t a, uint32_t b) {
 constexpr size_t kVelocityPasses = 8;
 } // namespace
 
-// Inserts a contact into the current step buffer, replacing any earlier one for the same pair.
-// A pair can be found in several substeps; the last one seen is the one worth keeping, because
-// it carries the impulses accumulated by the end of the step.
+// Inserts a contact, replacing any earlier one for the pair, so impulses end up final.
 void FxScene::record_contact(const FxContact& contact, uint64_t key) {
     auto [it, inserted] = m_step_contact_index.emplace(key, m_step_contacts.size());
     if (inserted) {
@@ -44,8 +42,7 @@ void FxScene::build_contact_events() {
         }
     }
 
-    // The diff walks unordered_maps, whose iteration order is unspecified. Sort by entity id so
-    // repeated runs of the same scene deliver events in the same order.
+    // unordered_map order is unspecified, so sort to keep runs reproducible.
     auto by_entity_id = [](const FxContactEvent& lhs, const FxContactEvent& rhs) {
         uint32_t lhs1 = lhs.entity1 ? lhs.entity1->get_entity_id() : 0;
         uint32_t rhs1 = rhs.entity1 ? rhs.entity1->get_entity_id() : 0;
@@ -79,16 +76,15 @@ void FxScene::reset() {
     m_input.clear();
     m_entities_dirty = false;
 
-    // Put the cast back exactly as it was: entities added since the snapshot go, entities
-    // deleted since come back. Rebuilding rather than patching also clears the AABB tree,
-    // entity ids and collision-exclusion pairs, so nothing survives that shouldn't.
+    // Rebuild rather than patch, so the AABB tree, entity ids and collision-exclusion pairs
+    // are rebuilt too and nothing survives that shouldn't.
     if (m_has_initial_snapshot) {
         m_entities.clear();
         m_constraints.clear();
         m_joints.clear();
         for (const auto& entity : m_initial_entities)
             m_entities.add(entity);
-        // Joints re-register their own constraints, so they go back before the loose ones.
+        // Joints re-register their own constraints, so they go back first.
         for (const auto& joint : m_initial_joints)
             add_joint(joint);
         for (const auto& constraint : m_initial_constraints) {
@@ -229,15 +225,9 @@ void FxScene::sweep_dead_joints() {
     }
 }
 
-// The entity loops below run with std::execution::seq deliberately. They used to use ::par,
-// which measured slower at every body count from 10 to 3000 (the registry cap is 4096) while
-// burning up to 32x the CPU: 0.71 -> 0.22 ms/step at 10 bodies, 22.6 -> 19.9 at 800, and
-// 59.3 -> 48.6 at 3000. The work is memory-bound over shared_ptr-indirected entities and is
-// dispatched once per substep, so thread hand-off and cache traffic cost more than the
-// arithmetic saves. Sequential is also deterministic, which the RL story depends on.
-//
-// Do not reintroduce a parallel policy here without an A/B measurement showing it wins on the
-// scene sizes that matter — see item 7 in docs/ToDo.md.
+// The entity loops below are sequential by measurement: std::execution::par was slower at
+// every body count from 10 to 3000 while burning up to 32x the CPU, because the work is
+// memory-bound and dispatched once per substep. Do not reintroduce it without an A/B run.
 
 // simulation step
 void FxScene::step(double step_dt) {
@@ -248,8 +238,7 @@ void FxScene::step(double step_dt) {
     double clamped_dt = std::clamp(step_dt, m_min_time_step, m_max_time_step);
     const double substep_dt = clamped_dt / static_cast<double>(m_substeps);
 
-    // Whatever the scene looks like when it first runs is what reset() restores, unless the
-    // caller already said otherwise with capture_initial_state().
+    // What the scene looks like when it first runs is what reset() restores.
     if (!m_has_initial_snapshot) capture_initial_state();
 
     // Sweep dead constraints and joints if needed
@@ -260,9 +249,8 @@ void FxScene::step(double step_dt) {
         m_entities_dirty = false;
     }
 
-    // This step's contacts become the previous step's, which the begin/end diff needs. Holding
-    // the previous buffer also keeps entities that stopped touching alive long enough to be
-    // named in an end event, even if they were deleted from the scene meanwhile.
+    // This step's contacts become the previous step's, which the begin/end diff needs, and
+    // keeps entities that stopped touching alive long enough to be named.
     m_prev_contacts.swap(m_step_contacts);
     m_prev_contact_index.swap(m_step_contact_index);
     m_step_contacts.clear();
@@ -311,9 +299,8 @@ void FxScene::step(double step_dt) {
                 uint64_t key =
                     pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
 
-                // A sensor reports overlaps but never exchanges impulses, so its contacts are
-                // buffered for queries and events and then skipped by every solver stage. It
-                // also must not wake a sleeper, since it applies no force to disturb one.
+                // A sensor is buffered for events but skipped by every solver stage, and must
+                // not wake a sleeper since it applies no force.
                 if (c.entity1->is_sensor || c.entity2->is_sensor) {
                     record_contact(c, key);
                     continue;
@@ -394,8 +381,7 @@ void FxScene::step(double step_dt) {
         }
     }
 
-    // The step buffer holds every pair that touched in any substep, so it is the set of live
-    // keys. Sensor pairs are in it too but never reach m_contact_cache, so they evict nothing.
+    // The step buffer is the live key set; sensor pairs never reach the cache, so evict nothing.
     for (auto it = m_contact_cache.begin(); it != m_contact_cache.end();) {
         if (m_step_contact_index.find(it->first) == m_step_contact_index.end()) {
             it = m_contact_cache.erase(it);

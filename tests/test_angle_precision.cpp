@@ -67,14 +67,8 @@ void test_torque_rotates_body_at_min_timestep() {
             "angular velocity must survive the substep integration at dt = 1e-3");
 }
 
-// A revolute motor whose anchor is offset from the child's centre of mass must keep its
-// authority at small timesteps.
-//
-// The pose is float32, and a per-substep constraint correction at dt = 1e-3 can be smaller
-// than one ulp of the coordinate it is added to, so applying it straight into the float pose
-// rounded it away entirely: measured 1.97e-6 rad of rotation over a second, a dead motor.
-// FxEntity::apply_pose_correction banks the leftover in double so successive corrections
-// accumulate until they land, without moving any storage off float.
+// An offset-anchor motor must keep authority at small timesteps. A correction below one ulp
+// of the float pose once rounded away entirely: 1.97e-6 rad over a second, a dead motor.
 float motor_rotation_over_a_second(float origin_x, double dt, int steps) {
     FxScene scene({400.0f, 40.0f});
     scene.set_gravity(FxVec2f{0.0f, 0.0f});

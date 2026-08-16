@@ -50,10 +50,8 @@ class FxScene {
     // Stores only scalar impulses so the cache never keeps entities alive accidentally.
     std::unordered_map<uint64_t, FxContactImpulseCache> m_contact_cache;
 
-    // Contacts observed during the most recent step, one entry per touching pair, and the same
-    // for the step before it. A pair may be found in several substeps; the entry keeps the last
-    // one seen, so solved contacts carry their final accumulated impulses. The previous step's
-    // buffer is retained so end-of-contact events can still name entities that stopped touching.
+    // This step's touching pairs and the previous step's, keeping the last occurrence of each
+    // so impulses are final. The previous buffer lets end events still name their entities.
     std::vector<FxContact> m_step_contacts;
     std::unordered_map<uint64_t, size_t> m_step_contact_index;
     std::vector<FxContact> m_prev_contacts;
@@ -84,17 +82,11 @@ class FxScene {
     FxScene(FxVec2ui SceneSize) : m_entities(m_enitities_limit), size(SceneSize) {}
     ~FxScene() = default;
 
-    // Restores the scene to its initial state: every entity, constraint and joint that existed
-    // when the scene was captured is present again and back at its starting pose, anything
-    // added since is gone, anything deleted since is back, sleep and PID state are cleared,
-    // and the contact caches and input are dropped. A reset is unconditional — no running
-    // scene, callback or held body can decline it.
-    //
-    // The snapshot is taken by capture_initial_state(), automatically on the first step() if
-    // it has not been taken explicitly. Build the scene, then let it step.
+    // Restores the captured composition and every entity to its initial state, clearing sleep,
+    // PID, contact and input state. Unconditional: nothing running can decline it.
     void reset();
-    // Marks the current composition as the state reset() restores. Call it explicitly after
-    // building a scene if you intend to add or remove entities before the first step.
+    // Marks the current composition as what reset() restores. Taken on the first step() if not
+    // called explicitly; call it when entities are added or removed before that.
     void capture_initial_state();
     // simulation step
     void step(double step_dt);
@@ -106,9 +98,8 @@ class FxScene {
     void set_step_callback(const std::function<void(FxScene&, double dt)>& callback) {
         m_func_step_callback = callback;
     }
-    // Called at the end of reset(), once entities are back at their initial state. Anything the
-    // user layered on top of the scene — a held projectile, a score, a game phase — lives
-    // outside the scene and would otherwise survive a reset that is meant to undo everything.
+    // Called at the end of reset(), once entities are restored, so state layered on top of the
+    // scene can be restored too.
     void set_reset_callback(const std::function<void(FxScene&)>& callback) {
         m_func_reset_callback = callback;
     }
@@ -139,19 +130,13 @@ class FxScene {
     // Returns the joint pointer if found; otherwise returns nullptr.
     std::shared_ptr<FxJoint> get_joint(const std::string& name) const;
 
-    // Keyboard and mouse state for this frame.
-    //
-    // A windowed scene has it filled in by FxRylbRenderer once per rendered frame, so a step
-    // callback can drive gameplay without touching raylib. A headless scene has no window and
-    // therefore no input: every query reads false and available() is false, until user code
-    // injects state through the same object, which is how a headless scene scripts triggers.
+    // Keyboard and mouse state, filled by a renderer each frame. A headless scene has none
+    // until user code injects it, which is how it scripts triggers.
     const FxInput& input() const { return m_input; }
     FxInput& input() { return m_input; }
 
-    // Contacts from the most recent step, one entry per touching pair, in broad-phase order
-    // (unspecified, but reproducible across identical runs). Valid until the next call to step()
-    // or reset(). Pairs involving a sensor appear here with zero impulses; every other pair
-    // carries the impulses that were actually applied.
+    // Contacts from the most recent step, one per touching pair, in a reproducible but
+    // unspecified order. Sensor pairs appear with zero impulses. Valid until step() or reset().
     const std::vector<FxContact>& contacts() const { return m_step_contacts; }
     // Pairs that began touching during the most recent step (not touching in the step before).
     const std::vector<FxContactEvent>& begin_contact_events() const { return m_begin_contacts; }
@@ -159,23 +144,14 @@ class FxScene {
     const std::vector<FxContactEvent>& end_contact_events() const { return m_end_contacts; }
 
     // ---------------------------------------------------------------- spatial queries
-    //
-    // These ask what is where, without stepping. Overlap queries run the same narrow phase the
-    // simulation uses, so a query and a contact agree about what is touching.
-    //
-    // Disabled entities and entities without collision geometry are never reported.
-    //
-    // Note these scan the entity list with a cheap bounding-box rejection rather than
-    // descending the broad-phase tree. The tree is only synced during step(), so querying it
-    // between steps — or before the first one — would answer from stale boxes. Correctness
-    // first; if query volume ever justifies it, the fix is to sync the tree on demand.
+    // Overlap runs the simulation's own narrow phase, so queries and contacts agree. Disabled
+    // entities and those without collision geometry are never reported.
 
-    // Nearest entity struck by the ray, searching along `direction` from `origin` out to
-    // `max_distance`. Returns false if nothing was hit. A ray starting inside a body reports
-    // that body at distance 0.
+    // Nearest entity struck, searching `max_distance` along `direction`. A ray starting inside
+    // a body reports it at distance 0.
     bool raycast(const FxVec2f& origin, const FxVec2f& direction, float max_distance,
                  FxRayHit& out_hit) const;
-    // Every entity along the ray, nearest first. Useful for lidar-style observations.
+    // Every entity along the ray, nearest first.
     void raycast_all(const FxVec2f& origin, const FxVec2f& direction, float max_distance,
                      std::vector<FxRayHit>& out_hits) const;
 
@@ -237,14 +213,12 @@ class FxScene {
     std::function<void(FxScene&, double dt)> m_func_step_callback;
     std::function<void(FxScene&)> m_func_reset_callback;
 
-    // The composition reset() restores. Held as shared_ptr so an entity deleted at runtime can
-    // be put back rather than merely forgotten.
+    // Composition reset() restores; shared_ptr so a deleted entity can be put back.
     std::vector<std::shared_ptr<FxEntity>> m_initial_entities;
     std::vector<std::shared_ptr<FxConstraint>> m_initial_constraints;
     std::vector<std::shared_ptr<FxJoint>> m_initial_joints;
     bool m_has_initial_snapshot = false;
 
-    // Filled by the renderer each frame, or by user code in a headless scene. Never read by
-    // the solver — input only reaches the simulation through user callbacks.
+    // Never read by the solver; input reaches the simulation only through user callbacks.
     FxInput m_input;
 };

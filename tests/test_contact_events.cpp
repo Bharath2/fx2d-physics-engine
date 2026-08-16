@@ -127,10 +127,8 @@ void test_end_event_fires_on_separation() {
     require(saw_end, "separating a touching pair must report an end event");
 }
 
-// A solved contact must carry valid geometry every step, and must report the velocity-level
-// impulse that arrested the fall. Note the impulse is the velocity-pass impulse: once the box has
-// settled there is no closing speed left to cancel, so it decays to zero. Holding the box up from
-// then on is the position-level penetration solve, which is not an impulse.
+// A solved contact carries valid geometry every step. The impulse is the velocity-pass one, so
+// it decays to zero once settled: what holds the box up after that is the position solve.
 void test_contact_carries_geometry_and_impact_impulse() {
     FxScene scene = make_scene();
     make_ground(scene, "ground", 6.0f, 1.0f, 8.0f, 0.5f);

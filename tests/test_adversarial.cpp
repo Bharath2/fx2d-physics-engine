@@ -1,21 +1,5 @@
-// Adversarial scenes: tall stacks, high mass ratios, degenerate geometry, restitution
-// chains, and spinning bodies. These are the scenes mature engines are judged on, and the
-// point of the suite is to pin down the envelope the solver provably owns.
-//
-// The thresholds here are measured, not aspirational. Where the solver currently fails, the
-// limit is recorded in docs/ToDo.md rather than asserted, so this file stays green and any
-// regression inside the proven envelope shows up immediately.
-//
-// Assert invariants, not appearances. Two scenes here look like solver failures and are not:
-// a fast-spinning box vaults metres into the air (it has the rotational energy to pay for the
-// height), and a heavy box dropped on a light column scatters it across the floor (a topple,
-// with every body still separated). Both were briefly mistaken for bugs. The lesson is in the
-// tests: check conserved energy rather than height, and check pairwise overlap rather than
-// final height, because a toppled stack and a collapsed one both end up flat on the ground.
-//
-// Note every helper sets BOTH visual and collision geometry. FxEntity::set_inertia() derives
-// inertia from the *visual* shape, so a collision-only body silently gets the inertia of the
-// default 0.5-radius circle, which would make every rotational result here meaningless.
+// Adversarial scenes pinning the envelope the solver provably owns; thresholds are measured.
+// Assert invariants, not appearances: conserved energy over height, overlap over final height.
 
 #include "Fx2D/Physics.h"
 
@@ -31,8 +15,7 @@ namespace {
 
 constexpr double kFrame = 1.0 / 60.0;
 
-// Settle time for the stacking scenes. Long enough for a stack to fail if it is going
-// to, short enough that the suite stays usable under ASan/UBSan in CI.
+// Long enough for a stack to fail if it is going to, short enough to stay usable in CI.
 constexpr int kSettleSteps = 250;
 
 FxScene make_scene() {
@@ -139,8 +122,7 @@ void test_stack_of_fifteen_holds_at_default_substeps() {
             "a 15-box stack must not sink appreciably, sank " + std::to_string(e.max_sink));
 }
 
-// Twenty boxes need more substeps than the default. This documents the trade explicitly:
-// the same scene that collapses at 11 substeps is stable at 22.
+// Twenty boxes collapse at the default 11 substeps and hold at 22.
 void test_stack_of_twenty_holds_with_more_substeps() {
     FxScene scene = make_scene();
     scene.set_substeps(22);
@@ -160,8 +142,7 @@ void test_stack_of_twenty_holds_with_more_substeps() {
                                     std::to_string(e.max_sink));
 }
 
-// Raising the substep count must monotonically improve stack convergence. This is the knob a
-// user reaches for when a stack misbehaves, so it needs to actually work.
+// More substeps must improve convergence: it is the knob users reach for.
 void test_more_substeps_improve_stack_convergence() {
     auto settle_sink = [](size_t substeps) {
         FxScene scene = make_scene();
@@ -231,9 +212,8 @@ void test_hundred_to_one_mass_ratio_does_not_crush() {
                                         std::to_string(light->pose.y()));
 }
 
-// A heavy body dropped on a light column topples it. What must NOT happen is bodies ending up
-// inside one another: a scattered stack and an interpenetrating one both finish flat on the
-// ground, so overlap is the thing to check, not height.
+// A heavy body toppling a light column is fine; bodies ending up inside one another is not,
+// and only overlap distinguishes the two.
 void test_heavy_body_topples_light_stack_without_interpenetration() {
     FxScene scene = make_scene();
     add_ground(scene);
@@ -301,8 +281,7 @@ void test_thin_slivers_rest_stably() {
 
 // ------------------------------------------------------------ restitution chain
 
-// Newton's cradle: a moving ball strikes a row of touching balls and the momentum should
-// come out the far end, leaving the middle ones where they were.
+// Newton's cradle: momentum should come out the far end, leaving the middle balls put.
 void test_restitution_chain_transfers_momentum() {
     FxScene scene = make_scene();
 
@@ -350,14 +329,8 @@ void test_restitution_chain_transfers_momentum() {
 
 // ------------------------------------------------------------ spinning bodies
 
-// Total mechanical energy of a spinning box on an inelastic floor must never rise.
-//
-// This is the invariant that actually matters for a rotating body, and it is worth recording
-// why height is not. A box spun fast enough legitimately vaults off a corner and ends up
-// metres up: at 100 rad/s it carries ~838 J of rotational energy, while lifting a 1 kg box 7 m
-// costs only 70 J. Judging the solver by how high the box goes therefore flags correct physics
-// as a bug. Energy does not lie: with elasticity 0 every contact is dissipative, so the total
-// may fall but must never climb.
+// Energy, not height, is the invariant for a rotating body: a box spun to 100 rad/s carries
+// ~838 J and can legitimately vault metres up, but with elasticity 0 the total must never rise.
 void test_spinning_box_never_gains_energy() {
     auto mechanical_energy = [](const std::shared_ptr<FxEntity>& e, float reference_height) {
         const float w = e->velocity.theta();
@@ -387,8 +360,7 @@ void test_spinning_box_never_gains_energy() {
     }
 }
 
-// At modest spin the box settles in place rather than vaulting. This is the everyday case, a
-// tumbling crate coming to rest, and it must stay well behaved.
+// At modest spin the box settles in place rather than vaulting.
 void test_modest_spin_settles_in_place() {
     const float corner_pivot_height = 1.5f + std::sqrt(2.0f) * 0.5f; // 2.207
 
@@ -420,13 +392,8 @@ void test_modest_spin_settles_in_place() {
 
 // ------------------------------------------------------------ kinematic platform
 
-// A platform driven by prescribed velocity must carry a box on top of it, without the box
-// sinking in or being left behind.
-//
-// Kinematic bodies must be driven by setting `velocity` and letting the integrator move them.
-// Writing `pose` directly leaves `prev_pose` stale, so the velocity-derivation sweep in
-// FxScene::step() reconstructs a bogus velocity from the teleport and friction cannot couple
-// the rider to the surface — the rider is simply left behind and falls off the end.
+// A velocity-driven platform must carry its rider. Kinematic bodies must be moved by setting
+// velocity: writing pose leaves prev_pose stale, so friction cannot couple the rider.
 void test_box_rides_kinematic_platform() {
     FxScene scene = make_scene();
     add_ground(scene);

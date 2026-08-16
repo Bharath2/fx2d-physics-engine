@@ -38,9 +38,7 @@ class FxJoint {
 
     // Accessor method for name
     const std::string& get_name() const { return m_name; }
-    // Clears controller state (integrator windup, derivative history) without touching the
-    // configured gains or targets, which are settings rather than state. Called by
-    // FxScene::reset(), so a motor does not carry windup across a scene reload.
+    // Clears integrator windup and derivative history; gains and targets are settings, kept.
     void reset() { reset_pid_state(); }
 
     // Entity accessor methods (read-only)
