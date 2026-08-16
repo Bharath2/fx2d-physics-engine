@@ -51,6 +51,15 @@ int main(int, char**) {
     int knocked_over = 0;
     float best_hit = 0.0f;
 
+    // "Reset Simulation" in the renderer panel returns every entity to its initial pose, but the
+    // slingshot's own state lives out here — without this the ball would be back at the anchor
+    // yet still flagged as launched, so nothing would hold it and it would drop off the post.
+    scene.set_reset_callback([&](FxScene&) {
+        slingshot.reset(ball);
+        best_hit = 0.0f;
+        knocked_over = 0;
+    });
+
     scene.set_step_callback([&](FxScene& s, double) {
         slingshot.update(s, ball);
 
