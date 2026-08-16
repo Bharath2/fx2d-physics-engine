@@ -4,6 +4,7 @@
 #include "Fx2D/Solver.h"
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 // Motor control mode: track a position, velocity, or direct effort target.
 enum class ControlMode { POSITION, VELOCITY, EFFORT };
@@ -23,9 +24,9 @@ class FxJoint {
     float m_target_effort = 0.0f; // Shared effort target for torque/force control
     bool m_instant = true; // Whether to apply controls instantly or use PID
 
-    // Prefixes every owned constraint with the joint name. Constraints name themselves after
-    // their entity pair, so two joints of the same type across one pair would otherwise
-    // collide in the scene registry and the second joint's constraints would be dropped.
+    // Renames owned constraints to <joint>_<Type>, appending _N on same-type repeats.
+    // Joint names are unique in the registry, so constraint names are unique by construction
+    // and stable under entity renames.
     void namespace_constraints();
     void reset_pid_state();
     void wake_entities();

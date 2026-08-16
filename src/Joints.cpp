@@ -11,8 +11,15 @@ std::string FxJoint::get_entity2_name() const {
 }
 
 void FxJoint::namespace_constraints() {
+    std::unordered_map<std::string, int> seen;
     for (auto& c : m_constraints) {
-        if (c) c->m_name = m_name + "_" + c->m_name;
+        if (!c) continue;
+        // Constraints construct as e1_e2_Type; keep only the type suffix.
+        const std::string& raw = c->m_name;
+        const size_t cut = raw.rfind('_');
+        const std::string type = (cut == std::string::npos) ? raw : raw.substr(cut + 1);
+        const int n = ++seen[type];
+        c->m_name = (n == 1) ? m_name + "_" + type : m_name + "_" + type + "_" + std::to_string(n);
     }
 }
 
