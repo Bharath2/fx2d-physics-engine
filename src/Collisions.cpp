@@ -277,10 +277,12 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
     contact.penetration_depth = 0.0f;
 
     // ----------- CHAIN -----------
-    // A chain is a run of edges sharing one entity, so it resolves to the deepest contact any
-    // one segment makes. Nothing here is new geometry: each segment is handed to the edge paths
-    // below. Chain-vs-chain and chain-vs-edge are skipped for the same reason edge-vs-edge is,
-    // neither side having volume to resolve.
+    // One-sided, front being the left of each segment's authored direction, and solved with
+    // neighbour knowledge for round bodies: handing a segment to the edge path in isolation
+    // gives endpoint contacts whose normal is whatever direction the vertex makes with the
+    // body centre, which at a joint can point along the surface and eject the body through it.
+    // The cure is Box2D's ghost-vertex idea: clamp joint contacts into the arc the two
+    // adjacent faces admit.
     if (A_shape->is_chain() || B_shape->is_chain()) {
         const bool a_is_chain = A_shape->is_chain();
         const FxShape* chain = a_is_chain ? A_shape : B_shape;
@@ -290,22 +292,77 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
             return contact;
         }
 
-        // Chains collide on one side only. A zero-thickness segment has no interior, so a body
-        // that slips behind it would otherwise be pushed further through by a flipped normal
-        // rather than back out. Front is the left of each segment's direction, so a polyline
-        // authored left to right supports bodies above it.
-        const FxVec2f centre = other->centroid();
-        const auto& cv = chain->vertices();
-
-        FxContact best = FxContact(false);
+        const auto cv = chain->vertices();
         const std::size_t segments = chain->segment_count();
-        for (std::size_t i = 0; i < segments; ++i) {
-            const FxVec2f dir = cv[i + 1] - cv[i];
-            const float len = dir.norm();
-            if (len < 1e-8f) continue;
-            const FxVec2f front{-dir.y() / len, dir.x() / len};
-            if ((centre - cv[i]).dot(front) < 0.0f) continue; // body is behind this segment
 
+        auto front_of = [&](std::size_t i) {
+            const FxVec2f d = cv[i + 1] - cv[i];
+            const float len = d.norm();
+            return (len > 1e-8f) ? FxVec2f{-d.y() / len, d.x() / len} : FxVec2f{0.f, 1.f};
+        };
+
+        if (other->is_circle() || other->is_capsule()) {
+            const float r = other->skin_radius();
+            const auto ov = other->vertices();
+
+            float best_depth = -FxInfinityf;
+            FxVec2f best_n{0.f, 1.f};
+            FxVec2f best_p{0.f, 0.f};
+            for (std::size_t i = 0; i < segments; ++i) {
+                // Virtual circle centre: the capsule's is its core point nearest this segment.
+                const FxVec2f c = other->is_circle() ?
+                                      other->centroid() :
+                                      seg_seg_closest(ov[0], ov[1], cv[i], cv[i + 1]).first;
+                const FxVec2f f = front_of(i);
+                if ((c - cv[i]).dot(f) < 0.0f) continue; // behind this face
+
+                const FxVec2f p = FxClosestOnSegment(cv[i], cv[i + 1], c);
+                const FxVec2f d = c - p;
+                const float dist = d.norm();
+                if (dist >= r) continue;
+                FxVec2f n = (dist > 1e-6f) ? d / dist : f;
+                float depth = r - dist;
+
+                // Contact at an interior vertex: only a convex joint has a real corner arc,
+                // and the normal must lie inside it; anything else clamps to the nearer face.
+                const bool at_start = i > 0 && (p - cv[i]).norm() < 1e-5f;
+                const bool at_end = i + 1 < segments && (p - cv[i + 1]).norm() < 1e-5f;
+                if (at_start || at_end) {
+                    const std::size_t j = at_start ? i : i + 1;
+                    const FxVec2f fa = front_of(j - 1);
+                    const FxVec2f fb = front_of(j);
+                    const float turn = fa.cross(fb); // < 0 convex (crest), > 0 concave (valley)
+                    const bool inside =
+                        turn < -1e-6f && fa.cross(n) <= 1e-6f && n.cross(fb) <= 1e-6f;
+                    if (!inside) {
+                        n = (n.dot(fa) >= n.dot(fb)) ? fa : fb;
+                        depth = r - (c - cv[j]).dot(n);
+                        if (depth <= 0.0f) continue;
+                    }
+                }
+                if (depth > best_depth) {
+                    best_depth = depth;
+                    best_n = n;
+                    best_p = p;
+                }
+            }
+            if (best_depth <= 0.0f) {
+                contact.set_valid(false);
+                return contact;
+            }
+            contact.count = 1;
+            contact.penetration_depth = best_depth;
+            contact.normal = a_is_chain ? best_n : -best_n; // keep the A -> B convention
+            contact.position[0] = best_p;
+            return contact;
+        }
+
+        // Polygons go segment by segment through the edge path, whose reference query already
+        // reports face normals, and the deepest contact wins.
+        const FxVec2f centre = other->centroid();
+        FxContact best = FxContact(false);
+        for (std::size_t i = 0; i < segments; ++i) {
+            if ((centre - cv[i]).dot(front_of(i)) < 0.0f) continue;
             const FxShape seg = chain->segment(i);
             FxContact c = a_is_chain ? compute_contact_one_way(&seg, other) :
                                        compute_contact_one_way(other, &seg);
@@ -472,13 +529,22 @@ const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1,
         if (!cAB.is_valid(false) || !cBA.is_valid(false)) return FxContact(false);
         // bias toward cAB: prevents jitter from flipping the reference edge each frame
         float bias = 0.005f * cAB.penetration_depth + 1e-6f;
-        contact = (cBA.penetration_depth < cAB.penetration_depth - bias) ? cBA : cAB;
+        const bool picked_ba = cBA.penetration_depth < cAB.penetration_depth - bias;
+        contact = picked_ba ? cBA : cAB;
+        // one_way(B, A) reports B->A; chains skip the centre-to-centre fixup below, so restore
+        // the convention here instead.
+        if (picked_ba && (A->is_chain() || B->is_chain())) contact.normal = -contact.normal;
     }
 
-    // Ensure normal points from entity1 -> entity2
+    // Ensure normal points from entity1 -> entity2. Skipped for chains: their entity pose is
+    // the polyline origin, not anywhere near the contact, so a centre-to-centre flip is
+    // arbitrary and inverts correct one-sided face normals. The chain branch orients its own.
     if (contact.is_valid(false)) {
-        FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
-        if (delta.dot(contact.normal) < 0.0f) contact.normal = -contact.normal;
+        const bool chain_involved = A->is_chain() || B->is_chain();
+        if (!chain_involved) {
+            FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
+            if (delta.dot(contact.normal) < 0.0f) contact.normal = -contact.normal;
+        }
         contact.entity1 = entity1;
         contact.entity2 = entity2;
         contact.normal = contact.normal.normalized();
@@ -519,7 +585,7 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
     const FxShape* B = entity2->collision_geometry().get();
     // Bare segments carry no skin, so the distance-minus-radii gap math degenerates for them.
     // Edges are static level geometry, where discrete contacts are sufficient.
-    if (A->is_edge() || B->is_edge()) return FxContact(false);
+    if (A->is_edge() || B->is_edge() || A->is_chain() || B->is_chain()) return FxContact(false);
     FxVec2f rel_vel = entity2->velocity.head<2>() - entity1->velocity.head<2>();
 
     FxVec2f normal;
