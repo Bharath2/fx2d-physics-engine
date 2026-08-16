@@ -71,6 +71,10 @@ int main(int, char**) {
             }
         }
 
+        if (in.key_pressed(FxKey::R)) {
+            s.reset();
+            return;
+        }
         if (in.key_pressed(FxKey::C)) {
             for (int i = 0; i < spawned; ++i)
                 s.delete_entity("ball_" + std::to_string(i));

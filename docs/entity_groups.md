@@ -27,6 +27,10 @@ field is public, so the same mechanism works without a group where you only need
 Groups are part of the composition snapshot: `reset()` restores every group with the
 membership it had at capture, exactly as it restores entities, joints and constraints.
 
+Because the group comes back, a reset callback must re-fetch it rather than re-create it:
+`create_group` on the restored name returns nullptr, and anything holding that null group
+silently stops working. `get_group` first, create only if missing.
+
 ## Naming
 
 Entities keep their user-given names. Builders that generate members should name them
