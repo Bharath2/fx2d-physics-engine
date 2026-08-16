@@ -393,7 +393,18 @@ void resolve_velocities(FxContact& contact) {
     // Mass, inertia and other properties
     const float wA = eff_inv_mass(A), wB = eff_inv_mass(B);
     const float IA = eff_inv_inertia(A), IB = eff_inv_inertia(B);
-    const float e = std::clamp(std::min(A.elasticity, B.elasticity), 0.0f, 1.0f);
+    // Restitution mixes with max, friction with min, and the asymmetry is deliberate.
+    //
+    // A bouncy body should bounce off whatever it hits: with min, a rubber ball dropped on a
+    // dead crate inherits the crate's zero and simply stops, which is not what anyone authoring
+    // "make this ball bouncy" expects. Taking the max lets the liveliest surface in the pair
+    // set the bounce, which is also what Box2D does. The cost is that a dead body cannot stay
+    // dead against a bouncy floor — to keep something inert, give the surfaces it lands on a
+    // low elasticity too.
+    //
+    // Friction keeps min for the opposite reason: the slipperiest surface should win, so ice
+    // stays slippery no matter how grippy the thing sliding on it is.
+    const float e = std::clamp(std::max(A.elasticity, B.elasticity), 0.0f, 1.0f);
     const float mu_s = std::clamp(std::min(A.static_friction, B.static_friction), 0.0f, 10.0f);
     const float mu_k = std::clamp(std::min(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
 
