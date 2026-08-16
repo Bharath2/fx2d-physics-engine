@@ -16,10 +16,6 @@ namespace {
 const char* kTowerPieces[] = {"box_l1", "box_r1",  "lintel1", "box_l2",
                               "box_r2", "lintel2", "target"};
 
-Color to_color(const FxVec4ui8& c) {
-    return Color{c[0], c[1], c[2], c[3]};
-}
-
 } // namespace
 
 int main(int, char**) {
@@ -103,7 +99,7 @@ int main(int, char**) {
                                 std::to_string(resting.size()) +
                                 "    hardest hit: " + std::to_string(static_cast<int>(best_hit)) +
                                 (slingshot.launched ? "    [R] reset" : "    drag the ball");
-        DrawText(hud.c_str(), 12, 12, 20, to_color(FxVec4ui8{30, 30, 40, 255}));
+        DrawText(hud.c_str(), 12, 12, 20, to_rl_color(FxVec4ui8{30, 30, 40, 255}));
     });
 
     renderer.run(true);

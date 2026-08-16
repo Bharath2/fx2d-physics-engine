@@ -20,10 +20,6 @@ const FxVec4ui8 kColours[] = {{232, 122, 92, 255},
                               {156, 208, 132, 255},
                               {196, 140, 224, 255}};
 
-Color to_rl(const FxVec4ui8& c) {
-    return Color{c[0], c[1], c[2], c[3]};
-}
-
 } // namespace
 
 int main(int, char**) {
@@ -108,7 +104,7 @@ int main(int, char**) {
             "    in bucket: " + std::to_string(in_bucket) +
             "    overflowed: " + std::to_string(spawned - in_bucket) +
             (raining ? "" : "    [paused]") + "    [space] rain  [C] clear  [R] reset";
-        DrawText(hud.c_str(), 12, 12, 18, to_rl(FxVec4ui8{226, 232, 240, 255}));
+        DrawText(hud.c_str(), 12, 12, 18, to_rl_color(FxVec4ui8{226, 232, 240, 255}));
         (void)r;
     });
 
