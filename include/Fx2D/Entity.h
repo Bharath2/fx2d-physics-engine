@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "Fx2D/Math.h"
+#include "Fx2D/Geometry.h"
 
 inline bool is_valid_name(const std::string& s) {
     if (s.empty()) return false;

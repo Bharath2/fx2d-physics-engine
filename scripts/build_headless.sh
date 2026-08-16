@@ -9,7 +9,8 @@ mkdir -p "$OUT"
 
 CXX=${CXX:-g++}
 EIGEN_INC=${EIGEN_INC:-/usr/include/eigen3}
-FLAGS=(-std=c++20 -O2 -Wall -I include -I "$EIGEN_INC")
+# examples/ is on the path because a test drives the slingshot the demo ships.
+FLAGS=(-std=c++20 -O2 -Wall -I include -I examples -I "$EIGEN_INC")
 LIBS=(-lyaml-cpp -ltbb)
 
 CORE=(src/Entity.cpp src/Scene.cpp src/Collisions.cpp src/Constraints.cpp
