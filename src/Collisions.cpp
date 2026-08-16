@@ -290,9 +290,22 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
             return contact;
         }
 
+        // Chains collide on one side only. A zero-thickness segment has no interior, so a body
+        // that slips behind it would otherwise be pushed further through by a flipped normal
+        // rather than back out. Front is the left of each segment's direction, so a polyline
+        // authored left to right supports bodies above it.
+        const FxVec2f centre = other->centroid();
+        const auto& cv = chain->vertices();
+
         FxContact best = FxContact(false);
         const std::size_t segments = chain->segment_count();
         for (std::size_t i = 0; i < segments; ++i) {
+            const FxVec2f dir = cv[i + 1] - cv[i];
+            const float len = dir.norm();
+            if (len < 1e-8f) continue;
+            const FxVec2f front{-dir.y() / len, dir.x() / len};
+            if ((centre - cv[i]).dot(front) < 0.0f) continue; // body is behind this segment
+
             const FxShape seg = chain->segment(i);
             FxContact c = a_is_chain ? compute_contact_one_way(&seg, other) :
                                        compute_contact_one_way(other, &seg);

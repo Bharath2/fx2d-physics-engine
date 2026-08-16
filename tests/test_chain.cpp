@@ -227,6 +227,31 @@ entities:
     require(threw, "a 2-point chain in YAML must be rejected");
 }
 
+// A chain supports bodies on its front side only. Authored left to right, front is up, so a
+// body underneath passes through rather than being pushed further down by a flipped normal.
+void test_chain_is_one_sided() {
+    FxScene scene = make_scene(FxVec2f{40.0f, 20.0f}, 0.0f);
+    add_chain(scene, "deck", {{2.0f, 10.0f}, {12.0f, 10.0f}, {22.0f, 10.0f}});
+
+    // Sitting just above the deck: supported.
+    auto above = add_circle(scene, "above", {12.0f, 10.3f}, 0.4f, {.elasticity = 0.0f});
+    scene.step(kFrame);
+    bool found_above = false;
+    for (const auto& c : scene.contacts())
+        if (c.entity1->get_name() == "above" || c.entity2->get_name() == "above")
+            found_above = true;
+    require(found_above, "a body resting on the front of a chain must contact it");
+    scene.delete_entity("above");
+
+    // The same overlap from underneath: ignored.
+    add_circle(scene, "below", {12.0f, 9.7f}, 0.4f, {.elasticity = 0.0f});
+    scene.step(kFrame);
+    for (const auto& c : scene.contacts()) {
+        const bool involves = c.entity1->get_name() == "below" || c.entity2->get_name() == "below";
+        require(!involves, "a body behind a chain must not be contacted");
+    }
+}
+
 } // namespace
 
 void run_chain_tests() {
@@ -236,6 +261,7 @@ void run_chain_tests() {
     test_ball_settles_in_a_chain_valley();
     test_body_crosses_segment_joints();
     test_chain_against_chain_is_skipped();
+    test_chain_is_one_sided();
     test_chain_from_yaml();
     test_yaml_chain_rejects_short_input();
     std::cout << "Chain collider tests passed." << std::endl;
