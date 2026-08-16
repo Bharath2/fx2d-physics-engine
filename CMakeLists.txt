@@ -275,6 +275,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_adversarial.cpp
     tests/test_input.cpp
     tests/test_queries.cpp
+    tests/test_chain.cpp
     tests/test_slingshot.cpp
   )
 

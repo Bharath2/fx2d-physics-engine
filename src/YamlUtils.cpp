@@ -104,7 +104,20 @@ FxShape buildShape(const YAML::Node& config) {
         }
         shape = FxShape(verts, skin_radius);
     }
-    // 5) Edge? Zero-thickness segment between two local-frame endpoints.
+    // 5) Chain? Open polyline of zero-thickness segments, for static level geometry.
+    else if (auto chain_node = geom["chain"]) {
+        if (!chain_node.IsSequence() || chain_node.size() < 3)
+            throw std::runtime_error("chain must be a sequence of at least 3 [x,y] points.");
+        std::vector<FxVec2f> pts;
+        for (const auto& pt : chain_node) {
+            if (!pt.IsSequence() || pt.size() != 2)
+                throw std::runtime_error("each chain point must be a 2-sequence.");
+            auto p_ = parseArray<2>(pt);
+            pts.push_back(FxVec2f({p_[0], p_[1]}));
+        }
+        shape = FxShape::make_chain(pts);
+    }
+    // 6) Edge? Zero-thickness segment between two local-frame endpoints.
     else if (auto edge_node = geom["edge"]) {
         if (!edge_node.IsSequence() || edge_node.size() != 2)
             throw std::runtime_error("edge must be a 2-sequence of [x,y] endpoints.");
