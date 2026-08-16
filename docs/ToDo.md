@@ -235,6 +235,12 @@ one-sided, ghost-vertex contact handling).
      'base_link_Anchor' already exists.`, printed by the joint tests) first, since chain
      tests depend on joint constraints registering the way the author expects.
 
+   One open finding from the bucket-fill scene (150-200 balls raining into a floating
+   container): the walls and bucket bottom always hold, but 1-2 balls per 200 end up below
+   the 0.8-thick catch floor, and doubling substeps does not remove it -- so it is not the
+   substep-limited penetration mode. Suspected corner or squeeze ejection under pile load;
+   the test pins the measured envelope at <= 3 until the mechanism is found.
+
    The suite is marked slow and skipped when `FX2D_SKIP_SLOW_TESTS=1`, which CI sets for
    its Debug/sanitizer job only. Release runs it on every push.
 

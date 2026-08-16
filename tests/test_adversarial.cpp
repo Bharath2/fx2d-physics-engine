@@ -415,9 +415,78 @@ void test_box_rides_kinematic_platform() {
                 " platform x=" + std::to_string(platform->pose.x()));
 }
 
+// A floating bucket rained on until it fills and overflows: 150 bodies piling in a confined
+// container. Measured at 200 balls: the bucket retains ~47, the walls are never penetrated,
+// and 1-2 balls escape through the 0.8-thick catch floor regardless of substep count -- that
+// last is a recorded envelope, not an accepted behaviour.
+void test_bucket_fills_and_overflows() {
+    FxScene scene = ::make_scene(FxVec2f{16.0f, 12.0f}); // boundaries contain the overflow
+    auto bottom = add_box(scene, "bkt_bottom", 8.0f, 5.0f, 3.2f, 0.4f, 1.0f);
+    auto left = add_box(scene, "bkt_left", 6.6f, 6.5f, 0.4f, 3.4f, 1.0f);
+    auto right = add_box(scene, "bkt_right", 9.4f, 6.5f, 0.4f, 3.4f, 1.0f);
+    auto floor = add_box(scene, "bkt_floor", 8.0f, 0.4f, 16.0f, 0.8f, 1.0f);
+    for (auto& e : {bottom, left, right, floor}) {
+        e->set_mass(0.0f);
+        e->set_inertia(0.0f);
+        e->enable_external_forces(false);
+        e->gravity_scale = 0.0f;
+    }
+
+    auto group = scene.create_group("balls", true);
+    const int total = 150;
+    int spawned = 0;
+    int steps = 0;
+    while ((spawned < total || steps < spawned * 3 + 240) && steps < 2400) {
+        if (spawned < total && steps % 3 == 0) {
+            const float jitter = 1.7f * std::sin(static_cast<float>(spawned) * 2.399f);
+            const float r = 0.16f + 0.05f * static_cast<float>(spawned % 3);
+            std::vector<std::shared_ptr<FxEntity>> blocking;
+            scene.overlap_circle(FxVec2f{8.0f + jitter, 11.4f}, r + 0.02f, blocking);
+            if (blocking.empty()) {
+                auto b = ::add_circle(scene, "rain_" + std::to_string(spawned),
+                                      {8.0f + jitter, 11.4f}, r,
+                                      {.mass = 0.6f,
+                                       .elasticity = 0.1f,
+                                       .static_friction = 0.4f,
+                                       .dynamic_friction = 0.3f});
+                scene.add_to_group(group, b);
+                ++spawned;
+            }
+        }
+        scene.step(kFrame);
+        ++steps;
+    }
+    require(spawned == total,
+            "the rain must deliver every ball, spawned " + std::to_string(spawned));
+
+    int in_bucket = 0, overflowed = 0, in_wall = 0, below_floor = 0;
+    for (const auto& e : group->members()) {
+        const float x = e->pose.x(), y = e->pose.y();
+        if (x > 6.8f && x < 9.2f && y > 5.2f && y < 8.8f) ++in_bucket;
+        else if (y > 0.7f && y < 5.0f) ++overflowed;
+        if (y <= 0.7f) ++below_floor;
+        auto inside_box = [&](float cx, float cy, float hw, float hh) {
+            return std::fabs(x - cx) < hw - 0.02f && std::fabs(y - cy) < hh - 0.02f;
+        };
+        if (inside_box(6.6f, 6.5f, 0.2f, 1.7f) || inside_box(9.4f, 6.5f, 0.2f, 1.7f) ||
+            inside_box(8.0f, 5.0f, 1.6f, 0.2f))
+            ++in_wall;
+    }
+
+    require(in_wall == 0,
+            "no ball may end up inside a bucket wall, found " + std::to_string(in_wall));
+    require(in_bucket >= 30,
+            "the bucket must retain a full load, held " + std::to_string(in_bucket));
+    require(overflowed >= 30,
+            "the surplus must overflow onto the floor, found " + std::to_string(overflowed));
+    require(below_floor <= 3, "floor escapes beyond the measured envelope of 1-2 per 200: " +
+                                  std::to_string(below_floor));
+}
+
 } // namespace
 
 void run_adversarial_tests() {
+    test_bucket_fills_and_overflows();
     test_stack_of_ten_holds();
     test_stack_of_fifteen_holds_at_default_substeps();
     test_stack_of_twenty_holds_with_more_substeps();
