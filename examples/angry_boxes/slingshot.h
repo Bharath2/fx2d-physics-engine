@@ -47,10 +47,15 @@ struct FxSlingshot {
         if (!ball) return;
         const FxInput& in = scene.input();
 
-        if (launched) {
-            if (in.key_pressed(FxKey::R)) reset(ball);
+        // R re-arms the shot from any state — mid-flight, mid-drag or parked. It only touches
+        // the ball; the tower keeps whatever damage it has taken. Use the renderer's
+        // "Reset Simulation" to put the whole scene back.
+        if (in.key_pressed(FxKey::R)) {
+            reset(ball);
             return;
         }
+
+        if (launched) return;
 
         if (!dragging) {
             // Hold the ball at the anchor so it does not fall while waiting to be fired.
@@ -59,7 +64,6 @@ struct FxSlingshot {
             if (in.mouse_pressed(FxMouseButton::Left) && (cursor - anchor).norm() <= grab_radius) {
                 dragging = true;
             }
-            if (in.key_pressed(FxKey::R)) reset(ball);
             return;
         }
 

@@ -265,9 +265,109 @@ void test_reset_rearms_the_slingshot() {
     require(w.ball->velocity.head<2>().norm() < 1e-3f, "a reset ball must be at rest");
 }
 
+// R must re-arm from any state, including mid-drag, not just after a launch.
+void test_reset_key_works_while_dragging() {
+    World w = make_world();
+    FxSlingshot sling;
+    sling.reset(w.ball);
+
+    frame(w.scene, sling, w.ball, sling.anchor, true);
+    frame(w.scene, sling, w.ball, sling.anchor + FxVec2f{-1.8f, 0.0f}, true);
+    require(sling.dragging, "the ball must be under drag before the reset");
+
+    w.scene.input().begin_frame();
+    w.scene.input().set_key(FxKey::R, true);
+    sling.update(w.scene, w.ball);
+    w.scene.step(kFrame);
+
+    require(!sling.dragging, "R must cancel an in-progress drag");
+    require(!sling.launched, "R must leave the slingshot armed");
+    require_near(w.ball->pose.x(), sling.anchor.x(), 1e-3f, "R must park the ball back at rest");
+    require(w.ball->velocity.head<2>().norm() < 1e-3f,
+            "a cancelled drag must not leave the ball moving");
+}
+
+// Resetting the whole scene must re-arm the slingshot through the reset callback, otherwise the
+// ball returns to the anchor still flagged as launched and simply falls off the post.
+void test_scene_reset_rearms_through_callback() {
+    World w = make_world();
+    FxSlingshot sling;
+    sling.reset(w.ball);
+    w.scene.set_reset_callback([&](FxScene&) { sling.reset(w.ball); });
+
+    grab_drag_release(w, sling, sling.anchor + FxVec2f{-2.0f, 0.0f});
+    for (int i = 0; i < 60; ++i)
+        frame(w.scene, sling, w.ball, sling.anchor, false);
+    require(sling.launched, "the ball must be in flight before the scene reset");
+    require(w.ball->pose.x() > 5.0f, "the ball must have travelled");
+
+    w.scene.reset();
+
+    require(!sling.launched, "a scene reset must re-arm the slingshot");
+    require_near(w.ball->pose.x(), sling.anchor.x(), 1e-3f, "the ball must be parked in x");
+    require_near(w.ball->pose.y(), sling.anchor.y(), 1e-3f, "the ball must be parked in y");
+
+    // And it must stay parked rather than dropping off the post.
+    for (int i = 0; i < 120; ++i)
+        frame(w.scene, sling, w.ball, FxVec2f{15.0f, 8.0f}, false);
+    require_near(w.ball->pose.y(), sling.anchor.y(), 1e-3f,
+                 "the re-armed ball must hold its position, not fall, y=" +
+                     std::to_string(w.ball->pose.y()));
+}
+
+// A launched ball must register contact with each crate it passes, never slip through one.
+// The ball is heavy and fast against light crates, which shoves them aside hard enough to look
+// like tunneling; this pins that the contacts are genuinely there.
+void test_fast_ball_hits_every_crate_in_its_path() {
+    for (float speed : {20.0f, 35.0f, 50.0f}) {
+        FxScene scene({30.0f, 12.0f});
+        scene.set_gravity(FxVec2f{0.0f, -10.0f});
+
+        auto ground = add_box(scene, "ground", 15.0f, 0.5f, 30.0f, 1.0f, 1.0f);
+        ground->set_mass(0.0f);
+        ground->set_inertia(0.0f);
+        ground->enable_external_forces(false);
+        ground->gravity_scale = 0.0f;
+
+        add_box(scene, "c1", 10.5f, 1.4f, 0.5f, 0.8f, 0.32f);
+        add_box(scene, "c2", 11.5f, 1.4f, 0.5f, 0.8f, 0.32f);
+
+        auto ball = std::make_shared<FxEntity>("ball");
+        ball->set_visual_geometry(FxVisualShape(0.32f));
+        ball->set_collision_geometry(FxCollisionShape(0.32f));
+        ball->set_init_pose(FxVec3f{4.0f, 1.4f, 0.0f});
+        ball->set_mass(1.6f);
+        ball->set_inertia();
+        ball->elasticity = 0.5f;
+        ball->enable_ccd = true;
+        scene.add_entity(ball);
+        ball->reset();
+        ball->velocity = FxVec3f{speed, 0.0f, 0.0f};
+
+        bool hit_c1 = false, hit_c2 = false;
+        for (int i = 0; i < 300; ++i) {
+            scene.step(kFrame);
+            for (const auto& c : scene.contacts()) {
+                if (!c.entity1 || !c.entity2) continue;
+                const std::string a = c.entity1->get_name(), b = c.entity2->get_name();
+                if (a != "ball" && b != "ball") continue;
+                if (a == "c1" || b == "c1") hit_c1 = true;
+                if (a == "c2" || b == "c2") hit_c2 = true;
+            }
+        }
+        require(hit_c1, "a ball at " + std::to_string(speed) +
+                            " m/s must register contact with the first crate");
+        require(hit_c2, "a ball at " + std::to_string(speed) +
+                            " m/s must register contact with the second crate too");
+    }
+}
+
 } // namespace
 
 void run_slingshot_tests() {
+    test_reset_key_works_while_dragging();
+    test_scene_reset_rearms_through_callback();
+    test_fast_ball_hits_every_crate_in_its_path();
     test_ball_waits_at_the_anchor();
     test_click_away_from_ball_does_not_grab();
     test_drag_follows_cursor_and_clamps();
