@@ -1,10 +1,5 @@
-// Bucket fill: a floating bucket, balls raining from the top until it fills and overflows.
-//
-//   Space   pause / resume the rain
-//   C       clear the balls
-//   R       reset the scene
-//
-// Build with -DFX2D_BUILD_EXAMPLES=ON and run from the repo root so Scene.yml resolves.
+// A floating bucket, balls raining until it fills and overflows. Space pauses the rain, C
+// clears, R resets. Build with -DFX2D_BUILD_EXAMPLES=ON and run from the repo root.
 
 #include "Fx2D/Core.h"
 

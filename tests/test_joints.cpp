@@ -257,10 +257,8 @@ void test_entity_registry_remove_keeps_broad_phase_consistent() {
             "New entity pair was not discovered");
 }
 
-// Two joints of the same type across one entity pair must each register their own constraints.
-// Constraints name themselves after the entity pair, so without the joint-name prefix the second
-// joint's names collided, the registry rejected them, and its anchor and angle limit were never
-// solved -- while add_joint still reported success.
+// Two joints of the same type across one pair must each register their constraints: without
+// the joint-name prefix the second joint's names collided and were silently dropped.
 void test_two_joints_on_one_pair_keep_their_constraints() {
     FxScene scene({100.0f, 100.0f});
     auto base = make_collision_entity("base", 0.0f, 0.0f);

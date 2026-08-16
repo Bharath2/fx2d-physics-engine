@@ -281,12 +281,8 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         }
     }
 
-    // Get broad phase pairs for collision detection using the dynamic AABB tree.
-    // substep_dt > 0: CCD-enabled entities get a swept AABB (union of current + displaced by v*dt)
-    // so fast movers are paired even when the tight AABB doesn't yet overlap the target's fat AABB.
-    // Sync every tree proxy from current entity state. Moving bodies' boxes are swept by
-    // their travel over sweep_dt, so one sync per step keeps per-substep queries a superset
-    // of what per-substep syncing found.
+    // Sync every tree proxy from current entity state; CCD bodies' boxes are swept by their
+    // travel over sweep_dt so fast movers pair before their tight boxes touch.
     void sync_broad_phase(float sweep_dt = 0.0f) const {
         for (size_t i = 0; i < m_items_vec.size(); ++i) {
             const auto& e = m_items_vec[i];
