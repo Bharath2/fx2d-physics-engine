@@ -226,3 +226,12 @@ Two things the example demonstrates that are easy to get wrong:
 The example runs at `dt = 0.01`, where the effect is negligible. If a motor seems weak or dead, try a larger timestep, or move the scene closer to the origin, before re-tuning gains. Anchoring the joint at the child's centre of mass also avoids it, since rotation about the centroid does not displace the anchor.
 
 Note that a related but distinct bug — `FxAngleWrap` rounding away any rotation under `1.2e-7` rad, which froze *all* angular motion at small timesteps — has been fixed. Free bodies and centre-anchored joints now rotate correctly at `dt = 1e-3`.
+
+## Constraint naming
+
+A joint's constraints are registered as `<jointname>_<Type>` — `lift_Anchor`,
+`bridge_j3_AngleLmt` — with `_N` appended only when one joint owns several constraints of the
+same type. Joint names are unique in the registry, so constraint names are unique by
+construction, and they survive entity renames because the entity pair is not part of the name.
+The YAML `joints:` section is name-keyed, so authored joint names flow straight through.
+Standalone constraints added directly with `add_constraint` keep their `e1_e2_Type` names.

@@ -280,10 +280,10 @@ void test_two_joints_on_one_pair_keep_their_constraints() {
             "the second joint's constraints must register too, total is " +
                 std::to_string(scene.constraint_count()));
 
-    // Named after their joint, so they are addressable and cannot collide.
-    require(scene.get_constraint("first_base_link_Anchor") != nullptr,
+    // Named <joint>_<Type>, so they are addressable, unique, and stable under entity renames.
+    require(scene.get_constraint("first_Anchor") != nullptr,
             "the first joint's anchor must be registered under its joint name");
-    require(scene.get_constraint("second_base_link_Anchor") != nullptr,
+    require(scene.get_constraint("second_Anchor") != nullptr,
             "the second joint's anchor must be registered under its joint name");
 
     // Deleting one joint must leave the other's constraints alone.
@@ -291,7 +291,7 @@ void test_two_joints_on_one_pair_keep_their_constraints() {
     require(scene.constraint_count() == 2,
             "deleting one joint must remove only its own constraints, left " +
                 std::to_string(scene.constraint_count()));
-    require(scene.get_constraint("second_base_link_Anchor") != nullptr,
+    require(scene.get_constraint("second_Anchor") != nullptr,
             "the surviving joint must keep its constraints");
 }
 
