@@ -66,15 +66,6 @@ std::pair<FxVec2f, FxVec2f> clip_edge(const FxVec2f& p1, const FxVec2f& q1, cons
 // Geometric helpers used by capsule reductions
 // ----------------------------------------------------------------------
 
-// Closest point on segment [a,b] to query point p.
-static FxVec2f closest_on_segment(const FxVec2f& a, const FxVec2f& b, const FxVec2f& p) {
-    FxVec2f ab = b - a;
-    float len2 = ab.dot(ab);
-    if (len2 < 1e-12f) return a;
-    float t = std::clamp((p - a).dot(ab) / len2, 0.0f, 1.0f);
-    return a + t * ab;
-}
-
 // Closest pair of points between two segments [a1,b1] and [a2,b2].
 // Returns {point on seg1, point on seg2}. Handles parallel and degenerate cases.
 static std::pair<FxVec2f, FxVec2f> seg_seg_closest(const FxVec2f& a1, const FxVec2f& b1,
@@ -115,7 +106,7 @@ static std::pair<FxVec2f, FxVec2f> seg_seg_closest(const FxVec2f& a1, const FxVe
 // Closest point on a capsule's central segment to a query world point.
 static FxVec2f closest_on_capsule_segment(const FxShape* capsule, const FxVec2f& p) {
     const auto& v = capsule->vertices();
-    return closest_on_segment(v[0], v[1], p);
+    return FxClosestOnSegment(v[0], v[1], p);
 }
 
 // Closest pair of points between a capsule's segment and a polygon's boundary.

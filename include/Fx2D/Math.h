@@ -98,6 +98,15 @@ class FxVec2f : public Eigen::Vector2f {
     }
 };
 
+// Closest point on segment [a,b] to p.
+static inline FxVec2f FxClosestOnSegment(const FxVec2f& a, const FxVec2f& b, const FxVec2f& p) {
+    FxVec2f ab = b - a;
+    float len2 = ab.dot(ab);
+    if (len2 < 1e-12f) return a;
+    float t = std::clamp((p - a).dot(ab) / len2, 0.0f, 1.0f);
+    return a + t * ab;
+}
+
 // Custom 2D double vector with .x() getter and .set_x() setter.
 class FxVec2d : public Eigen::Vector2d {
   public:
@@ -1420,6 +1429,30 @@ struct FxShape {
 
     // A zero-skin capsule is a bare segment: zero area, zero inertia, static level geometry.
     bool is_edge() const { return m_shape_type == FxShapeType::Capsule && m_skin_radius <= 1e-6f; }
+
+    // Is the world point inside this shape, skin included? Convex only, which every FxShape is.
+    bool contains(const FxVec2f& p) const {
+        const size_t n = m_world_vertices.size();
+        if (n == 0) return (p - m_centroid).norm() <= m_skin_radius;
+        if (n == 2) {
+            const FxVec2f closest = FxClosestOnSegment(m_world_vertices[0], m_world_vertices[1], p);
+            return (p - closest).norm() <= m_skin_radius;
+        }
+        // Same side of every edge. Accepting either sign keeps it winding-agnostic; the skin is
+        // exact away from the corners and conservative at them.
+        bool all_left = true, all_right = true;
+        for (size_t i = 0; i < n; ++i) {
+            const FxVec2f& a = m_world_vertices[i];
+            const FxVec2f& b = m_world_vertices[(i + 1) % n];
+            const FxVec2f edge = b - a;
+            const float len = edge.norm();
+            if (len < 1e-8f) continue;
+            const float side = edge.cross(p - a) / len;
+            if (side < -m_skin_radius) all_left = false;
+            if (side > m_skin_radius) all_right = false;
+        }
+        return all_left || all_right;
+    }
 
     // Get area of the shape (handles circle, capsule, and polygon — skin radius included)
     float area() const {
