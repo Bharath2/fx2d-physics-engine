@@ -6,7 +6,7 @@ A 2D rigid body physics engine written in C++20, using SAT collision detection, 
 ![2D rigid body stacking simulation](./examples/stacked_boxes/play.gif)
 
 ## Key Features
-- **Unified shape model:** Circles, capsules, edges, polygons, and rounded (skin-radius) rectangles and polygons, all stored as `vertices[] + skin_radius` and handled by one skin-aware SAT narrow phase
+- **Unified shape model:** Circles, capsules, edges, chains (open polylines for level geometry), polygons, and rounded (skin-radius) rectangles and polygons, all stored as `vertices[] + skin_radius` and handled by one skin-aware SAT narrow phase
 - **Dynamic AABB broad phase:** SAH-guided dynamic AABB tree with fat boxes and dual-tree pair descent
 - **Continuous collision:** Opt-in speculative contacts (`ccd: true`) that anticipate impacts to curb tunneling for fast bodies
 - **XPBD constraint solver:** Substepped position-based dynamics with compliance control, warm starting, and Coulomb friction
@@ -113,7 +113,7 @@ Headless examples skip the graphics stack entirely:
 
 ![2D joint motor control demo](./examples/joint_control_demo/play.gif)
 
-**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute and prismatic joint motor control (position, velocity, and effort modes) · [angry_boxes](./examples/angry_boxes/) — mouse-driven slingshot: drag the ball back, release, topple the tower
+**Available examples:** [stacked_boxes](./examples/stacked_boxes/) · [truck](./examples/truck/) · [joint_control_demo](./examples/joint_control_demo/) — revolute and prismatic joint motor control (position, velocity, and effort modes) · [angry_boxes](./examples/angry_boxes/) — mouse-driven slingshot: drag the ball back, release, topple the tower · [chain_terrain](./examples/chain_terrain/) — chain collider terrain: click to drop balls and watch them settle
 
 ## Documentation
 

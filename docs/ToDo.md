@@ -78,7 +78,8 @@ ordering fix, the adversarial scene suite, and keyboard/mouse input).
 
 4. Add more examples and docs around newer features.
    `examples/angry_boxes` covers mouse input, the draw overlay and impact strength read from
-   `FxScene::contacts()`. Still open:
+   `FxScene::contacts()`; `examples/chain_terrain` covers chain colliders and spawning entities
+   at runtime. Still open:
    - a sensor / trigger example — a goal region that fires a begin-contact event, the half of
      item 2 slice (a) no example demonstrates yet
    - ray-cast / overlap examples — still blocked on item 2 slice (b)

@@ -1,0 +1,47 @@
+scene:
+    size: [20, 11]
+    gravity: [0, -10]
+    background: [28, 34, 48, 255]
+
+entities:
+    # A single chain entity: hills, a valley and a lip, none of which a convex polygon
+    # could express on its own.
+    terrain:
+        pose: [0, 0, 0]
+        physics:
+            mass: 0.0
+            elasticity: 0.1
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.55
+            dynamic_friction: 0.45
+        visual:
+            geometry:
+                chain: [[0.5, 8.5], [3.0, 6.2], [5.5, 5.4], [7.5, 3.2],
+                        [10.0, 2.2], [12.5, 2.6], [14.5, 4.4], [16.0, 3.6],
+                        [17.5, 4.6], [19.5, 4.2]]
+            border_color: [122, 196, 140, 255]
+            border_thickness: 5.0
+        collision:
+            geometry:
+                chain: [[0.5, 8.5], [3.0, 6.2], [5.5, 5.4], [7.5, 3.2],
+                        [10.0, 2.2], [12.5, 2.6], [14.5, 4.4], [16.0, 3.6],
+                        [17.5, 4.6], [19.5, 4.2]]
+
+    # A catch floor, so anything leaving the chain does not fall forever.
+    floor:
+        pose: [10, 0.4, 0]
+        physics:
+            mass: 0.0
+            elasticity: 0.0
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.8
+            dynamic_friction: 0.7
+        visual:
+            geometry:
+                rectangle: [20.0, 0.8]
+            texture: [52, 60, 78, 255]
+        collision:
+            geometry:
+                rectangle: [20.0, 0.8]
