@@ -1,7 +1,7 @@
 // Fx2D step-time benchmark. Build with -DFX2D_BUILD_BENCH=ON, run as: Fx2DBench [steps]
 // Reports wall and CPU time per step, so speed bought with cores is visible as such.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 #include <chrono>
 #include <cmath>

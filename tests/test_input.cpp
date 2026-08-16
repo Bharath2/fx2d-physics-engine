@@ -1,7 +1,7 @@
 // Input state machine: edge detection, mouse state, and headless injection. The same interface
 // exists with or without a window; both paths go through the producer API exercised here.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 #include "test_harness.h"
 #include "test_scene_builders.h"

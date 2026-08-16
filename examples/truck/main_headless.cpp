@@ -1,7 +1,8 @@
 // Headless truck: same constraint rig as examples/truck/main.cpp, text report only.
 // Build/run from repo root: ./scripts/build_headless.sh && ./build-headless/truck_headless
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
+#include "Fx2D/YamlUtils.h"
 
 #include <iomanip>
 #include <iostream>

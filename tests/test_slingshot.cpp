@@ -1,7 +1,7 @@
 // The slingshot mechanic, driven headlessly by injecting mouse state through the same
 // producer API a renderer fills, since a GUI cannot run in CI.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 #include "angry_boxes/slingshot.h"
 #include "test_harness.h"

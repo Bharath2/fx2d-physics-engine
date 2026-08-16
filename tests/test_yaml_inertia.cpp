@@ -2,7 +2,7 @@
 // set_inertia() once ran before the visual shape was attached, so every entity got the default
 // 0.5-circle inertia of 0.125 * mass whatever its geometry.
 
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 #include "Fx2D/YamlUtils.h"
 
 #include "test_harness.h"

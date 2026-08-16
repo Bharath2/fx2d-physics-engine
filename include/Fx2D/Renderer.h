@@ -15,7 +15,7 @@
 #include <unordered_map>
 
 #include "Fx2D/Math.h"
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
 
 class FxRylbRenderer {
   protected:
