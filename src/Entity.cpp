@@ -48,6 +48,13 @@ void FxEntity::reset() {
     m_eff_moment = 0.0f;
     m_eff_impulse = {0.0f, 0.0f};
     m_eff_impulse_moment = 0.0f;
+    // A body that fell asleep before the reset must not stay frozen afterwards.
+    m_sleeping = false;
+    m_sleep_timer = 0.0f;
+    // Push the restored pose into the shapes so bounding boxes and the broad-phase tree do not
+    // keep describing where the entity used to be until the next step.
+    if (m_collision) m_collision->set_world_pose(pose);
+    if (m_visual) m_visual->set_world_pose(pose);
 }
 
 // method to set initial pose
