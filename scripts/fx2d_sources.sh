@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-find include/Fx2D src tests examples \
+find include/Fx2D src tests examples scripts/bench \
   \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
   ! -path '*/lib/*' \
   ! -path '*/build*/*' \

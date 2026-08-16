@@ -68,7 +68,7 @@ jobs:
       - name: clang-tidy (physics core)
         run: |
           ./scripts/gen_lint_compile_db.sh build-lint
-          clang-tidy -p build-lint --quiet \
+          clang-tidy --config-file=scripts/.clang-tidy -p build-lint --quiet \
             src/Entity.cpp \
             src/Scene.cpp \
             src/Collisions.cpp \

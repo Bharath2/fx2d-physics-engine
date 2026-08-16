@@ -132,7 +132,7 @@ Headless examples skip the graphics stack entirely:
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the
+Contributions are welcome — see [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for the
 workflow, lint gate (`./scripts/lint.sh`), and how to run the test suite.
 
 ## License

@@ -70,7 +70,7 @@ if [[ $DO_TIDY -eq 1 ]]; then
       src/Joints.cpp
       src/YamlUtils.cpp
     )
-    if ! clang-tidy -p build-lint --quiet "${TIDY_FILES[@]}"; then
+    if ! clang-tidy --config-file="$(cd "$(dirname "$0")" && pwd)/.clang-tidy" -p build-lint --quiet "${TIDY_FILES[@]}"; then
       echo "clang-tidy reported issues" >&2
       status=1
     else
