@@ -229,36 +229,19 @@ bool FxEntity::aabb_overlap_check(const std::shared_ptr<FxEntity>& other) const 
 
 // Update pose from velocity using mixed precision
 void FxEntity::__update_pose(const double& step_dt) {
-    // Do math in double, store to float, track what didn't fit
-    auto carry_add = [](float& dst, double inc, double& carry) {
-        double s = (double)dst + inc + carry;
-        float f = (float)s;
-        carry = s - (double)f;
-        dst = f;
-    };
-    carry_add(pose.x(), (double)velocity.x() * step_dt, m_pose_carry.x());
-    carry_add(pose.y(), (double)velocity.y() * step_dt, m_pose_carry.y());
-    carry_add(pose.theta(), (double)velocity.theta() * step_dt, m_pose_carry.theta());
+    FxCarryAdd(pose.x(), (double)velocity.x() * step_dt, m_pose_carry.x());
+    FxCarryAdd(pose.y(), (double)velocity.y() * step_dt, m_pose_carry.y());
+    FxCarryAdd(pose.theta(), (double)velocity.theta() * step_dt, m_pose_carry.theta());
     // wrap to [-pi, pi) when incremented
     pose.set_theta(FxAngleWrap(pose.theta()));
 }
 
 // Mixed-precision correction, reporting how much survived rounding into the float pose.
 FxVec3f FxEntity::apply_pose_correction(const FxVec3f& delta) {
-    auto carry_add = [](float& dst, double inc, double& carry) -> float {
-        const double sum = static_cast<double>(dst) + inc + carry;
-        const float rounded = static_cast<float>(sum);
-        carry = sum - static_cast<double>(rounded);
-        const float applied = rounded - dst;
-        dst = rounded;
-        return applied;
-    };
-
     FxVec3f applied{0.0f, 0.0f, 0.0f};
-    applied.x() = carry_add(pose.x(), static_cast<double>(delta.x()), m_correction_carry.x());
-    applied.y() = carry_add(pose.y(), static_cast<double>(delta.y()), m_correction_carry.y());
-    applied.theta() =
-        carry_add(pose.theta(), static_cast<double>(delta.theta()), m_correction_carry.theta());
+    applied.x() = FxCarryAdd(pose.x(), (double)delta.x(), m_correction_carry.x());
+    applied.y() = FxCarryAdd(pose.y(), (double)delta.y(), m_correction_carry.y());
+    applied.theta() = FxCarryAdd(pose.theta(), (double)delta.theta(), m_correction_carry.theta());
     return applied;
 }
 

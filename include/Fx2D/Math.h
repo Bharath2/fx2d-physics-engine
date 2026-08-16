@@ -28,6 +28,17 @@ static inline float FxAngleWrap(float angle) {
     return angle - FxPif;
 }
 
+// Add inc to a float accumulator in double, keeping whatever did not survive the rounding in
+// carry so the next call folds it back in. Returns the delta that actually landed.
+static inline float FxCarryAdd(float& dst, double inc, double& carry) {
+    double s = (double)dst + inc + carry;
+    float f = (float)s;
+    carry = s - (double)f;
+    float d = f - dst;
+    dst = f;
+    return d;
+}
+
 // concept to capture float, double, long double, int etc..
 template<typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
@@ -1285,18 +1296,6 @@ struct FxShape {
         return std::sqrt(maxSq);
     }
 
-    // 2) Shoelace‐formula signed area (returns signed area, caller checks validity)
-    static float polygon_area(const FxVec2fArray& verts) {
-        double sum = 0.0;
-        const size_t n = verts.size();
-        for (size_t i = 0; i < n; ++i) {
-            const FxVec2f& a = verts[i];
-            const FxVec2f& b = verts[(i + 1) % n];
-            sum += double(a.x()) * b.y() - double(b.x()) * a.y();
-        }
-        return float(0.5 * sum); // >0 ⇒ CCW, <0 ⇒ CW
-    }
-
     // 3) Convexity: all cross‐products have same sign
     static bool is_convex(const FxVec2fArray& verts) {
         size_t n = verts.size();
@@ -1388,6 +1387,18 @@ struct FxShape {
         m_skin_radius = skin_radius;
         m_radius = std::sqrt(hx * hx + hy * hy) + skin_radius;
         m_world_vertices = m_vertices;
+    }
+
+    // Shoelace signed area of a vertex loop: >0 counter-clockwise, <0 clockwise.
+    static float polygon_area(const FxVec2fArray& verts) {
+        double sum = 0.0;
+        const size_t n = verts.size();
+        for (size_t i = 0; i < n; ++i) {
+            const FxVec2f& a = verts[i];
+            const FxVec2f& b = verts[(i + 1) % n];
+            sum += double(a.x()) * b.y() - double(b.x()) * a.y();
+        }
+        return float(0.5 * sum);
     }
 
     // getters for shape properties

@@ -35,18 +35,6 @@ float ray_segment(const FxVec2f& origin, const FxVec2f& dir, const FxVec2f& a, c
     return t;
 }
 
-// Twice the signed area of the vertex loop: positive for counter-clockwise winding.
-float signed_area(const FxVec2fArray& verts) {
-    float total = 0.0f;
-    const size_t n = verts.size();
-    for (size_t i = 0; i < n; ++i) {
-        const FxVec2f& a = verts[i];
-        const FxVec2f& b = verts[(i + 1) % n];
-        total += a.cross(b);
-    }
-    return total;
-}
-
 // Is the point within the shape, skin included?
 bool point_inside(const FxShape& shape, const FxVec2f& p) {
     const float skin = shape.skin_radius();
@@ -110,7 +98,7 @@ float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
 
     // Winding differs between shape constructors, so measure it. A 2-vertex capsule encloses
     // no area, and its two edges already face opposite ways, so it needs no flip.
-    const float outward_sign = (n >= 3 && signed_area(verts) < 0.0f) ? -1.0f : 1.0f;
+    const float outward_sign = (n >= 3 && FxShape::polygon_area(verts) < 0.0f) ? -1.0f : 1.0f;
 
     for (size_t i = 0; i < n; ++i) {
         const FxVec2f a = verts[i];
