@@ -3,6 +3,7 @@
 #include "Fx2D/Physics.h"
 
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -14,28 +15,12 @@ namespace {
 
 std::shared_ptr<FxEntity> add_box(FxScene& scene, const std::string& name, float cx, float cy,
                                   float w, float h) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_visual_geometry(FxVisualShape(FxVec2f{w, h}));
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(1.0f);
-    e->set_inertia();
-    scene.add_entity(e);
-    e->reset();
-    return e;
+    return ::add_box(scene, name, {cx, cy}, {w, h});
 }
 
 std::shared_ptr<FxEntity> add_circle(FxScene& scene, const std::string& name, float cx, float cy,
                                      float r) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_visual_geometry(FxVisualShape(r));
-    e->set_collision_geometry(FxCollisionShape(r));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(1.0f);
-    e->set_inertia();
-    scene.add_entity(e);
-    e->reset();
-    return e;
+    return ::add_circle(scene, name, {cx, cy}, r);
 }
 
 bool contains(const std::vector<std::shared_ptr<FxEntity>>& v, const std::string& name) {
@@ -45,7 +30,7 @@ bool contains(const std::vector<std::shared_ptr<FxEntity>>& v, const std::string
 }
 
 FxScene make_scene() {
-    return FxScene(FxVec2ui{40u, 40u});
+    return ::make_scene(FxVec2f{40.0f, 40.0f}, 0.0f);
 }
 
 // A ray down a clear lane hits nothing.

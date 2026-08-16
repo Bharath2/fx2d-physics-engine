@@ -4,6 +4,7 @@
 #include "Fx2D/Physics.h"
 
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -147,14 +148,7 @@ void test_headless_injection_drives_step_callback() {
     FxScene scene({20.0f, 20.0f});
     scene.set_gravity(FxVec2f{0.0f, 0.0f});
 
-    auto body = std::make_shared<FxEntity>("body");
-    body->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    body->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    body->set_init_pose(FxVec3f{10.0f, 10.0f, 0.0f});
-    body->set_mass(1.0f);
-    body->set_inertia();
-    scene.add_entity(body);
-    body->reset();
+    auto body = add_box(scene, "body", {10.0f, 10.0f}, {1.0f, 1.0f});
 
     int callback_saw_key = 0;
     scene.set_step_callback([&](FxScene& s, double) {
@@ -220,14 +214,7 @@ void test_scene_reset_clears_input() {
 void test_reset_callback_fires_after_entities_are_restored() {
     FxScene scene({20.0f, 20.0f});
 
-    auto body = std::make_shared<FxEntity>("body");
-    body->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    body->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    body->set_init_pose(FxVec3f{5.0f, 5.0f, 0.0f});
-    body->set_mass(1.0f);
-    body->set_inertia();
-    scene.add_entity(body);
-    body->reset();
+    auto body = add_box(scene, "body", {5.0f, 5.0f}, {1.0f, 1.0f});
 
     int fired = 0;
     float body_x_seen_by_callback = -1.0f;
@@ -256,34 +243,16 @@ void test_reset_restores_scene_composition() {
     FxScene scene({20.0f, 20.0f});
     scene.set_gravity(FxVec2f{0.0f, 0.0f});
 
-    auto keeper = std::make_shared<FxEntity>("keeper");
-    keeper->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    keeper->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    keeper->set_init_pose(FxVec3f{5.0f, 5.0f, 0.0f});
-    keeper->set_mass(1.0f);
-    keeper->set_inertia();
-    scene.add_entity(keeper);
+    auto keeper = add_box(scene, "keeper", {5.0f, 5.0f}, {1.0f, 1.0f});
 
-    auto doomed = std::make_shared<FxEntity>("doomed");
-    doomed->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    doomed->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    doomed->set_init_pose(FxVec3f{9.0f, 5.0f, 0.0f});
-    doomed->set_mass(1.0f);
-    doomed->set_inertia();
-    scene.add_entity(doomed);
+    auto doomed = add_box(scene, "doomed", {9.0f, 5.0f}, {1.0f, 1.0f});
 
     scene.step(kFrame); // captures the initial composition
     require(scene.entity_count() == 2, "the scene must start with both entities");
 
     // Mutate the scene the way a running game would.
     scene.delete_entity("doomed");
-    auto spawned = std::make_shared<FxEntity>("spawned");
-    spawned->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    spawned->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    spawned->set_init_pose(FxVec3f{12.0f, 5.0f, 0.0f});
-    spawned->set_mass(1.0f);
-    spawned->set_inertia();
-    scene.add_entity(spawned);
+    auto spawned = add_box(scene, "spawned", {12.0f, 5.0f}, {1.0f, 1.0f});
     scene.step(kFrame);
 
     require(scene.entity_count() == 2, "after the edit there should still be two entities");
@@ -303,25 +272,9 @@ void test_reset_wakes_sleeping_bodies() {
     FxScene scene({20.0f, 20.0f});
     scene.set_gravity(FxVec2f{0.0f, -10.0f});
 
-    auto ground = std::make_shared<FxEntity>("ground");
-    ground->set_visual_geometry(FxVisualShape(FxVec2f{18.0f, 1.0f}));
-    ground->set_collision_geometry(FxCollisionShape(FxVec2f{18.0f, 1.0f}));
-    ground->set_init_pose(FxVec3f{10.0f, 1.0f, 0.0f});
-    ground->set_mass(0.0f);
-    ground->set_inertia(0.0f);
-    ground->enable_external_forces(false);
-    ground->gravity_scale = 0.0f;
-    scene.add_entity(ground);
+    make_static(add_box(scene, "ground", {10.0f, 1.0f}, {18.0f, 1.0f}));
 
-    auto box = std::make_shared<FxEntity>("box");
-    box->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    box->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    box->set_init_pose(FxVec3f{10.0f, 2.0f, 0.0f});
-    box->set_mass(1.0f);
-    box->set_inertia();
-    box->elasticity = 0.0f;
-    scene.add_entity(box);
-    box->reset();
+    auto box = add_box(scene, "box", {10.0f, 2.0f}, {1.0f, 1.0f}, {.elasticity = 0.0f});
 
     for (int i = 0; i < 240 && !box->is_sleeping(); ++i)
         scene.step(kFrame);
@@ -336,24 +289,9 @@ void test_reset_clears_accumulated_scene_state() {
     FxScene scene({20.0f, 20.0f});
     scene.set_gravity(FxVec2f{0.0f, -10.0f});
 
-    auto ground = std::make_shared<FxEntity>("ground");
-    ground->set_visual_geometry(FxVisualShape(FxVec2f{18.0f, 1.0f}));
-    ground->set_collision_geometry(FxCollisionShape(FxVec2f{18.0f, 1.0f}));
-    ground->set_init_pose(FxVec3f{10.0f, 1.0f, 0.0f});
-    ground->set_mass(0.0f);
-    ground->set_inertia(0.0f);
-    ground->enable_external_forces(false);
-    ground->gravity_scale = 0.0f;
-    scene.add_entity(ground);
+    make_static(add_box(scene, "ground", {10.0f, 1.0f}, {18.0f, 1.0f}));
 
-    auto box = std::make_shared<FxEntity>("box");
-    box->set_visual_geometry(FxVisualShape(FxVec2f{1.0f, 1.0f}));
-    box->set_collision_geometry(FxCollisionShape(FxVec2f{1.0f, 1.0f}));
-    box->set_init_pose(FxVec3f{10.0f, 2.0f, 0.0f});
-    box->set_mass(1.0f);
-    box->set_inertia();
-    scene.add_entity(box);
-    box->reset();
+    auto box = add_box(scene, "box", {10.0f, 2.0f}, {1.0f, 1.0f});
 
     for (int i = 0; i < 60; ++i)
         scene.step(kFrame);

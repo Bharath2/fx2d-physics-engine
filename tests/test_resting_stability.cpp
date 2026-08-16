@@ -3,6 +3,7 @@
 #include "Fx2D/Physics.h"
 
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -15,52 +16,31 @@ namespace {
 // Static collider: zero inverse mass, unaffected by gravity or impulses.
 std::shared_ptr<FxEntity> make_ground(FxScene& scene, float cx, float cy, float w, float h,
                                       float elasticity = 0.6f) {
-    auto e = std::make_shared<FxEntity>("ground");
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(0.0f);
-    e->set_inertia(0.0f);
-    e->enable_external_forces(false);
-    e->gravity_scale = 0.0f;
-    e->elasticity = elasticity;
-    e->static_friction = 0.5f;
-    e->dynamic_friction = 0.4f;
-    scene.add_entity(e);
-    return e;
+    return make_static(
+        add_box(scene, "ground", {cx, cy}, {w, h},
+                {.elasticity = elasticity, .static_friction = 0.5f, .dynamic_friction = 0.4f}));
 }
 
 std::shared_ptr<FxEntity> make_box(FxScene& scene, const std::string& name, float cx, float cy,
                                    float w, float h, float mass, float elasticity) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(mass);
-    e->set_inertia();
-    e->elasticity = elasticity;
-    e->static_friction = 0.5f;
-    e->dynamic_friction = 0.4f;
-    scene.add_entity(e);
-    return e;
+    return add_box(scene, name, {cx, cy}, {w, h},
+                   {.mass = mass,
+                    .elasticity = elasticity,
+                    .static_friction = 0.5f,
+                    .dynamic_friction = 0.4f});
 }
 
 std::shared_ptr<FxEntity> make_ball(FxScene& scene, const std::string& name, float cx, float cy,
                                     float r, float mass, float elasticity) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_collision_geometry(FxCollisionShape(r));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(mass);
-    e->set_inertia();
-    e->elasticity = elasticity;
-    e->static_friction = 0.3f;
-    e->dynamic_friction = 0.2f;
-    scene.add_entity(e);
-    return e;
+    return add_circle(scene, name, {cx, cy}, r,
+                      {.mass = mass,
+                       .elasticity = elasticity,
+                       .static_friction = 0.3f,
+                       .dynamic_friction = 0.2f});
 }
 
 FxScene make_scene() {
-    FxScene scene({12.0f, 8.0f});
-    scene.set_gravity(FxVec2f{0.0f, -10.0f});
-    return scene;
+    return ::make_scene(FxVec2f{12.0f, 8.0f});
 }
 
 struct Trace {

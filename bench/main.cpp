@@ -19,16 +19,16 @@ double cpu_seconds() {
     return static_cast<double>(std::clock()) / CLOCKS_PER_SEC;
 }
 
+// Kept local rather than sharing the test builders: the benchmark is a standalone tool and
+// should not depend on test scaffolding.
 std::shared_ptr<FxEntity> add_box(FxScene& scene, const std::string& name, float cx, float cy,
                                   float w, float h, float mass) {
     auto e = std::make_shared<FxEntity>(name);
-    // Both shapes: set_inertia() derives from the visual one.
     e->set_visual_geometry(FxVisualShape(FxVec2f{w, h}));
     e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
     e->set_init_pose(FxVec3f{cx, cy, 0.0f});
     e->set_mass(mass);
     e->set_inertia();
-    e->elasticity = 0.0f;
     e->static_friction = 0.5f;
     e->dynamic_friction = 0.4f;
     scene.add_entity(e);
