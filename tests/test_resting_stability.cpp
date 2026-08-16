@@ -271,9 +271,56 @@ void test_resting_penetration_stays_small() {
     require(overlap > -6e-3f, "a resting box must not hover above the ground");
 }
 
+// Restitution mixes with max, so the bounciest surface in a pair decides the bounce.
+//
+// Under the old min rule a lively ball inherited whatever dead thing it landed on and simply
+// stopped, which made "make this ball bouncy" mean nothing unless every surface agreed.
+void test_bouncy_body_bounces_off_a_dead_surface() {
+    FxScene scene = make_scene();
+    make_ground(scene, 6.0f, 1.0f, 8.0f, 0.5f, 0.0f); // completely inelastic floor
+    auto ball = make_ball(scene, "ball", 6.0f, 5.0f, 0.3f, 1.0f, 0.7f); // but a lively ball
+
+    float lowest = ball->pose.y();
+    float rebound_peak = 0.0f;
+    bool touched_down = false;
+    for (int i = 0; i < 400; ++i) {
+        scene.step(kFrame);
+        lowest = std::min(lowest, ball->pose.y());
+        if (!touched_down && ball->velocity.y() > 0.5f) touched_down = true;
+        if (touched_down) rebound_peak = std::max(rebound_peak, ball->pose.y());
+    }
+
+    require(touched_down, "the ball must land and rebound rather than sticking to the floor");
+    require(rebound_peak > lowest + 0.5f,
+            "a 0.7-elasticity ball must bounce clear of a dead floor, rose only " +
+                std::to_string(rebound_peak - lowest) + " above its lowest point");
+}
+
+// Friction still mixes with min, so the slipperiest surface wins and ice stays slippery.
+void test_slippery_surface_wins_over_grippy_body() {
+    FxScene scene = make_scene();
+    auto ground = make_ground(scene, 6.0f, 1.0f, 8.0f, 0.5f, 0.0f);
+    ground->static_friction = 0.0f; // ice
+    ground->dynamic_friction = 0.0f;
+
+    auto box = make_box(scene, "box", 6.0f, 1.75f, 0.5f, 0.5f, 1.0f, 0.0f);
+    box->static_friction = 1.0f; // grippy box
+    box->dynamic_friction = 1.0f;
+    box->velocity = FxVec3f{3.0f, 0.0f, 0.0f};
+
+    const float x0 = box->pose.x();
+    for (int i = 0; i < 120; ++i)
+        scene.step(kFrame);
+
+    require(box->pose.x() - x0 > 4.0f, "a grippy box on ice must keep sliding, travelled only " +
+                                           std::to_string(box->pose.x() - x0));
+}
+
 } // namespace
 
 void run_resting_stability_tests() {
+    test_bouncy_body_bounces_off_a_dead_surface();
+    test_slippery_surface_wins_over_grippy_body();
     test_resting_box_does_not_jitter();
     test_resting_box_does_not_creep_upward();
     test_three_box_stack_is_stable();

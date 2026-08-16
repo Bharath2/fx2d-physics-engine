@@ -128,9 +128,9 @@ Controls how the entity responds to forces, gravity, and collisions.
 | `inertia` | float | computed | Rotational inertia about the centre of mass. If omitted, computed from the **visual** geometry and mass |
 | `gravity_scale` | float | `1.0` | Multiplier on scene gravity. `0.0` disables gravity for this entity |
 | `vel_damping` | float | `0.0` | Linear/angular velocity damping applied each step |
-| `elasticity` | float | `1.0` | Coefficient of restitution (0 = inelastic, 1 = perfectly elastic) |
-| `static_friction` | float | `0.0` | Static friction coefficient used in contact force calculation |
-| `dynamic_friction` | float | `0.0` | Kinetic friction coefficient used in contact force calculation |
+| `elasticity` | float | `1.0` | Coefficient of restitution (0 = inelastic, 1 = perfectly elastic). A contact takes the **larger** of the two bodies' values, so a bouncy body bounces off anything |
+| `static_friction` | float | `0.0` | Static friction coefficient. A contact takes the **smaller** of the two values, so the slipperier surface wins |
+| `dynamic_friction` | float | `0.0` | Kinetic friction coefficient. A contact takes the **smaller** of the two values |
 | `external_forces_enabled` | bool | `true` | If `false`, the entity ignores external forces and collisions (gravity still applies) |
 | `ccd` | bool | `false` | If `true`, enables speculative contacts for this entity to prevent tunneling at high speeds |
 | `sensor` | bool | `false` | If `true`, the entity detects overlaps but applies no impulses. Bodies pass straight through it, and its contacts are reported only through `FxScene::contacts()` and the begin/end contact events |

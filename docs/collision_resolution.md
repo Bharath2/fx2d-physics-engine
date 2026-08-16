@@ -225,6 +225,8 @@ Unset friction in YAML defaults to `0`, and pair coefficients use $\min(\mu_A,\m
 
 **`prev_pose` adjustment.** Both `pose` and `prev_pose` are shifted by the same positional correction so that velocity derivation (`v = Δx/h`) sees a clean, pre-correction baseline.
 
+**Material mixing.** Restitution takes `max(a, b)` and friction takes `min(a, b)`, and the asymmetry is deliberate. A bouncy body should bounce off whatever it hits — under `min` a rubber ball landing on a dead crate inherited the crate's zero and simply stopped, so "make this ball bouncy" meant nothing unless every surface agreed. The cost is that a dead body cannot stay dead against a bouncy floor: to keep something inert, give the surfaces it lands on a low elasticity too. Friction goes the other way so the slipperiest surface wins, and ice stays slippery whatever slides on it. Note the restitution speed floor means resting contacts are unaffected by either rule.
+
 **Static/kinematic bodies.** Entities with `inv_mass = 0` receive zero correction from all impulse calculations. Their contribution to the effective mass denominator is also zero, meaning the full correction is applied to the dynamic body only.
 
 **Multi-point contacts.** When `count = 2` (e.g. a box face resting on a flat surface), the penetration correction is split evenly across both contact points, preventing over-correction.
