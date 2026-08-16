@@ -3,6 +3,7 @@
 #include "Fx2D/Physics.h"
 
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -15,34 +16,16 @@ constexpr double kFrame = 1.0 / 60.0;
 
 std::shared_ptr<FxEntity> make_ground(FxScene& scene, const std::string& name, float cx, float cy,
                                       float w, float h) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(0.0f);
-    e->set_inertia(0.0f);
-    e->enable_external_forces(false);
-    e->gravity_scale = 0.0f;
-    e->elasticity = 0.0f;
-    scene.add_entity(e);
-    return e;
+    return make_static(add_box(scene, name, {cx, cy}, {w, h}));
 }
 
 std::shared_ptr<FxEntity> make_box(FxScene& scene, const std::string& name, float cx, float cy,
                                    float w, float h) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(1.0f);
-    e->set_inertia();
-    e->elasticity = 0.0f;
-    scene.add_entity(e);
-    return e;
+    return add_box(scene, name, {cx, cy}, {w, h});
 }
 
 FxScene make_scene() {
-    FxScene scene({12.0f, 10.0f});
-    scene.set_gravity(FxVec2f{0.0f, -10.0f});
-    return scene;
+    return ::make_scene(FxVec2f{12.0f, 10.0f});
 }
 
 // Returns true if the two named entities appear as a pair in the event list.

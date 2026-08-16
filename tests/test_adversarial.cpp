@@ -4,6 +4,7 @@
 #include "Fx2D/Physics.h"
 
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -19,33 +20,17 @@ constexpr double kFrame = 1.0 / 60.0;
 constexpr int kSettleSteps = 250;
 
 FxScene make_scene() {
-    FxScene scene({40.0f, 40.0f});
-    scene.set_gravity(FxVec2f{0.0f, -10.0f});
-    return scene;
+    return ::make_scene(FxVec2f{40.0f, 40.0f});
 }
 
 std::shared_ptr<FxEntity> add_box(FxScene& scene, const std::string& name, float cx, float cy,
                                   float w, float h, float mass) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_visual_geometry(FxVisualShape(FxVec2f{w, h}));
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(mass);
-    e->set_inertia();
-    e->elasticity = 0.0f;
-    e->static_friction = 0.6f;
-    e->dynamic_friction = 0.5f;
-    scene.add_entity(e);
-    return e;
+    return ::add_box(scene, name, {cx, cy}, {w, h},
+                     {.mass = mass, .static_friction = 0.6f, .dynamic_friction = 0.5f});
 }
 
 std::shared_ptr<FxEntity> add_ground(FxScene& scene) {
-    auto e = add_box(scene, "ground", 20.0f, 1.0f, 30.0f, 1.0f, 1.0f);
-    e->set_mass(0.0f);
-    e->set_inertia(0.0f);
-    e->enable_external_forces(false);
-    e->gravity_scale = 0.0f;
-    return e;
+    return make_static(add_box(scene, "ground", 20.0f, 1.0f, 30.0f, 1.0f, 1.0f));
 }
 
 void run(FxScene& scene, int steps) {

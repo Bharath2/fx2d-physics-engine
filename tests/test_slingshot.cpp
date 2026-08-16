@@ -5,6 +5,7 @@
 
 #include "angry_boxes/slingshot.h"
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -24,17 +25,11 @@ struct World {
 
 std::shared_ptr<FxEntity> add_box(FxScene& scene, const std::string& name, float cx, float cy,
                                   float w, float h, float mass) {
-    auto e = std::make_shared<FxEntity>(name);
-    e->set_visual_geometry(FxVisualShape(FxVec2f{w, h}));
-    e->set_collision_geometry(FxCollisionShape(FxVec2f{w, h}));
-    e->set_init_pose(FxVec3f{cx, cy, 0.0f});
-    e->set_mass(mass);
-    e->set_inertia();
-    e->elasticity = 0.05f;
-    e->static_friction = 0.7f;
-    e->dynamic_friction = 0.6f;
-    scene.add_entity(e);
-    return e;
+    return ::add_box(scene, name, {cx, cy}, {w, h},
+                     {.mass = mass,
+                      .elasticity = 0.05f,
+                      .static_friction = 0.7f,
+                      .dynamic_friction = 0.6f});
 }
 
 // A ground plane, a short tower, and the projectile parked at the anchor.
@@ -54,17 +49,8 @@ World make_world() {
     w.tower.push_back(add_box(w.scene, "box_r1", 12.5f, 1.4f, 0.5f, 0.8f, 0.6f));
     w.tower.push_back(add_box(w.scene, "lintel1", 11.5f, 1.95f, 2.6f, 0.3f, 0.8f));
 
-    auto ball = std::make_shared<FxEntity>("ball");
-    ball->set_visual_geometry(FxVisualShape(0.32f));
-    ball->set_collision_geometry(FxCollisionShape(0.32f));
-    ball->set_init_pose(FxVec3f{3.0f, 3.0f, 0.0f});
-    ball->set_mass(1.6f);
-    ball->set_inertia();
-    ball->elasticity = 0.25f;
-    ball->enable_ccd = true;
-    w.scene.add_entity(ball);
-    w.ball = ball;
-
+    w.ball = ::add_circle(w.scene, "ball", {3.0f, 3.0f}, 0.32f,
+                          {.mass = 1.6f, .elasticity = 0.25f, .ccd = true});
     return w;
 }
 
@@ -327,16 +313,8 @@ void test_fast_ball_hits_every_crate_in_its_path() {
         add_box(scene, "c1", 10.5f, 1.4f, 0.5f, 0.8f, 0.32f);
         add_box(scene, "c2", 11.5f, 1.4f, 0.5f, 0.8f, 0.32f);
 
-        auto ball = std::make_shared<FxEntity>("ball");
-        ball->set_visual_geometry(FxVisualShape(0.32f));
-        ball->set_collision_geometry(FxCollisionShape(0.32f));
-        ball->set_init_pose(FxVec3f{4.0f, 1.4f, 0.0f});
-        ball->set_mass(1.6f);
-        ball->set_inertia();
-        ball->elasticity = 0.5f;
-        ball->enable_ccd = true;
-        scene.add_entity(ball);
-        ball->reset();
+        auto ball = ::add_circle(scene, "ball", {4.0f, 1.4f}, 0.32f,
+                                 {.mass = 1.6f, .elasticity = 0.5f, .ccd = true});
         ball->velocity = FxVec3f{speed, 0.0f, 0.0f};
 
         bool hit_c1 = false, hit_c2 = false;
