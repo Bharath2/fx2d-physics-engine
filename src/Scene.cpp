@@ -1,4 +1,21 @@
 #include "Fx2D/Scene.h"
+#ifdef FX2D_PROFILE
+#include <chrono>
+double g_prof[5] = {0, 0, 0, 0, 0};
+struct ProfTimer {
+    int slot;
+    std::chrono::steady_clock::time_point t0;
+    explicit ProfTimer(int s) : slot(s), t0(std::chrono::steady_clock::now()) {}
+    ~ProfTimer() {
+        g_prof[slot] +=
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0)
+                .count();
+    }
+};
+#define PROF(slot) ProfTimer prof_timer_##slot(slot)
+#else
+#define PROF(slot)
+#endif
 
 namespace {
 uint64_t pack_contact_key(uint32_t a, uint32_t b) {
@@ -319,58 +336,67 @@ void FxScene::step(double step_dt) {
 
         // compute contacts - skip disabled entities
         contacts.clear();
-        auto broad_phase_pairs = m_entities.get_broad_phase_pairs(static_cast<float>(substep_dt));
-        for (const auto& pair : broad_phase_pairs) {
-            FxContact c =
-                FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
-            if (!c.is_valid() &&
-                (entities_vec[pair.first]->enable_ccd || entities_vec[pair.second]->enable_ccd))
-                c = FxSolver::speculative_contact_check(entities_vec[pair.first],
-                                                        entities_vec[pair.second],
-                                                        static_cast<float>(substep_dt));
-            if (c.is_valid()) {
-                uint64_t key =
-                    pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
+        std::vector<std::pair<size_t, size_t>> broad_phase_pairs;
+        {
+            PROF(0);
+            broad_phase_pairs = m_entities.get_broad_phase_pairs(static_cast<float>(substep_dt));
+        }
+        {
+            PROF(1);
+            for (const auto& pair : broad_phase_pairs) {
+                FxContact c =
+                    FxSolver::collision_check(entities_vec[pair.first], entities_vec[pair.second]);
+                if (!c.is_valid() &&
+                    (entities_vec[pair.first]->enable_ccd || entities_vec[pair.second]->enable_ccd))
+                    c = FxSolver::speculative_contact_check(entities_vec[pair.first],
+                                                            entities_vec[pair.second],
+                                                            static_cast<float>(substep_dt));
+                if (c.is_valid()) {
+                    uint64_t key =
+                        pack_contact_key(c.entity1->get_entity_id(), c.entity2->get_entity_id());
 
-                // A sensor is buffered for events but skipped by every solver stage, and must
-                // not wake a sleeper since it applies no force.
-                if (c.entity1->is_sensor || c.entity2->is_sensor) {
-                    record_contact(c, key);
-                    continue;
-                }
-
-                // Wake only when a moving, awake partner disturbs a sleeper.
-                auto wake_if_disturbed = [](const std::shared_ptr<FxEntity>& sleeper,
-                                            const std::shared_ptr<FxEntity>& other) {
-                    if (!sleeper || !other || !sleeper->is_sleeping()) return;
-                    if (other->is_sleeping()) return;
-                    const bool moving =
-                        other->velocity.head<2>().norm() > sleeper->sleep_threshold_linear ||
-                        std::fabs(other->velocity.theta()) > sleeper->sleep_threshold_angular;
-                    if (moving) sleeper->wake();
-                };
-                wake_if_disturbed(c.entity1, c.entity2);
-                wake_if_disturbed(c.entity2, c.entity1);
-
-                auto cache_it = m_contact_cache.find(key);
-                if (cache_it != m_contact_cache.end()) {
-                    // If the contact normal changed significantly the tangent basis flipped;
-                    // discard cached friction impulse to avoid spurious lateral forces.
-                    bool normal_stable = cache_it->second.normal.dot(c.normal) > 0.99f;
-                    for (size_t contact_idx = 0; contact_idx < 2; ++contact_idx) {
-                        // Warm-start guess only; jn_accumulated stays 0 until warm_start.
-                        c.jn_warm[contact_idx] = cache_it->second.jn[contact_idx];
-                        c.jt_warm[contact_idx] =
-                            normal_stable ? cache_it->second.jt[contact_idx] : 0.0f;
+                    // A sensor is buffered for events but skipped by every solver stage, and must
+                    // not wake a sleeper since it applies no force.
+                    if (c.entity1->is_sensor || c.entity2->is_sensor) {
+                        record_contact(c, key);
+                        continue;
                     }
+
+                    // Wake only when a moving, awake partner disturbs a sleeper.
+                    auto wake_if_disturbed = [](const std::shared_ptr<FxEntity>& sleeper,
+                                                const std::shared_ptr<FxEntity>& other) {
+                        if (!sleeper || !other || !sleeper->is_sleeping()) return;
+                        if (other->is_sleeping()) return;
+                        const bool moving =
+                            other->velocity.head<2>().norm() > sleeper->sleep_threshold_linear ||
+                            std::fabs(other->velocity.theta()) > sleeper->sleep_threshold_angular;
+                        if (moving) sleeper->wake();
+                    };
+                    wake_if_disturbed(c.entity1, c.entity2);
+                    wake_if_disturbed(c.entity2, c.entity1);
+
+                    auto cache_it = m_contact_cache.find(key);
+                    if (cache_it != m_contact_cache.end()) {
+                        // If the contact normal changed significantly the tangent basis flipped;
+                        // discard cached friction impulse to avoid spurious lateral forces.
+                        bool normal_stable = cache_it->second.normal.dot(c.normal) > 0.99f;
+                        for (size_t contact_idx = 0; contact_idx < 2; ++contact_idx) {
+                            // Warm-start guess only; jn_accumulated stays 0 until warm_start.
+                            c.jn_warm[contact_idx] = cache_it->second.jn[contact_idx];
+                            c.jt_warm[contact_idx] =
+                                normal_stable ? cache_it->second.jt[contact_idx] : 0.0f;
+                        }
+                    }
+                    contacts.emplace_back(std::move(c));
                 }
-                contacts.emplace_back(std::move(c));
             }
         }
-
         // Solve contact penetration (position-level)
-        for (const auto& c : contacts) {
-            FxSolver::resolve_penetration(c, substep_dt);
+        {
+            PROF(2);
+            for (const auto& c : contacts) {
+                FxSolver::resolve_penetration(c, substep_dt);
+            }
         }
 
         // Solve constraints (XPBD-style)
@@ -396,9 +422,12 @@ void FxScene::step(double step_dt) {
         }
 
         // Multiple passes: one solve per contact leaves stack velocity residuals.
-        for (size_t pass = 0; pass < kVelocityPasses; ++pass) {
-            for (auto& c : contacts)
-                FxSolver::resolve_velocities(c);
+        {
+            PROF(3);
+            for (size_t pass = 0; pass < kVelocityPasses; ++pass) {
+                for (auto& c : contacts)
+                    FxSolver::resolve_velocities(c);
+            }
         }
 
         for (auto& c : contacts) {
