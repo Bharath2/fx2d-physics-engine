@@ -16,7 +16,9 @@ Checks: >
   -performance-unnecessary-value-param
 
 WarningsAsErrors: ''
-HeaderFilterRegex: 'include/Fx2D/.*|src/.*|tests/.*|examples/.*'
+# Anchored on the project directory: Eigen lays itself out as Eigen/src/..., which an
+# unanchored 'src/.*' matches, burying our own findings under third-party noise.
+HeaderFilterRegex: '.*/Fx2D/(include|src|tests|examples|scripts)/.*'
 FormatStyle: none
 UseColor: true
 
