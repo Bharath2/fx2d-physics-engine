@@ -17,8 +17,7 @@ Checks: >
 
 WarningsAsErrors: ''
 HeaderFilterRegex: 'include/Fx2D/.*|src/.*|tests/.*|examples/.*'
-ExcludeHeaderFilterRegex: 'lib/.*|build.*/.*'
-FormatStyle: file
+FormatStyle: none
 UseColor: true
 
 CheckOptions:

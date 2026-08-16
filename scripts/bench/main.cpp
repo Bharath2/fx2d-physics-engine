@@ -97,7 +97,8 @@ int main(int argc, char** argv) {
 
     for (int n : {10, 50, 200, 400, 800, 1600, 3000}) {
         const Result r = bench_settling_boxes(n, steps);
-        const double ratio = r.wall_ms_per_step > 0.0 ? r.cpu_ms_per_step / r.wall_ms_per_step : 0.0;
+        const double ratio =
+            r.wall_ms_per_step > 0.0 ? r.cpu_ms_per_step / r.wall_ms_per_step : 0.0;
         std::cout << std::setw(8) << n << std::setw(10) << r.wall_ms_per_step << " ms"
                   << std::setw(10) << r.cpu_ms_per_step << " ms" << std::setw(11) << ratio
                   << std::setw(12) << r.steps_per_second << "\n";

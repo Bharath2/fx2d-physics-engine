@@ -18,11 +18,14 @@ Style and light static analysis (clang-format, cppcheck, clang-tidy) are gated
 in CI (`.github/workflows/lint.yml`):
 
 ```bash
-./scripts/format.sh           # rewrite sources to .clang-format
+./scripts/format.sh           # rewrite sources to scripts/.clang-format
 ./scripts/format.sh --check   # dry-run (fails if anything would change)
 ./scripts/lint.sh             # format check + cppcheck + clang-tidy
 ./scripts/lint.sh --no-tidy   # skip clang-tidy (fastest local gate)
 ```
+
+The clang-format and clang-tidy configs live in `scripts/`, so the wrapper scripts pass
+them explicitly rather than relying on the tools searching upward from each file.
 
 `lint.sh` generates a minimal `compile_commands.json` for clang-tidy via
 `./scripts/gen_lint_compile_db.sh` (physics core only, no raylib), and cppcheck
