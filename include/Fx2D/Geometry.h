@@ -41,11 +41,11 @@ struct FxAABB {
 
 // Custom 2x2 float matrix with .a(), .b(), .c(), .d() getters and corresponding setters.
 // Unified shape: vertices (0/2/N) + skin_radius (circle/capsule/edge/polygon/rounded).
-enum class FxShapeType { Circle, Capsule, Polygon };
+enum class FxShapeType { Circle, Capsule, Polygon, Chain };
 
 struct FxShape {
   protected:
-    FxShapeType m_shape_type; // Circle, Capsule, or Polygon
+    FxShapeType m_shape_type; // Circle, Capsule, Polygon, or Chain
     float m_radius; // bounding radius from centroid (skin-inclusive)
     float m_skin_radius = 0.0f; // Minkowski-sum skin (rounding) radius
     FxVec2fArray m_vertices; // local vertices: 0 (circle), 2 (capsule), or >=3 (polygon)
@@ -121,6 +121,24 @@ struct FxShape {
         m_world_vertices = m_vertices;
     }
 
+    // Chain: an open polyline of >= 2 segments, for static level geometry a convex polygon
+    // approximates badly. Like an edge it has no interior, so no area and no inertia, and like
+    // an edge its vertices are kept exactly as authored rather than recentred.
+    struct ChainTag {};
+    FxShape(const FxVec2fArray& points, ChainTag) {
+        if (points.size() < 3)
+            throw std::invalid_argument("FxShape: a chain needs at least 3 points");
+        for (std::size_t i = 1; i < points.size(); ++i) {
+            if ((points[i] - points[i - 1]).norm() <= 1e-6f)
+                throw std::invalid_argument("FxShape: chain points must be distinct");
+        }
+        m_shape_type = FxShapeType::Chain;
+        m_vertices = points;
+        m_skin_radius = 0.0f;
+        m_radius = calc_radius(m_vertices);
+        m_world_vertices = m_vertices;
+    }
+
     // –– Polygon from arbitrary vertices, with optional uniform skin (rounding) radius
     FxShape(const FxVec2fArray& vertices, float skin_radius = 0.0f) {
         constexpr float minArea = 1e-6f;
@@ -187,11 +205,25 @@ struct FxShape {
 
     bool is_polygon() const { return m_shape_type == FxShapeType::Polygon; }
 
+    // Builds an open polyline collider from >= 3 points.
+    static FxShape make_chain(const FxVec2fArray& points) { return FxShape(points, ChainTag{}); }
+
+    bool is_chain() const { return m_shape_type == FxShapeType::Chain; }
+
+    // Segments in a chain; 0 for every other shape.
+    std::size_t segment_count() const { return is_chain() ? m_world_vertices.size() - 1 : 0; }
+
+    // Segment i of a chain as a standalone edge, positioned in the world.
+    FxShape segment(std::size_t i) const {
+        return FxShape(m_world_vertices[i], m_world_vertices[i + 1]);
+    }
+
     // A zero-skin capsule is a bare segment: zero area, zero inertia, static level geometry.
     bool is_edge() const { return m_shape_type == FxShapeType::Capsule && m_skin_radius <= 1e-6f; }
 
     // Is the world point inside this shape, skin included? Convex only, which every FxShape is.
     bool contains(const FxVec2f& p) const {
+        if (is_chain()) return false;
         const size_t n = m_world_vertices.size();
         if (n == 0) return (p - m_centroid).norm() <= m_skin_radius;
         if (n == 2) {
@@ -216,6 +248,7 @@ struct FxShape {
 
     // Get area of the shape (handles circle, capsule, and polygon — skin radius included)
     float area() const {
+        if (is_chain()) return 0.0f;
         if (is_circle()) {
             return FxPif * m_skin_radius * m_skin_radius;
         }
@@ -240,6 +273,7 @@ struct FxShape {
 
     // Calculate moment of inertia for given mass (uniform density)
     float calc_inertia(float mass) const {
+        if (is_chain()) return 0.0f;
         if (is_circle()) {
             return 0.5f * mass * m_skin_radius * m_skin_radius;
         }

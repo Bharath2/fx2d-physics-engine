@@ -276,6 +276,32 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
     auto contact = FxContact(true);
     contact.penetration_depth = 0.0f;
 
+    // ----------- CHAIN -----------
+    // A chain is a run of edges sharing one entity, so it resolves to the deepest contact any
+    // one segment makes. Nothing here is new geometry: each segment is handed to the edge paths
+    // below. Chain-vs-chain and chain-vs-edge are skipped for the same reason edge-vs-edge is,
+    // neither side having volume to resolve.
+    if (A_shape->is_chain() || B_shape->is_chain()) {
+        const bool a_is_chain = A_shape->is_chain();
+        const FxShape* chain = a_is_chain ? A_shape : B_shape;
+        const FxShape* other = a_is_chain ? B_shape : A_shape;
+        if (other->is_chain() || other->is_edge()) {
+            contact.set_valid(false);
+            return contact;
+        }
+
+        FxContact best = FxContact(false);
+        const std::size_t segments = chain->segment_count();
+        for (std::size_t i = 0; i < segments; ++i) {
+            const FxShape seg = chain->segment(i);
+            FxContact c = a_is_chain ? compute_contact_one_way(&seg, other) :
+                                       compute_contact_one_way(other, &seg);
+            if (!c.is_valid(false) || c.count == 0) continue;
+            if (!best.is_valid(false) || c.penetration_depth > best.penetration_depth) best = c;
+        }
+        return best;
+    }
+
     // ----------- CAPSULE REDUCTIONS -----------
     // Reduce capsule-vs-X to "virtual circle at closest segment point vs X" using
     // the capsule's skin_radius as the effective circle radius.

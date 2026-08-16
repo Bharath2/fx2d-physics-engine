@@ -292,6 +292,18 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
 
             const auto& bb = e->bounding_box();
             FxAABB tight{bb[0], bb[1], bb[2], bb[3]};
+            // An axis-aligned edge or chain is zero-thickness on one axis, which is_valid()
+            // rejects, so the entity would never enter the tree and never collide. Give the
+            // proxy a hair of thickness; the shape's own AABB is left alone.
+            constexpr float kMinProxyExtent = 1e-3f;
+            if (tight.maxX - tight.minX < kMinProxyExtent) {
+                tight.minX -= kMinProxyExtent;
+                tight.maxX += kMinProxyExtent;
+            }
+            if (tight.maxY - tight.minY < kMinProxyExtent) {
+                tight.minY -= kMinProxyExtent;
+                tight.maxY += kMinProxyExtent;
+            }
             if (!tight.is_valid()) continue;
 
             // For CCD bodies, extend the insertion AABB to cover the swept path this substep.

@@ -249,6 +249,22 @@ An edge is a zero-thickness line segment defined by two endpoints in local (body
 
 Internally an edge is a capsule with a zero skin radius, and unlike other shapes its endpoints are kept exactly as authored rather than recentred on the centroid. Edge-vs-edge pairs never generate contacts, and edges are skipped by CCD.
 
+### Chain
+
+```yaml
+geometry:
+    chain: [[0.0, 0.0], [4.0, 1.0], [8.0, 0.5], [12.0, 2.0]]
+```
+
+An open polyline of at least 3 points, forming a run of zero-thickness segments authored as one
+entity. Use it for static level geometry — terrain, ramps, cave walls — that a convex polygon
+approximates badly. Like an edge it has no interior, so no area and no inertia: pair it with
+`mass: 0` and `gravity_scale: 0.0`.
+
+A chain inherits the edge limitations. Chain-vs-chain and chain-vs-edge pairs never generate
+contacts, since neither side has volume to resolve, and chains are skipped by speculative-contact
+CCD, so a fast enough body can pass through one.
+
 ### Polygon
 
 ```yaml
@@ -297,6 +313,7 @@ Exactly one geometry key is read per `geometry:` block, in this order — the fi
 | `rectangle` | `[width, height]` | 4-vertex polygon, rounded if `radius:` is given |
 | `polygon` | list of `[x, y]` vertices | convex polygon, rounded if `radius:` is given |
 | `edge` | `[[x1, y1], [x2, y2]]` | zero-thickness segment |
+| `chain` | list of >= 3 `[x, y]` points | open polyline of zero-thickness segments |
 | `radius` | `0.25` | modifier for `rectangle` / `polygon` only |
 
 Anything else throws `Unknown geometry type in shape config.` Note the key is `rectangle`, not `box`, and the rounding modifier is `radius`, not `skin_radius`.

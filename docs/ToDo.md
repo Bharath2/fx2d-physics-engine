@@ -9,15 +9,15 @@ ordering fix, the adversarial scene suite, and keyboard/mouse input).
 
 ## Priority Targets
 
-1. Add chain / polyline colliders.
-   The last shape from the original shape list. Shapes share a unified
-   `vertices[] + skin_radius` storage — `FxShape` recognises `Circle`
-   (0 vertices), `Capsule` (2 vertices), and `Polygon` (>=3 vertices) — and
-   edges already exist as zero-skin capsules (`edge: [[x, y], [x, y]]`) with a
-   dedicated line-reference query. A chain collider is the natural composition:
-   a sequence of edge segments authored as one entity, for static level
-   geometry that a polygon approximates awkwardly. Edge-vs-edge pairs and CCD
-   on edges are intentionally skipped today; chains inherit that.
+1. Chain / polyline colliders — delivered.
+   `FxShapeType::Chain`, built with `FxShape::make_chain()` or the YAML `chain:` key, is an open
+   polyline of at least 3 points authored as one entity. It resolves to the deepest contact any
+   of its segments makes, each handed to the existing edge routines, so it adds no new geometry.
+   Covered by `tests/test_chain.cpp` and documented in [scene_yml.md](scene_yml.md).
+
+   It inherits the edge limitations as expected: chain-vs-chain and chain-vs-edge produce no
+   contacts, and chains are skipped by speculative-contact CCD, so a fast enough body tunnels.
+   Lifting that is item 3's time-of-impact work, not a chain problem.
 
 2. Spatial query APIs — delivered.
    Both slices have landed. Slice (a): buffered contacts, begin/end contact events and sensors
