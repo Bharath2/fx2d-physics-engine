@@ -1,0 +1,64 @@
+scene:
+    size: [16, 12]
+    gravity: [0, -10]
+    background: [30, 33, 44, 255]
+
+entities:
+    # The bucket floats mid-scene: a bottom and two walls, all static.
+    bucket_bottom:
+        pose: [8.0, 5.0, 0]
+        physics: &bucket_physics
+            mass: 0.0
+            elasticity: 0.05
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.5
+            dynamic_friction: 0.4
+        visual: &bottom_visual
+            geometry:
+                rectangle: [3.2, 0.4]
+            texture: [188, 152, 106, 255]
+            border_color: [64, 48, 30, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                rectangle: [3.2, 0.4]
+
+    bucket_left:
+        pose: [6.6, 6.5, 0]
+        physics: *bucket_physics
+        visual: &wall_visual
+            geometry:
+                rectangle: [0.4, 3.4]
+            texture: [188, 152, 106, 255]
+            border_color: [64, 48, 30, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                rectangle: [0.4, 3.4]
+
+    bucket_right:
+        pose: [9.4, 6.5, 0]
+        physics: *bucket_physics
+        visual: *wall_visual
+        collision:
+            geometry:
+                rectangle: [0.4, 3.4]
+
+    # Catch floor for the overflow.
+    floor:
+        pose: [8.0, 0.4, 0]
+        physics:
+            mass: 0.0
+            elasticity: 0.0
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.7
+            dynamic_friction: 0.6
+        visual:
+            geometry:
+                rectangle: [16.0, 0.8]
+            texture: [52, 58, 74, 255]
+        collision:
+            geometry:
+                rectangle: [16.0, 0.8]
