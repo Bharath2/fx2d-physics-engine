@@ -277,12 +277,9 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
     contact.penetration_depth = 0.0f;
 
     // ----------- CHAIN -----------
-    // One-sided, front being the left of each segment's authored direction, and solved with
-    // neighbour knowledge for round bodies: handing a segment to the edge path in isolation
-    // gives endpoint contacts whose normal is whatever direction the vertex makes with the
-    // body centre, which at a joint can point along the surface and eject the body through it.
-    // The cure is Box2D's ghost-vertex idea: clamp joint contacts into the arc the two
-    // adjacent faces admit.
+    // One-sided (front = left of the authored direction), and solved with neighbour knowledge
+    // for round bodies: joint contacts are clamped into the arc the adjacent faces admit, or an
+    // endpoint normal could point along the surface and eject the body through it.
     if (A_shape->is_chain() || B_shape->is_chain()) {
         const bool a_is_chain = A_shape->is_chain();
         const FxShape* chain = a_is_chain ? A_shape : B_shape;

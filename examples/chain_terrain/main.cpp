@@ -1,10 +1,5 @@
-// Chain collider demo: terrain built from one polyline entity, with balls you drop on it.
-//
-//   left mouse   drop a ball where you click
-//   C            clear the balls
-//   R            reset the scene
-//
-// Build with -DFX2D_BUILD_EXAMPLES=ON and run from the repo root so Scene.yml resolves.
+// Terrain built from one chain entity; click to drop balls on it, C clears, R resets.
+// Build with -DFX2D_BUILD_EXAMPLES=ON and run from the repo root.
 
 #include "Fx2D/Core.h"
 

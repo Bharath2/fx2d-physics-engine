@@ -415,10 +415,8 @@ void test_box_rides_kinematic_platform() {
                 " platform x=" + std::to_string(platform->pose.x()));
 }
 
-// A floating bucket rained on until it fills and overflows: 150 bodies piling in a confined
-// container. Measured at 200 balls: the bucket retains ~47, the walls are never penetrated,
-// and 1-2 balls escape through the 0.8-thick catch floor regardless of substep count -- that
-// last is a recorded envelope, not an accepted behaviour.
+// A floating bucket rained on until it fills and overflows. Thresholds are measured; the 1-2
+// balls per 200 that escape below the catch floor are a recorded envelope, not accepted.
 void test_bucket_fills_and_overflows() {
     FxScene scene = ::make_scene(FxVec2f{16.0f, 12.0f}); // boundaries contain the overflow
     auto bottom = add_box(scene, "bkt_bottom", 8.0f, 5.0f, 3.2f, 0.4f, 1.0f);
