@@ -185,11 +185,8 @@ std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML
             {init_velocity_array[0], init_velocity_array[1], init_velocity_array[2]});
     }
 
-    // Two settings are deferred to the end of this function, after the geometry is attached.
-    // The implicit inertia calculation reads the visual shape, so computing it here would
-    // silently measure the entity's default shape instead of the authored one. And
-    // enable_external_forces() zeroes inv_mass / inv_inertia, so it has to be applied after
-    // any inertia assignment or a static body would regain the ability to spin.
+    // Both deferred until the geometry exists: implicit inertia reads the visual shape, and
+    // enable_external_forces() zeroes inv_inertia so it must be applied after any inertia.
     bool inertia_from_visual_shape = false;
     bool external_forces_enabled = true;
     bool has_physics_block = false;

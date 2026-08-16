@@ -1,13 +1,5 @@
-// Entry point for the Fx2D test suite.
-//
-// Every suite runs even if an earlier one fails, so a single run reports all
-// broken areas rather than only the first. A failing suite throws; main turns
-// that into a non-zero exit status for ctest and CI.
-//
-// Suites marked slow simulate many bodies for many steps. They are fast enough in
-// Release but cost minutes under ASan/UBSan, and they exercise no code path the other
-// suites miss, so setting FX2D_SKIP_SLOW_TESTS=1 skips them. CI uses that for its Debug
-// job only; the Release job always runs everything.
+// Test suite entry point. Every suite runs even if an earlier one throws, so one run reports
+// every broken area. Suites marked slow are skipped when FX2D_SKIP_SLOW_TESTS is set.
 
 #include <cstdlib>
 #include <exception>
@@ -68,7 +60,7 @@ int main() {
 
     for (const Suite& suite : kSuites) {
         if (suite.slow && skip_slow) {
-            // Announced, never silent: a skipped suite must not read as a passing one.
+            // Announced, never silent: a skip must not read as a pass.
             std::cout << "[SKIP] " << suite.name << " (FX2D_SKIP_SLOW_TESTS is set)" << std::endl;
             ++skipped;
             continue;

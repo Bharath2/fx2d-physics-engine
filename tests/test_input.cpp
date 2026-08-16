@@ -1,8 +1,5 @@
-// Input state machine: edge detection, mouse state, and headless injection.
-//
-// These run headless by design. The point of FxInput is that the same interface exists with or
-// without a window: the renderer feeds it in a windowed build, and user code feeds it in a
-// headless one to script triggers. Both paths go through the producer API exercised here.
+// Input state machine: edge detection, mouse state, and headless injection. The same interface
+// exists with or without a window; both paths go through the producer API exercised here.
 
 #include "Fx2D/Physics.h"
 
@@ -254,8 +251,7 @@ void test_reset_callback_fires_after_entities_are_restored() {
     require(fired == 2, "each reset() must fire the callback again");
 }
 
-// reset() is a full reload: the composition goes back to the captured one, so an entity added
-// since is gone and one deleted since is back.
+// reset() restores the captured composition: additions go, deletions come back.
 void test_reset_restores_scene_composition() {
     FxScene scene({20.0f, 20.0f});
     scene.set_gravity(FxVec2f{0.0f, 0.0f});
@@ -335,7 +331,7 @@ void test_reset_wakes_sleeping_bodies() {
     require(!box->is_sleeping(), "reset must wake every body, or the scene reloads frozen");
 }
 
-// Nothing a running scene does can decline a reset: time, contacts and input all go too.
+// Time, contacts and input are all dropped by a reset.
 void test_reset_clears_accumulated_scene_state() {
     FxScene scene({20.0f, 20.0f});
     scene.set_gravity(FxVec2f{0.0f, -10.0f});

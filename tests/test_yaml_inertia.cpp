@@ -1,9 +1,6 @@
-// Inertia derived from YAML must match the same shape built in C++.
-//
-// Regression: buildEntity() parses the physics: block before visual:, so the implicit
-// set_inertia() used to run against the entity's default visual shape (a 0.5-radius circle)
-// rather than the authored geometry. Every entity that omitted physics.inertia silently got
-// 0.125 * mass whatever its shape — a 2x1 plank of mass 5 got 0.625 instead of 2.083.
+// Inertia derived from YAML must match the same shape built in C++. Regression: the implicit
+// set_inertia() once ran before the visual shape was attached, so every entity got the default
+// 0.5-circle inertia of 0.125 * mass whatever its geometry.
 
 #include "Fx2D/Physics.h"
 #include "Fx2D/YamlUtils.h"
@@ -132,11 +129,8 @@ visual:
             "a zero-thickness edge has no area and must have zero inertia");
 }
 
-// external_forces_enabled: false must survive the deferred inertia calculation.
-//
-// enable_external_forces(false) works by zeroing inv_mass and inv_inertia. Since the implicit
-// set_inertia() now runs after the physics block is parsed, it would resurrect inv_inertia and
-// let a body declared static be spun by collisions, unless the flag is applied last.
+// external_forces_enabled works by zeroing inv_mass and inv_inertia, so it must be applied
+// after the deferred inertia calculation or a static body becomes spinnable.
 void test_external_forces_disabled_stays_static() {
     auto entity = build(R"YAML(
 physics:

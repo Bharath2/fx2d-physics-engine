@@ -1,9 +1,5 @@
-// Spatial queries: ray casts, overlap and shape queries.
-//
-// Ray tests are done here rather than routed through the contact solver, because a ray is a
-// degenerate shape the narrow phase deliberately does not handle (zero-thickness segments carry
-// no volume to resolve). Overlap tests go the other way and reuse FxSolver::collision_check
-// verbatim, so a query and a simulated contact can never disagree about what is touching.
+// Spatial queries. Rays are tested against shape boundaries here, since the narrow phase
+// refuses zero-thickness segments; overlap reuses it verbatim so queries and contacts agree.
 
 #include "Fx2D/Scene.h"
 
@@ -14,8 +10,7 @@ namespace {
 
 constexpr float kEps = 1e-8f;
 
-// Nearest positive root of |origin + t*dir - centre| = radius, or -1 for a miss.
-// dir must be unit length. A ray starting inside reports 0.
+// Nearest positive root, or -1 for a miss. dir must be unit; starting inside reports 0.
 float ray_circle(const FxVec2f& origin, const FxVec2f& dir, const FxVec2f& centre, float radius) {
     const FxVec2f m = origin - centre;
     const float b = m.dot(dir);
@@ -68,9 +63,8 @@ bool point_inside(const FxShape& shape, const FxVec2f& p) {
         return (p - (a + ab * u)).norm() <= skin;
     }
 
-    // Convex polygon: inside when the point sits on the same side of every edge. Accepting
-    // either sign keeps this winding-agnostic. The skin is handled by allowing the point to sit
-    // slightly outside each edge, which is exact away from the corners and conservative at them.
+    // Convex: inside when the point is on the same side of every edge. Accepting either sign
+    // keeps it winding-agnostic; the skin is exact away from corners, conservative at them.
     bool all_left = true, all_right = true;
     for (size_t i = 0; i < n; ++i) {
         const FxVec2f a = verts[i];
@@ -85,15 +79,9 @@ bool point_inside(const FxShape& shape, const FxVec2f& p) {
     return all_left || all_right;
 }
 
-// Ray against one shape, already positioned in the world. Returns distance or -1, and fills the
-// surface normal.
-//
-// Every shape is vertices + skin radius, so the boundary is the vertex core offset outward by
-// the skin: each edge becomes a segment pushed out along its outward normal, and each vertex
-// becomes an arc of radius `skin`. Testing the offset edges and the vertex circles and keeping
-// the nearest hit therefore handles circles, capsules, edges, polygons and rounded polygons
-// through one path. With skin 0 it degenerates to plain ray-versus-edge, which is exactly right
-// for a sharp polygon.
+// Ray against one world-positioned shape: distance or -1, plus the surface normal.
+// The boundary is the vertex core offset by the skin, so testing pushed-out edges and vertex
+// arcs covers every shape type, degenerating to ray-versus-edge at skin 0.
 float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
                 FxVec2f& out_normal) {
     const float skin = shape.skin_radius();
@@ -114,16 +102,14 @@ float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
     FxVec2f best_normal{0.0f, 0.0f};
     const size_t n = verts.size();
 
-    // A ray that begins inside the shape reports the shape immediately, so picking works when
-    // the cursor is over a body rather than only when it is outside looking in.
+    // Starting inside reports the shape immediately, so picking works over a body.
     if (point_inside(shape, origin)) {
         out_normal = -dir;
         return 0.0f;
     }
 
-    // Which way is out depends on the winding, and the two shape constructors do not agree, so
-    // measure it rather than assume. A 2-vertex capsule has no enclosed area: its edge list is
-    // v0->v1 and v1->v0, whose right perps already point to opposite sides, so it needs no flip.
+    // Winding differs between shape constructors, so measure it. A 2-vertex capsule encloses
+    // no area, and its two edges already face opposite ways, so it needs no flip.
     const float outward_sign = (n >= 3 && signed_area(verts) < 0.0f) ? -1.0f : 1.0f;
 
     for (size_t i = 0; i < n; ++i) {
@@ -162,12 +148,8 @@ float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
     return best;
 }
 
-// Cheap rejection: does the ray come within the shape's bounding circle inside max_distance?
-//
-// Deliberately derived from the shape itself (centroid and skin-inclusive bounding radius)
-// rather than FxEntity::bounding_box(), which is a cache refreshed only by step() and reset().
-// A query must answer correctly for a body that was just moved by hand, and before the scene
-// has ever stepped.
+// Cheap rejection against the shape's bounding circle. Derived from the shape rather than the
+// cached bounding box, which is only refreshed by step() and reset().
 bool ray_reaches(const FxVec2f& origin, const FxVec2f& dir, float max_distance,
                  const FxShape& shape) {
     const FxVec2f centre = shape.centroid();
@@ -182,8 +164,7 @@ bool queryable(const std::shared_ptr<FxEntity>& e) {
     return e && e->enabled && e->collision_geometry();
 }
 
-// A throwaway body carrying the query shape, so overlap tests can go through the very same
-// narrow phase the simulation uses instead of a parallel implementation that could disagree.
+// A throwaway body carrying the query shape, so overlap can reuse the narrow phase.
 std::shared_ptr<FxEntity> make_probe(const FxShape& shape, const FxVec3f& pose) {
     auto probe = std::make_shared<FxEntity>("fx_query_probe");
     probe->set_init_pose(pose);
@@ -216,7 +197,7 @@ void FxScene::raycast_all(const FxVec2f& origin, const FxVec2f& direction, float
         hit.entity = entity;
         hit.distance = t;
         hit.point = origin + dir * t;
-        // Always report the face the ray arrived at, even for a grazing or inside-out hit.
+        // Always report the face the ray arrived at.
         hit.normal = (normal.dot(dir) > 0.0f) ? -normal : normal;
         out_hits.push_back(hit);
     }
@@ -241,17 +222,14 @@ void FxScene::overlap_shape(const FxShape& shape, const FxVec3f& pose,
 
     for (const auto& entity : m_entities.items()) {
         if (!queryable(entity)) continue;
-        // No bounding-box pre-filter here for the same reason as the ray path: it would read a
-        // cache that step() maintains, and a query must be right between steps too.
+        // No bounding-box pre-filter: it would read a cache only step() maintains.
         const FxShape& entity_shape = *entity->collision_geometry();
         if (FxSolver::collision_check(probe, entity).is_valid()) {
             out.push_back(entity);
             continue;
         }
-        // The narrow phase is built to separate overlapping bodies, so it reports nothing when
-        // one shape is wholly inside the other — there is no penetration axis, and coincident
-        // centres give it no normal to work with. That is fine for solving contacts and wrong
-        // for a query, where full containment is the most emphatic kind of overlap there is.
+        // Full containment gives the narrow phase no penetration axis, so it reports nothing.
+        // Right for solving contacts, wrong for a query.
         if (point_inside(*probe->collision_geometry(), entity_shape.centroid()) ||
             point_inside(entity_shape, probe->collision_geometry()->centroid())) {
             out.push_back(entity);
@@ -275,8 +253,7 @@ void FxScene::overlap_box(const FxVec2f& centre, const FxVec2f& extents,
 
 void FxScene::overlap_point(const FxVec2f& point,
                             std::vector<std::shared_ptr<FxEntity>>& out) const {
-    // A point is not a shape the narrow phase accepts, so probe with the smallest circle the
-    // shape constructor will build. The radius is far below any sane scene scale.
+    // A point is not a shape the narrow phase accepts, so probe with a tiny circle.
     overlap_circle(point, 1e-4f, out);
 }
 

@@ -61,9 +61,8 @@ class FxRylbRenderer {
     FxVec2f screen_to_world(const FxVec2f& screen) const;
     FxVec2f world_to_screen(const FxVec2f& world) const;
 
-    // Custom drawing on top of the scene, before the ImGui panels. Use world_to_screen() to
-    // place things in scene coordinates. Anything a game needs to show that is not an entity
-    // — an aim line, a trajectory preview, a score — goes here.
+    // Custom drawing over the scene, before the UI panels. Use world_to_screen() to place
+    // things in scene coordinates.
     void set_draw_callback(const std::function<void(FxRylbRenderer&)>& callback) {
         m_func_draw_callback = callback;
     }

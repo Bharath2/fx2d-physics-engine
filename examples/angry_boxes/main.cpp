@@ -1,12 +1,5 @@
-// Angry-birds style demo: drag the ball back with the mouse, release, knock the tower down.
-//
-//   left mouse   grab the ball near the slingshot, drag to aim, release to fire
-//   R            reset the shot
-//
-// Run from the repo root so the Scene.yml path resolves:
-//   cmake -S . -B build -DFX2D_BUILD_EXAMPLES=ON && cmake --build build --target
-//   example_angry_boxes
-//   ./build/example_angry_boxes
+// Drag the ball back with the mouse, release, knock the tower down. R resets the shot.
+// Build with -DFX2D_BUILD_EXAMPLES=ON and run from the repo root so Scene.yml resolves.
 
 #include "Fx2D/Core.h"
 
@@ -42,7 +35,7 @@ int main(int, char**) {
     slingshot.anchor = FxVec2f{3.0f, 3.0f};
     slingshot.reset(ball);
 
-    // Resting heights, so a piece that has dropped or rolled can be counted as knocked over.
+    // Resting heights, so a dropped or rolled piece can be counted as knocked over.
     std::vector<std::pair<std::string, float>> resting;
     for (const char* name : kTowerPieces) {
         if (auto piece = scene.get_entity(name)) resting.emplace_back(name, piece->pose.y());
@@ -51,9 +44,7 @@ int main(int, char**) {
     int knocked_over = 0;
     float best_hit = 0.0f;
 
-    // "Reset Simulation" in the renderer panel returns every entity to its initial pose, but the
-    // slingshot's own state lives out here — without this the ball would be back at the anchor
-    // yet still flagged as launched, so nothing would hold it and it would drop off the post.
+    // The slingshot's own state lives outside the scene, so a reset must re-arm it here.
     scene.set_reset_callback([&](FxScene&) {
         slingshot.reset(ball);
         best_hit = 0.0f;

@@ -1,8 +1,5 @@
-// The angry_boxes slingshot, driven headlessly.
-//
-// The example needs a window, so this exercises the same FxSlingshot the example uses by
-// injecting mouse state through FxScene::input() — the identical producer API the renderer
-// fills in. It is the proof the mechanic works, since a GUI cannot be run in CI.
+// The slingshot mechanic, driven headlessly by injecting mouse state through the same
+// producer API a renderer fills, since a GUI cannot run in CI.
 
 #include "Fx2D/Physics.h"
 
@@ -265,7 +262,7 @@ void test_reset_rearms_the_slingshot() {
     require(w.ball->velocity.head<2>().norm() < 1e-3f, "a reset ball must be at rest");
 }
 
-// R must re-arm from any state, including mid-drag, not just after a launch.
+// R must re-arm from any state, including mid-drag.
 void test_reset_key_works_while_dragging() {
     World w = make_world();
     FxSlingshot sling;
@@ -287,8 +284,7 @@ void test_reset_key_works_while_dragging() {
             "a cancelled drag must not leave the ball moving");
 }
 
-// Resetting the whole scene must re-arm the slingshot through the reset callback, otherwise the
-// ball returns to the anchor still flagged as launched and simply falls off the post.
+// A scene reset must re-arm through the callback, or the ball returns still flagged launched.
 void test_scene_reset_rearms_through_callback() {
     World w = make_world();
     FxSlingshot sling;
@@ -315,9 +311,8 @@ void test_scene_reset_rearms_through_callback() {
                      std::to_string(w.ball->pose.y()));
 }
 
-// A launched ball must register contact with each crate it passes, never slip through one.
-// The ball is heavy and fast against light crates, which shoves them aside hard enough to look
-// like tunneling; this pins that the contacts are genuinely there.
+// A heavy ball shoves light crates aside fast enough to look like tunneling; this pins that
+// the contacts are genuinely there.
 void test_fast_ball_hits_every_crate_in_its_path() {
     for (float speed : {20.0f, 35.0f, 50.0f}) {
         FxScene scene({30.0f, 12.0f});
