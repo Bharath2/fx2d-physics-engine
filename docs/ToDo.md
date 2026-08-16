@@ -80,17 +80,28 @@ ordering fix, the adversarial scene suite, and keyboard/mouse input).
      item 2 slice (a) no example demonstrates yet
    - ray-cast / overlap examples — still blocked on item 2 slice (b)
 
-5. Remove the float precision floor in position-level solving.
-   Found while validating the joint example, where motors appeared dead at small
-   timesteps; the `FxAngleWrap` half is fixed and regression-covered
-   (`tests/test_angle_precision.cpp`). The remaining half:
-   - Constraint corrections are still computed on `float` world coordinates, so a correction
-     below one ulp of the coordinate magnitude (~`4.8e-7` at `x = 7`) is lost. A revolute joint
-     with an anchor offset from the child's centre of mass depends on displacements at that
-     scale, so at `dt = 1e-3` it loses most of its motor authority, and the error grows with
-     distance from the origin. The same joint near the origin rotates ~5 orders of magnitude
-     further per unit time. Fixing this means accumulating constraint corrections in double
-     precision, or solving in body-relative coordinates rather than world coordinates.
+5. Extend mixed precision to the remaining float floors.
+   Both halves of the original finding are fixed, and neither required moving storage off
+   float32. The pose stays `float`; only the *residual* is banked in double, at the two
+   places that need it.
+
+   - `FxAngleWrap` no longer floors tiny rotations (`tests/test_angle_precision.cpp`).
+   - Constraint corrections now go through `FxEntity::apply_pose_correction()`, which adds in
+     double, stores to float, and keeps what did not fit for the next correction — the same
+     carry trick `__update_pose()` already used for integration. A correction below one ulp of
+     the coordinate (~`4.8e-7` at `x = 7`) used to round away entirely. Measured on an
+     offset-anchor revolute motor over one second: at `dt = 1e-3` it managed **1.97e-6 rad**
+     before, and **2.26 rad** after, matching what it achieves at `dt = 1e-2`. Distance from
+     the origin no longer decides motor authority either.
+
+   Remaining, same technique, lower value:
+   - **Penetration correction** (`resolve_penetration`) still writes the float pose directly.
+     It shifts `pose` and `prev_pose` together so the correction registers no velocity, so it
+     needs the delta that actually landed — which is exactly what `apply_pose_correction()`
+     returns. Penetration corrections are usually far above one ulp, so this matters only for
+     deep stacks a long way from the origin.
+   - **Velocity-level impulses** accumulate in float. No case has been measured where that
+     costs anything; worth a look only if one shows up.
 
 6. Build on the input layer.
    Delivered. `FxScene::input()` exposes keyboard and mouse through `FxInput`

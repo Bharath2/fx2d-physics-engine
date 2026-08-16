@@ -67,9 +67,82 @@ void test_torque_rotates_body_at_min_timestep() {
             "angular velocity must survive the substep integration at dt = 1e-3");
 }
 
+// A revolute motor whose anchor is offset from the child's centre of mass must keep its
+// authority at small timesteps.
+//
+// The pose is float32, and a per-substep constraint correction at dt = 1e-3 can be smaller
+// than one ulp of the coordinate it is added to, so applying it straight into the float pose
+// rounded it away entirely: measured 1.97e-6 rad of rotation over a second, a dead motor.
+// FxEntity::apply_pose_correction banks the leftover in double so successive corrections
+// accumulate until they land, without moving any storage off float.
+float motor_rotation_over_a_second(float origin_x, double dt, int steps) {
+    FxScene scene({400.0f, 40.0f});
+    scene.set_gravity(FxVec2f{0.0f, 0.0f});
+
+    auto base = std::make_shared<FxEntity>("base_link");
+    base->set_visual_geometry(FxVisualShape(FxVec2f{0.4f, 0.4f}));
+    base->set_init_pose(FxVec3f{origin_x, 4.0f, 0.0f});
+    base->set_mass(0.0f);
+    base->set_inertia(0.0f);
+    base->enable_external_forces(false);
+    base->gravity_scale = 0.0f;
+    scene.add_entity(base);
+
+    auto arm = std::make_shared<FxEntity>("arm");
+    arm->set_visual_geometry(FxVisualShape(FxVec2f{2.0f, 0.25f}));
+    arm->set_init_pose(FxVec3f{origin_x + 1.0f, 4.0f, 0.0f}); // centre 1.0 from the anchor
+    arm->set_mass(1.0f);
+    arm->set_inertia(0.5f);
+    arm->gravity_scale = 0.0f;
+    scene.add_entity(arm);
+
+    auto joint = std::make_shared<FxRevoluteJoint>("motor", base, arm, FxVec2f{0.0f, 0.0f});
+    joint->set_control_mode(ControlMode::VELOCITY);
+    joint->set_pid(FxVec3f{6.0f, 0.0f, 0.0f});
+    joint->set_omega(3.0f, false);
+    scene.add_joint(joint);
+
+    base->reset();
+    arm->reset();
+
+    const float theta0 = arm->pose.theta();
+    for (int i = 0; i < steps; ++i)
+        scene.step(dt);
+    return std::fabs(arm->pose.theta() - theta0);
+}
+
+void test_offset_motor_keeps_authority_at_small_timesteps() {
+    for (float origin_x : {0.5f, 7.0f, 300.0f}) {
+        const float coarse = motor_rotation_over_a_second(origin_x, 1e-2, 100);
+        const float fine = motor_rotation_over_a_second(origin_x, 1e-3, 1000);
+
+        require(coarse > 1.0f, "the motor must turn the arm at dt=1e-2 from x=" +
+                                   std::to_string(origin_x) + ", got " + std::to_string(coarse));
+        require(fine > 1.0f, "the motor must keep its authority at dt=1e-3 from x=" +
+                                 std::to_string(origin_x) + ", got " + std::to_string(fine) +
+                                 " rad (it managed 1.97e-6 before the mixed-precision fix)");
+        // The two timesteps must agree: shrinking dt must not change what the motor achieves.
+        require(std::fabs(fine - coarse) < 0.25f * coarse,
+                "coarse and fine timesteps must agree at x=" + std::to_string(origin_x) + ": " +
+                    std::to_string(coarse) + " vs " + std::to_string(fine));
+    }
+}
+
+// Distance from the origin must not decide how well a motor works.
+void test_motor_authority_does_not_decay_with_distance() {
+    const float near_origin = motor_rotation_over_a_second(0.5f, 1e-3, 1000);
+    const float far_away = motor_rotation_over_a_second(300.0f, 1e-3, 1000);
+
+    require(far_away > 0.7f * near_origin,
+            "a motor 300 units from the origin must perform like one at the origin: " +
+                std::to_string(near_origin) + " near vs " + std::to_string(far_away) + " far");
+}
+
 } // namespace
 
 void run_angle_precision_tests() {
+    test_offset_motor_keeps_authority_at_small_timesteps();
+    test_motor_authority_does_not_decay_with_distance();
     test_angle_wrap_preserves_tiny_angles();
     test_angle_wrap_preserves_in_range_angles();
     test_angle_wrap_still_wraps_out_of_range();
