@@ -16,6 +16,7 @@
 #include "Fx2D/Input.h"
 #include "Fx2D/Joints.h"
 #include "Fx2D/Math.h"
+#include "Fx2D/Query.h"
 #include "Fx2D/Registry.h"
 #include "Fx2D/Solver.h"
 
@@ -156,6 +157,39 @@ class FxScene {
     const std::vector<FxContactEvent>& begin_contact_events() const { return m_begin_contacts; }
     // Pairs that stopped touching during the most recent step (touching in the step before).
     const std::vector<FxContactEvent>& end_contact_events() const { return m_end_contacts; }
+
+    // ---------------------------------------------------------------- spatial queries
+    //
+    // These ask what is where, without stepping. Overlap queries run the same narrow phase the
+    // simulation uses, so a query and a contact agree about what is touching.
+    //
+    // Disabled entities and entities without collision geometry are never reported.
+    //
+    // Note these scan the entity list with a cheap bounding-box rejection rather than
+    // descending the broad-phase tree. The tree is only synced during step(), so querying it
+    // between steps — or before the first one — would answer from stale boxes. Correctness
+    // first; if query volume ever justifies it, the fix is to sync the tree on demand.
+
+    // Nearest entity struck by the ray, searching along `direction` from `origin` out to
+    // `max_distance`. Returns false if nothing was hit. A ray starting inside a body reports
+    // that body at distance 0.
+    bool raycast(const FxVec2f& origin, const FxVec2f& direction, float max_distance,
+                 FxRayHit& out_hit) const;
+    // Every entity along the ray, nearest first. Useful for lidar-style observations.
+    void raycast_all(const FxVec2f& origin, const FxVec2f& direction, float max_distance,
+                     std::vector<FxRayHit>& out_hits) const;
+
+    // Entities overlapping an arbitrary shape placed at `pose` (x, y, theta).
+    void overlap_shape(const FxShape& shape, const FxVec3f& pose,
+                       std::vector<std::shared_ptr<FxEntity>>& out) const;
+    // Entities overlapping a circle, an axis-aligned box, or a single point.
+    void overlap_circle(const FxVec2f& centre, float radius,
+                        std::vector<std::shared_ptr<FxEntity>>& out) const;
+    void overlap_box(const FxVec2f& centre, const FxVec2f& extents,
+                     std::vector<std::shared_ptr<FxEntity>>& out) const;
+    void overlap_point(const FxVec2f& point, std::vector<std::shared_ptr<FxEntity>>& out) const;
+    // First entity covering the point, or nullptr — "what is under the cursor".
+    std::shared_ptr<FxEntity> entity_at_point(const FxVec2f& point) const;
 
     // Registry access methods
     size_t entity_count() const { return m_entities.size(); }
