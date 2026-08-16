@@ -238,8 +238,10 @@ if (FX2D_BUILD_EXAMPLES)
   add_executable(example_joint_control examples/joint_control_demo/main_visual.cpp)
   add_executable(example_stacked_boxes examples/stacked_boxes/main.cpp)
   add_executable(example_angry_boxes   examples/angry_boxes/main.cpp)
+  add_executable(example_chain_terrain examples/chain_terrain/main.cpp)
 
-  foreach(example_target example_truck example_joint_control example_stacked_boxes example_angry_boxes)
+  foreach(example_target example_truck example_joint_control example_stacked_boxes example_angry_boxes
+                         example_chain_terrain)
     target_link_libraries(${example_target} PRIVATE Fx2Dlib)
     fx2d_tune_target(${example_target})
   endforeach()

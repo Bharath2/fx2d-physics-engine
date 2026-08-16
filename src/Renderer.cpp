@@ -251,6 +251,27 @@ void FxRylbRenderer::draw_scene() {
         const float x = sx(pose.x());
         const float y = sy(pose.y());
 
+        if (visual->is_chain()) {
+            // Open polyline: draw each segment, with a disc at every joint so corners look
+            // continuous rather than notched.
+            const auto& verts = visual->vertices();
+            const float thickness =
+                (visual->outlineThickness() > 0.0f) ? visual->outlineThickness() : 3.0f;
+            const Color oc = to_rl_color(visual->outlineColor());
+            auto to_screen = [&](const FxVec2f& w) {
+                return Vector2{static_cast<float>(m_scale) * w.x(),
+                               static_cast<float>(m_display_h) -
+                                   static_cast<float>(m_scale) * w.y()};
+            };
+            for (size_t i = 0; i + 1 < verts.size(); ++i) {
+                const Vector2 a = to_screen(verts[i]);
+                const Vector2 b = to_screen(verts[i + 1]);
+                DrawLineEx(a, b, thickness, oc);
+                DrawCircleV(a, 0.5f * thickness, oc);
+            }
+            DrawCircleV(to_screen(verts[verts.size() - 1]), 0.5f * thickness, oc);
+            return;
+        }
         if (visual->is_circle()) {
             const float r = static_cast<float>(m_scale) * visual->skin_radius();
             bool textured = false;

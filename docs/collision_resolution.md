@@ -45,6 +45,7 @@ All shapes are stored as `vertices[] + skin_radius`:
 | Capsule | 2 (segment endpoints) | end-cap radius |
 | Edge    | 2 (segment endpoints) | 0 (zero-thickness segment) |
 | Polygon | ≥ 3          | 0 (sharp) or > 0 (rounded corners) |
+| Chain   | ≥ 3 (open polyline) | 0 (zero-thickness segments) |
 
 Every contact computation works in two steps: find the closest features between the two raw cores (point, segment, or polygon), then subtract `rA + rB` from the resulting gap. The contact point lies on the skin surface of B (i.e. shifted by `-rB` along the normal from the raw core contact).
 
@@ -85,6 +86,17 @@ An edge is a zero-skin capsule, so edge–circle and edge–capsule pairs use th
 Edge–polygon needs its own query (`edge_polygon_contact`). The capsule reduction measures the distance to the polygon *boundary*, which stays positive once the segment lies inside the polygon, so a bare segment would report no contact exactly when it is most deeply penetrating. Instead the segment's line becomes the reference axis: the normal is the segment perpendicular oriented toward the polygon centroid, and the polygon vertices lying behind that line (within the segment's span, offset by the polygon's own skin) supply up to two contact points, deepest first.
 
 Edge–edge pairs never produce contacts, since neither shape has volume to resolve. Edges are also skipped by speculative-contact CCD: the distance-minus-radii gap math degenerates without a skin, and edges are static level geometry where discrete contacts suffice.
+
+#### Chain–X
+
+A chain is a run of edges sharing one entity, so it resolves to the deepest contact any single
+segment makes: each segment is handed to the edge paths above and the best result wins. No new
+geometry is involved, which also means a chain inherits every edge limitation. Chain–chain and
+chain–edge pairs produce nothing, neither side having volume to resolve, and chains are excluded
+from speculative contacts, so a fast enough body passes through one.
+
+Reporting only the deepest segment costs nothing in practice: a body spanning two segments at a
+joint is pushed out along the deeper of the two, and the next substep resolves the other.
 
 #### Polygon–Polygon (SAT, skin-aware)
 
