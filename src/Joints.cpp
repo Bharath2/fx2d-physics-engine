@@ -10,6 +10,12 @@ std::string FxJoint::get_entity2_name() const {
     return entity2 ? entity2->get_name() : "";
 }
 
+void FxJoint::namespace_constraints() {
+    for (auto& c : m_constraints) {
+        if (c) c->m_name = m_name + "_" + c->m_name;
+    }
+}
+
 void FxJoint::reset_pid_state() {
     m_integral = 0.0f;
     m_previous_error = 0.0f;
@@ -92,6 +98,8 @@ FxRevoluteJoint::FxRevoluteJoint(const std::string& name, const std::shared_ptr<
     angular_limit->lower_limit = angle_min;
     angular_limit->upper_limit = angle_max;
     m_constraints.push_back(angular_limit);
+
+    namespace_constraints();
 }
 
 void FxRevoluteJoint::apply_torque_effort(float torque) {
@@ -209,6 +217,8 @@ FxPrismaticJoint::FxPrismaticJoint(const std::string& name, const std::shared_pt
 
     auto angle_lock = std::make_shared<FxAngleLockConstraint>(e1, e2, 0.0f);
     m_constraints.push_back(angle_lock);
+
+    namespace_constraints();
 }
 
 void FxPrismaticJoint::apply_force_effort(float force) {

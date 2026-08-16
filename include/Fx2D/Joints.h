@@ -23,6 +23,10 @@ class FxJoint {
     float m_target_effort = 0.0f; // Shared effort target for torque/force control
     bool m_instant = true; // Whether to apply controls instantly or use PID
 
+    // Prefixes every owned constraint with the joint name. Constraints name themselves after
+    // their entity pair, so two joints of the same type across one pair would otherwise
+    // collide in the scene registry and the second joint's constraints would be dropped.
+    void namespace_constraints();
     void reset_pid_state();
     void wake_entities();
     float eval_pid(float error, double dt);

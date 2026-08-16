@@ -257,9 +257,48 @@ void test_entity_registry_remove_keeps_broad_phase_consistent() {
             "New entity pair was not discovered");
 }
 
+// Two joints of the same type across one entity pair must each register their own constraints.
+// Constraints name themselves after the entity pair, so without the joint-name prefix the second
+// joint's names collided, the registry rejected them, and its anchor and angle limit were never
+// solved -- while add_joint still reported success.
+void test_two_joints_on_one_pair_keep_their_constraints() {
+    FxScene scene({100.0f, 100.0f});
+    auto base = make_collision_entity("base", 0.0f, 0.0f);
+    auto link = make_collision_entity("link", 1.0f, 0.0f);
+    scene.add_entity(base);
+    scene.add_entity(link);
+
+    auto first = std::make_shared<FxRevoluteJoint>("first", base, link, FxVec2f{0.0f, 0.0f});
+    require(scene.add_joint(first), "the first joint must be added");
+    const size_t after_first = scene.constraint_count();
+    require(after_first == 2, "a revolute joint contributes an anchor and an angle limit, got " +
+                                  std::to_string(after_first));
+
+    auto second = std::make_shared<FxRevoluteJoint>("second", base, link, FxVec2f{0.0f, 0.0f});
+    require(scene.add_joint(second), "the second joint must be added");
+    require(scene.constraint_count() == 4,
+            "the second joint's constraints must register too, total is " +
+                std::to_string(scene.constraint_count()));
+
+    // Named after their joint, so they are addressable and cannot collide.
+    require(scene.get_constraint("first_base_link_Anchor") != nullptr,
+            "the first joint's anchor must be registered under its joint name");
+    require(scene.get_constraint("second_base_link_Anchor") != nullptr,
+            "the second joint's anchor must be registered under its joint name");
+
+    // Deleting one joint must leave the other's constraints alone.
+    require(scene.delete_joint("first"), "the first joint must delete");
+    require(scene.constraint_count() == 2,
+            "deleting one joint must remove only its own constraints, left " +
+                std::to_string(scene.constraint_count()));
+    require(scene.get_constraint("second_base_link_Anchor") != nullptr,
+            "the surviving joint must keep its constraints");
+}
+
 } // namespace
 
 void run_joint_tests() {
+    test_two_joints_on_one_pair_keep_their_constraints();
     test_pid_round_trip();
     test_effort_aliases();
     test_effort_mode_applies_direct_effort();

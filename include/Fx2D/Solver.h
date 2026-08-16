@@ -61,6 +61,9 @@ struct FxContact {
 
 // Position-based constraint base class for XPBD solver
 class FxConstraint {
+    // Joints rename the constraints they own; see FxJoint::namespace_constraints.
+    friend class FxJoint;
+
   protected:
     std::string m_name; // "id1_id2_constraint-name"
     double compliance = 1e-7; // XPBD alpha = compliance / dt^2

@@ -69,8 +69,8 @@ float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
     const float outward_sign = (n >= 3 && FxShape::polygon_area(verts) < 0.0f) ? -1.0f : 1.0f;
 
     for (size_t i = 0; i < n; ++i) {
-        const FxVec2f a = verts[i];
-        const FxVec2f b = verts[(i + 1) % n];
+        const FxVec2f& a = verts[i];
+        const FxVec2f& b = verts[(i + 1) % n];
         const FxVec2f edge = b - a;
         const float len = edge.norm();
         if (len < kEps) continue;
@@ -91,10 +91,9 @@ float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
             const float t = ray_circle(origin, dir, verts[i], skin);
             if (t >= 0.0f && (best < 0.0f || t < best)) {
                 best = t;
-                FxVec2f nrm = (origin + dir * t) - verts[i];
+                const FxVec2f nrm = (origin + dir * t) - verts[i];
                 const float len = nrm.norm();
                 best_normal = (len > kEps) ? (nrm / len) : -dir;
-                best = t;
             }
         }
     }
