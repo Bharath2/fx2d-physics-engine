@@ -89,14 +89,23 @@ Edge–edge pairs never produce contacts, since neither shape has volume to reso
 
 #### Chain–X
 
-A chain is a run of edges sharing one entity, so it resolves to the deepest contact any single
-segment makes: each segment is handed to the edge paths above and the best result wins. No new
-geometry is involved, which also means a chain inherits every edge limitation. Chain–chain and
-chain–edge pairs produce nothing, neither side having volume to resolve, and chains are excluded
-from speculative contacts, so a fast enough body passes through one.
+A chain resolves to the deepest contact any single segment makes, and three rules make that
+reliable where naive per-segment dispatch is not:
 
-Reporting only the deepest segment costs nothing in practice: a body spanning two segments at a
-joint is pushed out along the deeper of the two, and the next substep resolves the other.
+- **One-sided.** Front is the left of each segment's authored direction, so a polyline written
+  left to right supports bodies above it. A zero-thickness segment has no interior; without this,
+  a body slipping behind one is pushed further through by a flipped normal.
+- **Ghost vertices.** Round bodies are solved with neighbour knowledge: a contact at a segment
+  joint must carry a normal inside the arc the two adjacent faces admit (a real corner arc only
+  exists at convex joints), otherwise it is clamped to the nearer face normal. In isolation, an
+  endpoint contact's normal is whatever direction the vertex makes with the body centre, which
+  at a joint can point along the surface and eject the body through it.
+- **The chain orients its own normals.** The usual centre-to-centre normal fixup is skipped:
+  a chain's entity pose is the polyline origin, nowhere near the contact, so that flip is
+  arbitrary and inverted correct face normals on steep terrain.
+
+Chain–chain and chain–edge pairs produce nothing, neither side having volume to resolve, and
+chains are excluded from speculative contacts, so a fast enough body still passes through one.
 
 #### Polygon–Polygon (SAT, skin-aware)
 

@@ -157,6 +157,42 @@ void test_chain_against_chain_is_skipped() {
                                           std::to_string(scene.contacts().size()));
 }
 
+// The demo terrain, with drops aimed at the segments that used to fail: steep faces whose
+// front normal points up-left were inverted by the centre-to-centre normal fixup (a chain's
+// entity pose is nowhere near the contact), and joint contacts could eject bodies sideways.
+void test_steep_terrain_holds_dropped_balls() {
+    const std::vector<FxVec2f> terrain = {{0.5f, 8.5f},  {3.0f, 6.2f},  {5.5f, 5.4f},
+                                          {7.5f, 3.2f},  {10.0f, 2.2f}, {12.5f, 2.6f},
+                                          {14.5f, 4.4f}, {16.0f, 3.6f}, {17.5f, 4.6f},
+                                          {19.5f, 4.2f}};
+    auto surface_y = [&](float x) {
+        for (size_t i = 0; i + 1 < terrain.size(); ++i) {
+            if (x >= terrain[i].x() && x <= terrain[i + 1].x()) {
+                const float t = (x - terrain[i].x()) / (terrain[i + 1].x() - terrain[i].x());
+                return terrain[i].y() + t * (terrain[i + 1].y() - terrain[i].y());
+            }
+        }
+        return -100.0f;
+    };
+
+    for (float drop_x : {2.0f, 9.0f, 13.2f, 16.0f, 17.4f}) {
+        FxScene scene = make_scene(FxVec2f{20.0f, 12.0f});
+        add_chain(scene, "terrain", terrain);
+        auto ball =
+            add_circle(scene, "ball", {drop_x, surface_y(drop_x) + 2.0f}, 0.25f,
+                       {.elasticity = 0.25f, .static_friction = 0.4f, .dynamic_friction = 0.3f});
+
+        for (int i = 0; i < 300; ++i)
+            scene.step(kFrame);
+
+        const float sy = surface_y(ball->pose.x());
+        require(ball->pose.y() > sy - 0.3f,
+                "a ball dropped at x=" + std::to_string(drop_x) +
+                    " must stay on the terrain, ended (" + std::to_string(ball->pose.x()) + ", " +
+                    std::to_string(ball->pose.y()) + ") with surface at " + std::to_string(sy));
+    }
+}
+
 // Chains are authorable from YAML.
 void test_chain_from_yaml() {
     FxScene scene = FxYAML::buildScene(R"yaml(
@@ -262,6 +298,7 @@ void run_chain_tests() {
     test_body_crosses_segment_joints();
     test_chain_against_chain_is_skipped();
     test_chain_is_one_sided();
+    test_steep_terrain_holds_dropped_balls();
     test_chain_from_yaml();
     test_yaml_chain_rejects_short_input();
     std::cout << "Chain collider tests passed." << std::endl;
