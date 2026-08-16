@@ -17,6 +17,11 @@
 #include "Fx2D/Math.h"
 #include "Fx2D/Scene.h"
 
+// Fx2D colour to raylib colour.
+inline Color to_rl_color(const FxVec4ui8& c) {
+    return Color{c[0], c[1], c[2], c[3]};
+}
+
 class FxRylbRenderer {
   protected:
     FxScene& m_scene;

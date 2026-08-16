@@ -281,9 +281,9 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         }
     }
 
-    // Sync every tree proxy from current entity state; CCD bodies' boxes are swept by their
-    // travel over sweep_dt so fast movers pair before their tight boxes touch.
-    void sync_broad_phase(float sweep_dt = 0.0f) const {
+    // Sync the tree from current entity state, then collect overlapping pairs. CCD bodies'
+    // boxes are swept by their travel over sweep_dt so fast movers pair early.
+    std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs(float sweep_dt = 0.0f) const {
         for (size_t i = 0; i < m_items_vec.size(); ++i) {
             const auto& e = m_items_vec[i];
             uint32_t eid = e->get_entity_id();
@@ -334,16 +334,7 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
                 m_aabb_tree.update(m_entity_node_map.at(eid), query_aabb);
             }
         }
-    }
 
-    // Back-compat: sync then query in one call.
-    std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs(float sweep_dt = 0.0f) const {
-        sync_broad_phase(sweep_dt);
-        return query_broad_phase_pairs();
-    }
-
-    // Pair collection against the already-synced tree.
-    std::vector<std::pair<size_t, size_t>> query_broad_phase_pairs() const {
         // Ask the tree for raw entity-id pairs.
         std::vector<std::pair<int32_t, int32_t>> tree_pairs;
         m_aabb_tree.query_pairs(tree_pairs);

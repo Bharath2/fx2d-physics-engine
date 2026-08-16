@@ -1,11 +1,6 @@
 #include "Fx2D/Renderer.h"
 #include "Fx2D/Math.h"
 
-// Helper to convert between our colors and raylib
-static inline Color to_rl_color(const FxVec4ui8& c) {
-    return Color{c[0], c[1], c[2], c[3]};
-}
-
 FxRylbRenderer::FxRylbRenderer(FxScene& scene, int fps, unsigned int scale) :
     m_scene(scene), m_scale(scale), m_display_w(0), m_display_h(0) {
     init(fps);

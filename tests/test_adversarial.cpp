@@ -463,11 +463,10 @@ void test_bucket_fills_and_overflows() {
         if (x > 6.8f && x < 9.2f && y > 5.2f && y < 8.8f) ++in_bucket;
         else if (y > 0.7f && y < 5.0f) ++overflowed;
         if (y <= 0.7f) ++below_floor;
-        auto inside_box = [&](float cx, float cy, float hw, float hh) {
-            return std::fabs(x - cx) < hw - 0.02f && std::fabs(y - cy) < hh - 0.02f;
-        };
-        if (inside_box(6.6f, 6.5f, 0.2f, 1.7f) || inside_box(9.4f, 6.5f, 0.2f, 1.7f) ||
-            inside_box(8.0f, 5.0f, 1.6f, 0.2f))
+        const FxVec2f centre{x, y};
+        if (left->collision_geometry()->contains(centre) ||
+            right->collision_geometry()->contains(centre) ||
+            bottom->collision_geometry()->contains(centre))
             ++in_wall;
     }
 

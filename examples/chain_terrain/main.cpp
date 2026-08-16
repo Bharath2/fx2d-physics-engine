@@ -19,10 +19,6 @@ const FxVec4ui8 kBallColours[] = {{232, 122, 92, 255},
                                   {156, 208, 132, 255},
                                   {196, 140, 224, 255}};
 
-Color to_rl(const FxVec4ui8& c) {
-    return Color{c[0], c[1], c[2], c[3]};
-}
-
 } // namespace
 
 int main(int, char**) {
@@ -101,7 +97,7 @@ int main(int, char**) {
             std::to_string(terrain->collision_geometry()->segment_count()) + " segments" +
             "    balls: " + std::to_string(spawned) + "/" + std::to_string(kMaxBalls) +
             "  resting: " + std::to_string(resting) + "    [click] drop  [C] clear  [R] reset";
-        DrawText(hud.c_str(), 12, 12, 18, to_rl(FxVec4ui8{226, 232, 240, 255}));
+        DrawText(hud.c_str(), 12, 12, 18, to_rl_color(FxVec4ui8{226, 232, 240, 255}));
     });
 
     renderer.run(true);
