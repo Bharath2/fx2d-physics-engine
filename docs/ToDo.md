@@ -5,7 +5,9 @@ targets are removed; see git history for what already landed (shapes unified
 under `vertices[] + skin_radius`, capsules/edges/rounded variants, speculative-
 contact CCD, broad-phase hardening, the test suite, joint-control examples,
 the `FxAngleWrap` precision fix, contacts/events/sensors, the YAML inertia
-ordering fix, the adversarial scene suite, and keyboard/mouse input).
+ordering fix, the adversarial scene suite, keyboard/mouse input, entity groups
+with intra-group collision filtering, and the chain collider with its
+one-sided, ghost-vertex contact handling).
 
 ## Priority Targets
 

@@ -12,6 +12,7 @@ A 2D rigid body physics engine written in C++20, using SAT collision detection, 
 - **XPBD constraint solver:** Substepped position-based dynamics with compliance control, warm starting, and Coulomb friction
 - **Joints with motors:** Revolute and prismatic joints with position / velocity / effort control modes and PID tuning
 - **Spatial queries:** Ray casts, overlap and point queries sharing the simulation's own narrow phase, for line of sight, area effects, click-picking and RL observations
+- **Entity groups:** Named sets managed as one thing — bulk delete/enable, restored by reset, and intra-group collision filtering via one integer per body
 - **Contacts, events, and sensors:** Buffered contacts after each step, begin/end contact events, and trigger-only sensor entities
 - **Keyboard and mouse input:** Renderer-agnostic input for gameplay code, with world-space cursor position and headless injection for scripted or agent-driven scenes
 - **Sleeping:** Resting bodies fall asleep and stop consuming solver time until disturbed
@@ -124,6 +125,7 @@ Headless examples skip the graphics stack entirely:
 | [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |
 | [contacts_and_events.md](./docs/contacts_and_events.md) | Reading contacts after a step, begin/end contact events, and sensor (trigger) entities |
 | [queries.md](./docs/queries.md) | Ray casts, overlap and point queries — line of sight, lidar fans, explosions, click-picking |
+| [entity_groups.md](./docs/entity_groups.md) | Named entity sets — bulk operations, intra-group collision filtering, reset semantics, naming |
 | [input.md](./docs/input.md) | Keyboard and mouse input for gameplay — renderer polling, world-space cursor, headless injection |
 | [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |
 | [headless_mode.md](./docs/headless_mode.md) | Running the simulation without a renderer for testing and data collection |
