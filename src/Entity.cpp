@@ -44,6 +44,7 @@ void FxEntity::reset() {
     prev_pose = _init_pose;
     prev_velocity = _init_velocity;
     m_pose_carry = {0, 0, 0};
+    m_correction_carry = {0, 0, 0};
     m_eff_force = {0.0f, 0.0f};
     m_eff_moment = 0.0f;
     m_eff_impulse = {0.0f, 0.0f};
@@ -241,6 +242,26 @@ void FxEntity::__update_pose(const double& step_dt) {
     carry_add(pose.theta(), (double)velocity.theta() * step_dt, m_pose_carry.theta());
     // wrap to [-pi, pi) when incremented
     pose.set_theta(FxAngleWrap(pose.theta()));
+}
+
+// Same mixed-precision trick as __update_pose, but for constraint corrections, and reporting
+// how much of the correction survived so prev_pose can be kept in step where that matters.
+FxVec3f FxEntity::apply_pose_correction(const FxVec3f& delta) {
+    auto carry_add = [](float& dst, double inc, double& carry) -> float {
+        const double sum = static_cast<double>(dst) + inc + carry;
+        const float rounded = static_cast<float>(sum);
+        carry = sum - static_cast<double>(rounded);
+        const float applied = rounded - dst;
+        dst = rounded;
+        return applied;
+    };
+
+    FxVec3f applied{0.0f, 0.0f, 0.0f};
+    applied.x() = carry_add(pose.x(), static_cast<double>(delta.x()), m_correction_carry.x());
+    applied.y() = carry_add(pose.y(), static_cast<double>(delta.y()), m_correction_carry.y());
+    applied.theta() =
+        carry_add(pose.theta(), static_cast<double>(delta.theta()), m_correction_carry.theta());
+    return applied;
 }
 
 void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {

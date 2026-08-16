@@ -45,11 +45,14 @@ void FxConstraint::resolve(double dt) {
     // Calculate Lagrange multiplier delta
     const float dLambda = -C / denom;
 
-    // Apply corrections directly to entity poses
-    entity1->pose.xy() += w1 * dLambda * g1;
-    entity2->pose.xy() += w2 * dLambda * g2;
-    entity1->pose.theta() += I1 * dLambda * gth1;
-    entity2->pose.theta() += I2 * dLambda * gth2;
+    // Apply corrections through the mixed-precision path rather than straight into the float
+    // pose. A motor correction can be smaller than one ulp of the coordinate it is added to,
+    // and would simply round away; apply_pose_correction banks the leftover so successive
+    // corrections accumulate until they move the body. See FxEntity::apply_pose_correction.
+    const FxVec2f dxy1 = w1 * dLambda * g1;
+    const FxVec2f dxy2 = w2 * dLambda * g2;
+    entity1->apply_pose_correction(FxVec3f{dxy1.x(), dxy1.y(), I1 * dLambda * gth1});
+    entity2->apply_pose_correction(FxVec3f{dxy2.x(), dxy2.y(), I2 * dLambda * gth2});
 }
 
 // FxAngleLockConstraint constructors

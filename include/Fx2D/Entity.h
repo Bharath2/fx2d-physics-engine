@@ -64,6 +64,10 @@ class FxEntity {
     FxVec3f _init_pose{0, 0, 0};
     FxVec3f _init_velocity{0, 0, 0};
     FxVec3d m_pose_carry{0, 0, 0};
+    // Residual of constraint corrections too small to survive rounding into the float pose.
+    // Kept separate from m_pose_carry so integration and constraint solving cannot borrow
+    // each other's leftovers.
+    FxVec3d m_correction_carry{0, 0, 0};
 
     // visual and collision shapes
     std::shared_ptr<FxCollisionShape> m_collision;
@@ -193,6 +197,21 @@ class FxEntity {
     // resolve the forces and torques and calculate acceleration;
     FxVec3f calc_acceleration();
     FxVec3f calc_acceleration(const FxVec2f& gravity);
+
+    // Applies a positional correction in mixed precision and returns the part that actually
+    // landed in the float pose.
+    //
+    // The pose is float32 by design, so a correction smaller than one ulp of the coordinate
+    // magnitude — about 4.8e-7 at x = 7 — would otherwise round away to nothing. A revolute
+    // motor with an anchor offset from the centre of mass works in exactly that range at small
+    // timesteps, so it would lose most of its authority, and worse the further the scene sits
+    // from the origin. Accumulating the leftover in double and folding it into the next
+    // correction lets those increments add up until they are large enough to move the body,
+    // without giving up float storage anywhere.
+    //
+    // The return value is the delta that reached the pose, so callers that must keep prev_pose
+    // in step (a correction that should not register as velocity) can shift it identically.
+    FxVec3f apply_pose_correction(const FxVec3f& delta);
 
     void step(const FxVec2f& gravity, const double& step_dt);
 
