@@ -15,6 +15,7 @@ void run_angle_precision_tests();
 void run_resting_stability_tests();
 void run_contact_event_tests();
 void run_yaml_inertia_tests();
+void run_group_tests();
 void run_chain_tests();
 void run_query_tests();
 void run_input_tests();
@@ -39,6 +40,7 @@ const Suite kSuites[] = {
     {"resting_stability", run_resting_stability_tests, false},
     {"contact_events", run_contact_event_tests, false},
     {"yaml_inertia", run_yaml_inertia_tests, false},
+    {"groups", run_group_tests, false},
     {"chain", run_chain_tests, false},
     {"queries", run_query_tests, false},
     {"input", run_input_tests, false},

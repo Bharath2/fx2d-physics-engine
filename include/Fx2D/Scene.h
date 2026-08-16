@@ -19,6 +19,29 @@
 #include "Fx2D/Registry.h"
 #include "Fx2D/Solver.h"
 
+// A named set of entities managed as one thing: deleted together, enabled together, and by
+// default exempt from colliding with one another. Membership carries no connectivity or
+// uniformity requirement; builders that populate groups may impose their own.
+class FxEntityGroup {
+    friend class FxScene;
+    std::string m_name;
+    int32_t m_collision_group = 0; // unique negative id when self-collision is off, else 0
+    std::vector<std::shared_ptr<FxEntity>> m_members;
+
+  public:
+    explicit FxEntityGroup(const std::string& name) : m_name(name) {}
+    const std::string& get_name() const { return m_name; }
+    const std::vector<std::shared_ptr<FxEntity>>& members() const { return m_members; }
+    size_t size() const { return m_members.size(); }
+    void set_enabled(bool enabled) {
+        for (auto& e : m_members) {
+            if (!e) continue;
+            e->enabled = enabled;
+            if (enabled) e->wake();
+        }
+    }
+};
+
 // A pair of entities that started or stopped touching during a step.
 struct FxContactEvent {
     std::shared_ptr<FxEntity> entity1 = nullptr;
@@ -66,6 +89,7 @@ class FxScene {
   protected:
     FxEntityRegistry m_entities; // stores pointers to all entities with collision management
     FxNamedRegistry<FxConstraint> m_constraints; // stores all constraints
+    FxNamedRegistry<FxEntityGroup> m_groups; // named entity groups
     FxNamedRegistry<FxJoint> m_joints; // stores all joints
 
   public:
@@ -180,6 +204,24 @@ class FxScene {
         return m_joints.get_rawptr(name) != nullptr;
     }
 
+    // ---------------------------------------------------------------- entity groups
+    // Returns the new group, or nullptr if the name is taken. With self_collide false the
+    // group's members never collide with one another; outsiders are unaffected.
+    std::shared_ptr<FxEntityGroup> create_group(const std::string& name, bool self_collide = false);
+    // Adds the entity to the scene if needed, then to the group.
+    bool add_to_group(const std::shared_ptr<FxEntityGroup>& group,
+                      const std::shared_ptr<FxEntity>& entity);
+    std::shared_ptr<FxEntityGroup> get_group(const std::string& name) const {
+        return m_groups.get(name);
+    }
+    // Deletes every member entity, then the group itself.
+    bool delete_group(const std::string& name);
+    size_t group_count() const { return m_groups.size(); }
+    // base if free, else base_1, base_2, ... — for builders generating entity names.
+    std::string unique_entity_name(const std::string& base) const {
+        return m_entities.make_unique_name(base);
+    }
+
     // Collision pair management (delegated to entity registry)
     void enable_collision(const std::string& entity1_name, const std::string& entity2_name) {
         m_entities.enable_collision(entity1_name, entity2_name);
@@ -216,6 +258,10 @@ class FxScene {
     std::vector<std::shared_ptr<FxEntity>> m_initial_entities;
     std::vector<std::shared_ptr<FxConstraint>> m_initial_constraints;
     std::vector<std::shared_ptr<FxJoint>> m_initial_joints;
+    // Membership is copied at capture, since the live group object mutates afterwards.
+    std::vector<std::pair<std::shared_ptr<FxEntityGroup>, std::vector<std::shared_ptr<FxEntity>>>>
+        m_initial_groups;
+    int32_t m_next_collision_group = -1;
     bool m_has_initial_snapshot = false;
 
     // Never read by the solver; input reaches the simulation only through user callbacks.

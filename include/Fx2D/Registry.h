@@ -110,6 +110,15 @@ class FxNamedRegistry {
         return (it == m_name_map.end()) ? nullptr : m_items_vec[it->second].get();
     }
 
+    // base if free, else base_1, base_2, ... until a free name is found.
+    std::string make_unique_name(const std::string& base) const {
+        if (m_name_map.find(base) == m_name_map.end()) return base;
+        for (int i = 1;; ++i) {
+            std::string candidate = base + "_" + std::to_string(i);
+            if (m_name_map.find(candidate) == m_name_map.end()) return candidate;
+        }
+    }
+
     const std::vector<std::shared_ptr<T>>& items() const noexcept { return m_items_vec; }
     std::vector<std::shared_ptr<T>>& items() noexcept { return m_items_vec; }
 
@@ -343,6 +352,11 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
                 !m_items_vec[i]->enable_ccd && !m_items_vec[j]->enable_ccd)
                 continue;
             if (!is_collision_pair(static_cast<uint32_t>(eid_a), static_cast<uint32_t>(eid_b)))
+                continue;
+            // One integer per body replaces O(N^2) pair exclusions for intra-group filtering.
+            if (m_items_vec[i]->collision_group != 0 &&
+                m_items_vec[i]->collision_group == m_items_vec[j]->collision_group &&
+                m_items_vec[i]->collision_group < 0)
                 continue;
             if (!m_items_vec[i]->collision_geometry() || !m_items_vec[j]->collision_geometry())
                 continue;

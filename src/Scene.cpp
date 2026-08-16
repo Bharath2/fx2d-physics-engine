@@ -60,7 +60,35 @@ void FxScene::capture_initial_state() {
     m_initial_entities = m_entities.items();
     m_initial_constraints = m_constraints.items();
     m_initial_joints = m_joints.items();
+    m_initial_groups.clear();
+    for (const auto& g : m_groups.items())
+        m_initial_groups.emplace_back(g, g->m_members);
     m_has_initial_snapshot = true;
+}
+
+std::shared_ptr<FxEntityGroup> FxScene::create_group(const std::string& name, bool self_collide) {
+    auto group = std::make_shared<FxEntityGroup>(name);
+    if (!self_collide) group->m_collision_group = m_next_collision_group--;
+    if (!m_groups.add(group)) return nullptr;
+    return group;
+}
+
+bool FxScene::add_to_group(const std::shared_ptr<FxEntityGroup>& group,
+                           const std::shared_ptr<FxEntity>& entity) {
+    if (!group || !entity) return false;
+    if (!m_entities.get_rawptr(entity->get_name()) && !m_entities.add(entity)) return false;
+    entity->collision_group = group->m_collision_group;
+    group->m_members.push_back(entity);
+    return true;
+}
+
+bool FxScene::delete_group(const std::string& name) {
+    auto group = m_groups.get(name);
+    if (!group) return false;
+    for (const auto& member : group->m_members) {
+        if (member) delete_entity(member->get_name());
+    }
+    return m_groups.remove(name);
 }
 
 // calls reset of all entities
@@ -82,6 +110,11 @@ void FxScene::reset() {
         m_entities.clear();
         m_constraints.clear();
         m_joints.clear();
+        m_groups.clear();
+        for (const auto& [group, members] : m_initial_groups) {
+            group->m_members = members;
+            m_groups.add(group);
+        }
         for (const auto& entity : m_initial_entities)
             m_entities.add(entity);
         // Joints re-register their own constraints, so they go back first.

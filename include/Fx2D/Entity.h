@@ -111,6 +111,8 @@ class FxEntity {
     bool enable_ccd = false; // If true, speculative contacts are generated for this entity to
                              // prevent tunneling
     bool is_sensor = false; // Detects overlaps but exchanges no impulses; reported as events
+    int32_t collision_group = 0; // Entities sharing a negative value never collide with each
+                                 // other; 0 means no group filtering
 
     // sleep configuration
     float sleep_threshold_linear = 0.01f; // linear speed below which entity may sleep

@@ -239,9 +239,10 @@ if (FX2D_BUILD_EXAMPLES)
   add_executable(example_stacked_boxes examples/stacked_boxes/main.cpp)
   add_executable(example_angry_boxes   examples/angry_boxes/main.cpp)
   add_executable(example_chain_terrain examples/chain_terrain/main.cpp)
+  add_executable(example_bucket_fill   examples/bucket_fill/main.cpp)
 
   foreach(example_target example_truck example_joint_control example_stacked_boxes example_angry_boxes
-                         example_chain_terrain)
+                         example_chain_terrain example_bucket_fill)
     target_link_libraries(${example_target} PRIVATE Fx2Dlib)
     fx2d_tune_target(${example_target})
   endforeach()
@@ -278,6 +279,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_input.cpp
     tests/test_queries.cpp
     tests/test_chain.cpp
+    tests/test_groups.cpp
     tests/test_slingshot.cpp
   )
 
