@@ -48,13 +48,20 @@ int main(int, char**) {
     bool raining = true;
 
     scene.set_reset_callback([&](FxScene& s) {
-        balls = s.create_group("balls", true);
+        // reset() restores the group from the snapshot, so re-fetch it rather than re-create:
+        // create_group would find the name taken, return nullptr, and kill the rain.
+        balls = s.get_group("balls");
+        if (!balls) balls = s.create_group("balls", true);
         spawned = 0;
         step_count = 0;
         raining = true;
     });
 
     scene.set_step_callback([&](FxScene& s, double) {
+        if (s.input().key_pressed(FxKey::R)) {
+            s.reset();
+            return; // the reset callback re-armed everything; nothing valid to do this step
+        }
         if (s.input().key_pressed(FxKey::Space)) raining = !raining;
         if (s.input().key_pressed(FxKey::C)) {
             s.delete_group("balls");
