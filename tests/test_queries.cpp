@@ -226,9 +226,37 @@ void test_overlap_agrees_with_contacts() {
     require(found.empty(), "a query far from every body must come back empty");
 }
 
+// FxShape::contains covers every shape family, skin included.
+void test_shape_contains_point() {
+    FxShape circle(1.0f);
+    circle.set_world_pose(FxVec3f{5.0f, 5.0f, 0.0f});
+    require(circle.contains(FxVec2f{5.0f, 5.0f}), "a circle must contain its centre");
+    require(circle.contains(FxVec2f{5.9f, 5.0f}), "and a point inside its radius");
+    require(!circle.contains(FxVec2f{6.1f, 5.0f}), "but not one outside it");
+
+    FxShape box(FxVec2f{2.0f, 4.0f}); // spans 4..6 by 3..7 once placed
+    box.set_world_pose(FxVec3f{5.0f, 5.0f, 0.0f});
+    require(box.contains(FxVec2f{5.9f, 6.9f}), "a box must contain a point just inside a corner");
+    require(!box.contains(FxVec2f{6.1f, 5.0f}), "and reject one past its face");
+
+    FxShape capsule(2.0f, 0.5f); // segment along local x, 0.5 skin
+    capsule.set_world_pose(FxVec3f{5.0f, 5.0f, 0.0f});
+    require(capsule.contains(FxVec2f{5.0f, 5.4f}),
+            "a capsule must contain a point within its skin");
+    require(!capsule.contains(FxVec2f{5.0f, 5.6f}), "and reject one beyond it");
+
+    // Rotation is respected, since the test runs on world vertices.
+    FxShape plank(FxVec2f{4.0f, 0.4f});
+    plank.set_world_pose(FxVec3f{5.0f, 5.0f, 1.5708f}); // stood on end
+    require(plank.contains(FxVec2f{5.0f, 6.5f}),
+            "a rotated plank must contain points along its new axis");
+    require(!plank.contains(FxVec2f{6.5f, 5.0f}), "and not where it no longer reaches");
+}
+
 } // namespace
 
 void run_query_tests() {
+    test_shape_contains_point();
     test_ray_through_empty_space_misses();
     test_ray_hits_box_face();
     test_ray_stops_at_max_distance();

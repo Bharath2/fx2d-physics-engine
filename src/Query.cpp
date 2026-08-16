@@ -35,38 +35,6 @@ float ray_segment(const FxVec2f& origin, const FxVec2f& dir, const FxVec2f& a, c
     return t;
 }
 
-// Is the point within the shape, skin included?
-bool point_inside(const FxShape& shape, const FxVec2f& p) {
-    const float skin = shape.skin_radius();
-    const FxVec2fArray verts = shape.vertices();
-    const size_t n = verts.size();
-
-    if (n == 0) return (p - shape.centroid()).norm() <= skin; // circle
-
-    if (n == 2) { // capsule or edge: within `skin` of the segment
-        const FxVec2f a = verts[0], b = verts[1];
-        const FxVec2f ab = b - a;
-        const float len2 = ab.dot(ab);
-        const float u = (len2 > kEps) ? std::clamp((p - a).dot(ab) / len2, 0.0f, 1.0f) : 0.0f;
-        return (p - (a + ab * u)).norm() <= skin;
-    }
-
-    // Convex: inside when the point is on the same side of every edge. Accepting either sign
-    // keeps it winding-agnostic; the skin is exact away from corners, conservative at them.
-    bool all_left = true, all_right = true;
-    for (size_t i = 0; i < n; ++i) {
-        const FxVec2f a = verts[i];
-        const FxVec2f b = verts[(i + 1) % n];
-        const FxVec2f edge = b - a;
-        const float len = edge.norm();
-        if (len < kEps) continue;
-        const float side = edge.cross(p - a) / len; // signed distance from the edge line
-        if (side < -skin) all_left = false;
-        if (side > skin) all_right = false;
-    }
-    return all_left || all_right;
-}
-
 // Ray against one world-positioned shape: distance or -1, plus the surface normal.
 // The boundary is the vertex core offset by the skin, so testing pushed-out edges and vertex
 // arcs covers every shape type, degenerating to ray-versus-edge at skin 0.
@@ -91,7 +59,7 @@ float ray_shape(const FxShape& shape, const FxVec2f& origin, const FxVec2f& dir,
     const size_t n = verts.size();
 
     // Starting inside reports the shape immediately, so picking works over a body.
-    if (point_inside(shape, origin)) {
+    if (shape.contains(origin)) {
         out_normal = -dir;
         return 0.0f;
     }
@@ -218,8 +186,8 @@ void FxScene::overlap_shape(const FxShape& shape, const FxVec3f& pose,
         }
         // Full containment gives the narrow phase no penetration axis, so it reports nothing.
         // Right for solving contacts, wrong for a query.
-        if (point_inside(*probe->collision_geometry(), entity_shape.centroid()) ||
-            point_inside(entity_shape, probe->collision_geometry()->centroid())) {
+        if (probe->collision_geometry()->contains(entity_shape.centroid()) ||
+            entity_shape.contains(probe->collision_geometry()->centroid())) {
             out.push_back(entity);
         }
     }
