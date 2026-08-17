@@ -125,6 +125,7 @@ Headless examples skip the graphics stack entirely:
 | [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |
 | [contacts_and_events.md](./docs/contacts_and_events.md) | Reading contacts after a step, begin/end contact events, and sensor (trigger) entities |
 | [queries.md](./docs/queries.md) | Ray casts, overlap and point queries — line of sight, lidar fans, explosions, click-picking |
+| [simd_plan.md](./docs/simd_plan.md) | The plan of record for vectorizing the solver — SoA gather/scatter, bulk loops, colored 8-wide velocity solve |
 | [entity_groups.md](./docs/entity_groups.md) | Named entity sets — bulk operations, intra-group collision filtering, reset semantics, naming |
 | [input.md](./docs/input.md) | Keyboard and mouse input for gameplay — renderer polling, world-space cursor, headless injection |
 | [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |

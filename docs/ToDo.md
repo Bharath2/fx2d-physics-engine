@@ -21,19 +21,22 @@ once — and reproduce CI (format + Release + Debug/ASan with -Werror) before pu
 
 ## Pending, in order
 
-1. **The rope thread** (item 10): distance joint → FxChain dynamic mode → bridge demo →
+1. **SIMD, per the plan of record** ([simd_plan.md](simd_plan.md)): SoA gather/scatter inside
+   step(), vectorized bulk loops, then the colored 8-wide velocity solve. Single-threaded;
+   builds the exact layout item 7's threading would need.
+2. **The rope thread** (item 10): distance joint → FxChain dynamic mode → bridge demo →
    chains-under-tension tests. One connected piece of work; each stage is useful alone, and
    the end closes the last untested adversarial class from item 8.
-2. **The floor escape** (detail in item 8): the only unexplained defect. 1–2 balls per 200
+3. **The floor escape** (detail in item 8): the only unexplained defect. 1–2 balls per 200
    through the 0.8-thick catch floor, substep-independent, pinned at <=3 by the bucket test.
-3. **Mouse joint** then the rest of item 9 — mouse pairs with `entity_at_point()` for
+4. **Mouse joint** then the rest of item 9 — mouse pairs with `entity_at_point()` for
    click-dragging and improves every demo.
-4. **Tree-accelerated queries** (item 2 follow-up) once query volume justifies it.
-5. **Time-of-impact CCD** (item 3) — also what lets fast bodies hit chains and edges.
-6. **Solver grid diagonal** (small): 11x5, 12x5 and 13x4 were never measured; the analysis
+5. **Tree-accelerated queries** (item 2 follow-up) once query volume justifies it.
+6. **Time-of-impact CCD** (item 3) — also what lets fast bodies hit chains and edges.
+7. **Solver grid diagonal** (small): 11x5, 12x5 and 13x4 were never measured; the analysis
    predicts 11x5 ~10% cheaper than the current 14x4 default if it passes, but it sits one
    pass above a configuration that failed by 2x, and buys none of 14's substep-side headroom.
-7. **Broad-phase hoist and threading** (items 3 and 7) — both gated on A/B evidence that has
+8. **Broad-phase hoist and threading** (items 3 and 7) — both gated on A/B evidence that has
    so far said no.
 
 Housekeeping, whenever convenient: the Debug/ASan CI job creeps as suites grow — marking the
@@ -217,10 +220,9 @@ and the adversarial test, which cannot share code, so change them in step.
    - **Determinism is a hard requirement**, not a nicety: fixed reduction order for float
      accumulation, no parallel writes to `m_contact_cache` (write-back stays serial),
      concatenation in pair order. A nondeterministic sim would undermine the RL story.
-   - **Out of scope for now:** SoA/SIMD batch solving of contacts (Box2D v3 style) — a
-     large refactor that only matters if the above land and still leave a ceiling. Note
-     leaf-level SIMD hygiene already exists: `-O3 -march=native` under `FX2D_NATIVE`, and
-     32-byte-aligned `FxArray` with `__restrict` loops that auto-vectorize.
+   - **SoA/SIMD batch solving** is no longer out of scope: it is the plan of record, see
+     [simd_plan.md](simd_plan.md). Its gather/scatter layout and colored contact graph are
+     also the prerequisites any future threading starts from.
 
 8. Push past the envelope the adversarial scenes established.
    The scenes have landed (`tests/test_adversarial.cpp`): tall stacks, pyramids, mass
