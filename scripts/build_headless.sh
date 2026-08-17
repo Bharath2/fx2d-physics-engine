@@ -13,8 +13,7 @@ EIGEN_INC=${EIGEN_INC:-/usr/include/eigen3}
 FLAGS=(-std=c++20 -O2 -Wall -I include -I examples -I "$EIGEN_INC")
 LIBS=(-lyaml-cpp -ltbb)
 
-CORE=(src/Entity.cpp src/Scene.cpp src/Collisions.cpp src/Constraints.cpp
-      src/Joints.cpp src/Query.cpp src/YamlUtils.cpp)
+mapfile -t CORE < <(./scripts/list_sources.sh --core)
 
 build() {
     local name=$1 main=$2

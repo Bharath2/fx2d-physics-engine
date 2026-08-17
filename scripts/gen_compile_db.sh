@@ -52,14 +52,7 @@ fi
 
 ROOT=$(to_mixed "$(pwd)")
 
-FILES=(
-  src/Entity.cpp
-  src/Scene.cpp
-  src/Collisions.cpp
-  src/Constraints.cpp
-  src/Joints.cpp
-  src/YamlUtils.cpp
-)
+mapfile -t FILES < <(./scripts/list_sources.sh --core)
 
 {
   echo '['

@@ -19,6 +19,7 @@ in CI (`.github/workflows/lint.yml`):
 
 ```bash
 ./scripts/format.sh           # rewrite sources to scripts/.clang-format
+./scripts/list_sources.sh     # what the tools sweep; --core for the physics TUs
 ./scripts/format.sh --check   # dry-run (fails if anything would change)
 ./scripts/lint.sh             # format check + cppcheck + clang-tidy
 ./scripts/lint.sh --no-tidy   # skip clang-tidy (fastest local gate)
@@ -28,7 +29,7 @@ The clang-format and clang-tidy configs live in `scripts/`, so the wrapper scrip
 them explicitly rather than relying on the tools searching upward from each file.
 
 `lint.sh` generates a minimal `compile_commands.json` for clang-tidy via
-`./scripts/gen_lint_compile_db.sh` (physics core only, no raylib), and cppcheck
+`./scripts/gen_compile_db.sh` (physics core only, no raylib), and cppcheck
 reads its suppressions from `scripts/cppcheck-suppressions.txt`.
 
 Install the tools on Debian/Ubuntu:
