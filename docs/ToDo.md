@@ -197,7 +197,10 @@ one-sided, ghost-vertex contact handling).
    kinematic platform. Thresholds in them are measured rather than aspirational.
 
    **The solver passed everything thrown at it.** No correctness bug was found. Columns
-   up to 15 boxes and a 5-wide pyramid hold at the default 11 substeps; 20 holds at 22.
+   up to 15 boxes and a 5-wide pyramid hold at the default configuration; 20 holds at 22
+   substeps. The default became 14 substeps x 4 velocity passes after a measured study:
+   fastest configuration passing the full quality suite, 26-33% cheaper per step than the
+   old 11x8.
    Raising substeps monotonically reduces sink, so the knob users reach for works. 10:1
    mass ratios are near-exact. Slivers down to 0.02 thick rest without jitter. Newton's
    cradle transfers momentum and leaves the middle balls in place. A box rides a
@@ -216,7 +219,7 @@ one-sided, ghost-vertex contact handling).
 
    What is genuinely open:
 
-   - **Deep penetration at extreme mass ratios.** A 1000:1 resting pair at the default 11
+   - **Deep penetration at extreme mass ratios.** A 1000:1 resting pair at 11
      substeps presses the light box exactly half its height into the ground and leaves it
      there — in place, unrotated, so this is real interpenetration rather than a topple. At
      44 substeps it does not happen. The milder 100:1 case buries 0.073 at 11 substeps and

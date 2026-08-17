@@ -23,8 +23,6 @@ uint64_t pack_contact_key(uint32_t a, uint32_t b) {
     return static_cast<uint64_t>(a) << 32 | static_cast<uint64_t>(b);
 }
 
-// Sweeps over the full contact list per substep in the velocity pass.
-constexpr size_t kVelocityPasses = 8;
 } // namespace
 
 // Inserts a contact, replacing any earlier one for the pair, so impulses end up final.
@@ -424,7 +422,7 @@ void FxScene::step(double step_dt) {
         // Multiple passes: one solve per contact leaves stack velocity residuals.
         {
             PROF(3);
-            for (size_t pass = 0; pass < kVelocityPasses; ++pass) {
+            for (size_t pass = 0; pass < m_velocity_passes; ++pass) {
                 for (auto& c : contacts)
                     FxSolver::resolve_velocities(c);
             }

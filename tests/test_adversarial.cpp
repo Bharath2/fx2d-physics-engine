@@ -89,7 +89,7 @@ void test_stack_of_ten_holds() {
             "a 10-box stack must not sink into itself, sank " + std::to_string(e.max_sink));
 }
 
-// Fifteen is the tallest column that holds at the default 11 substeps. Measured sink 0.151.
+// Fifteen is the tallest column that holds at the default configuration.
 void test_stack_of_fifteen_holds_at_default_substeps() {
     FxScene scene = make_scene();
     add_ground(scene);
@@ -107,7 +107,7 @@ void test_stack_of_fifteen_holds_at_default_substeps() {
             "a 15-box stack must not sink appreciably, sank " + std::to_string(e.max_sink));
 }
 
-// Twenty boxes collapse at the default 11 substeps and hold at 22.
+// Twenty boxes need more than the default configuration; they hold at 22 substeps.
 void test_stack_of_twenty_holds_with_more_substeps() {
     FxScene scene = make_scene();
     scene.set_substeps(22);
