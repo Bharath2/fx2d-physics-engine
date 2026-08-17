@@ -218,8 +218,7 @@ std::shared_ptr<FxEntity> buildEntity(const std::string& entity_name, const YAML
                                                                           // specified
         entity->vel_damping = physics["vel_damping"].as<float>(0.0f); // default to 0.0 if not
                                                                       // specified
-        entity->elasticity = physics["elasticity"].as<float>(1.0f); // default to 1.0 if not
-                                                                    // specified
+        entity->elasticity = physics["elasticity"].as<float>(0.1f);
         entity->static_friction = physics["static_friction"].as<float>(0.0f); // default to 0.0 if
                                                                               // not specified
         entity->dynamic_friction = physics["dynamic_friction"].as<float>(0.0f); // default to 0.2 if
