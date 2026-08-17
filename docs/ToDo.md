@@ -11,6 +11,35 @@ ghost-vertex contact handling, the solver perf pass — per-substep contact
 caching plus the measured 14x4 substep/velocity-pass default, ~2.5x per step
 combined — and the elasticity default dropping to 0.1).
 
+## How to work this file
+
+The numbered items below are the reference detail; this section is the pickup order. The
+working practice that produced everything delivered so far: measure before changing (the
+benchmark is `scripts/bench.cpp`, the profiler is `FX2D_PROFILE`), let the full 15-suite run
+judge physics changes — the adversarial suite has rejected wrong configurations more than
+once — and reproduce CI (format + Release + Debug/ASan with -Werror) before pushing.
+
+## Pending, in order
+
+1. **The rope thread** (item 10): distance joint → FxChain dynamic mode → bridge demo →
+   chains-under-tension tests. One connected piece of work; each stage is useful alone, and
+   the end closes the last untested adversarial class from item 8.
+2. **The floor escape** (detail in item 8): the only unexplained defect. 1–2 balls per 200
+   through the 0.8-thick catch floor, substep-independent, pinned at <=3 by the bucket test.
+3. **Mouse joint** then the rest of item 9 — mouse pairs with `entity_at_point()` for
+   click-dragging and improves every demo.
+4. **Tree-accelerated queries** (item 2 follow-up) once query volume justifies it.
+5. **Time-of-impact CCD** (item 3) — also what lets fast bodies hit chains and edges.
+6. **Solver grid diagonal** (small): 11x5, 12x5 and 13x4 were never measured; the analysis
+   predicts 11x5 ~10% cheaper than the current 14x4 default if it passes, but it sits one
+   pass above a configuration that failed by 2x, and buys none of 14's substep-side headroom.
+7. **Broad-phase hoist and threading** (items 3 and 7) — both gated on A/B evidence that has
+   so far said no.
+
+Housekeeping, whenever convenient: the Debug/ASan CI job creeps as suites grow — marking the
+slingshot suite slow is the lever; and the bucket spawn constants exist in both the example
+and the adversarial test, which cannot share code, so change them in step.
+
 ## Priority Targets
 
 1. Chain / polyline colliders — delivered.
@@ -263,6 +292,27 @@ combined — and the elasticity default dropping to 0.1).
    - **Wheel joint** — revolute plus a sprung suspension axis; the truck example currently
      fakes this with hand-assembled constraints.
    - **Pulley and gear** — ratio constraints across two joints; niche but classic.
+
+10. FxChain dynamic mode — the rope builder.
+   The agreed design, deferred from the chain work: `FxChain` is a builder spec, not a
+   runtime type. A polyline plus a mode. Static mode already exists (the chain collider);
+   dynamic mode emits an entity group of capsule links joined by revolute joints along the
+   same polyline. The spec carries the repeatable link properties (shape, mass, inertia
+   explicit or computed, friction, elasticity — default it to something inert), the joint
+   parameters (compliance or stiffness, optional angle limits, optional motor), and per-end
+   anchoring: pinned to the world, attached to a named entity, or free. A `chains:` YAML
+   section maps onto the same spec. Naming follows the group scheme: `<name>_<i>` links,
+   `<name>_j<i>` joints, constraints `<joint>_<Type>`.
+
+   Prerequisites all landed: groups give membership, bulk delete and intra-group collision
+   filtering; the constraint-naming fix makes many joints on one rig safe; a distance joint
+   (item 9) is the natural first link type before capsules-plus-revolutes.
+
+   Expectations to hold the tests to: joints are maximal-coordinate, so a loaded rope will
+   stretch — compliance is the dial, and the tests should pin measured stretch at a chosen
+   compliance rather than assert zero. This is where item 5's float-precision finding was
+   first stumbled on, so surprises are likely and finding them is the point. Exit: a bridge
+   demo with balls dropped on it, and chains-under-tension in the adversarial suite.
 
 ## Why These Matter
 
