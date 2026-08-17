@@ -6,8 +6,10 @@ under `vertices[] + skin_radius`, capsules/edges/rounded variants, speculative-
 contact CCD, broad-phase hardening, the test suite, joint-control examples,
 the `FxAngleWrap` precision fix, contacts/events/sensors, the YAML inertia
 ordering fix, the adversarial scene suite, keyboard/mouse input, entity groups
-with intra-group collision filtering, and the chain collider with its
-one-sided, ghost-vertex contact handling).
+with intra-group collision filtering, the chain collider with its one-sided,
+ghost-vertex contact handling, the solver perf pass — per-substep contact
+caching plus the measured 14x4 substep/velocity-pass default, ~2.5x per step
+combined — and the elasticity default dropping to 0.1).
 
 ## Priority Targets
 
