@@ -10,7 +10,7 @@ if ! command -v clang-format >/dev/null 2>&1; then
   exit 1
 fi
 
-mapfile -t FILES < <(./scripts/fx2d_sources.sh)
+mapfile -t FILES < <(./scripts/list_sources.sh)
 if [[ ${#FILES[@]} -eq 0 ]]; then
   echo "error: no sources found" >&2
   exit 1

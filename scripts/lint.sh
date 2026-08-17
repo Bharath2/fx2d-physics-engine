@@ -60,16 +60,9 @@ if [[ $DO_TIDY -eq 1 ]]; then
     echo "error: clang-tidy not found on PATH" >&2
     status=1
   else
-    ./scripts/gen_lint_compile_db.sh build-lint
-    # Physics + headless examples only — Renderer.cpp needs raylib headers.
-    TIDY_FILES=(
-      src/Entity.cpp
-      src/Scene.cpp
-      src/Collisions.cpp
-      src/Constraints.cpp
-      src/Joints.cpp
-      src/YamlUtils.cpp
-    )
+    ./scripts/gen_compile_db.sh build-lint
+    # The physics core only — Renderer.cpp needs raylib headers.
+    mapfile -t TIDY_FILES < <(./scripts/list_sources.sh --core)
     if ! clang-tidy --config-file="$(cd "$(dirname "$0")" && pwd)/.clang-tidy" -p build-lint --quiet "${TIDY_FILES[@]}"; then
       echo "clang-tidy reported issues" >&2
       status=1
