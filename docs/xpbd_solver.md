@@ -10,7 +10,9 @@ Fx2D uses **Extended Position-Based Dynamics (XPBD)** to simulate rigid body phy
 
 ## Overview
 
-Each call to `FxScene::step(dt)` divides the frame time into **N substeps** (default: 11):
+Each call to `FxScene::step(dt)` divides the frame time into **N substeps** (default: 14, with 4 velocity passes each;
+the pair was chosen by measurement — fewer passes fail tall stacks, and 14x4 was the
+fastest configuration passing the full quality suite):
 
 $$h = \frac{dt}{N}$$
 

@@ -64,7 +64,10 @@ class FxScene {
     // max and min time step values that can be use in step method
     static constexpr double m_max_time_step = 0.06;
     static constexpr double m_min_time_step = 1e-3;
-    size_t m_substeps = 11;
+    // 14x4 measured fastest among configurations passing the full quality suite;
+    // fewer passes fail tall stacks, more substeps at 8 passes just cost more.
+    size_t m_substeps = 14;
+    size_t m_velocity_passes = 4;
     // dirty flag to track when any entity is deleted
     bool m_entities_dirty = false;
     // total time elapsed since scene start
@@ -116,6 +119,8 @@ class FxScene {
     // get total time elapsed since scene start
     double time_elapsed() const { return m_time_elapsed; }
     void set_substeps(const size_t& substeps) { m_substeps = substeps; }
+    // Velocity sweeps per substep; convergence trades against cost jointly with substeps.
+    void set_velocity_passes(size_t passes) { m_velocity_passes = passes; }
     void set_gravity(const FxVec2f& o_gravity) { gravity = o_gravity; }
     // custom call back function called after every time step, user gets access to the scene.
     void set_step_callback(const std::function<void(FxScene&, double dt)>& callback) {
