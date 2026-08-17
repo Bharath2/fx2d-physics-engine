@@ -249,6 +249,21 @@ combined — and the elasticity default dropping to 0.1).
    The suite is marked slow and skipped when `FX2D_SKIP_SLOW_TESTS=1`, which CI sets for
    its Debug/sanitizer job only. Release runs it on every push.
 
+9. Broaden the joint set.
+   Two joint types against Box2D's eight-plus is the largest practical gap for anyone
+   building a real game on Fx2D. The machinery is already in place — FxJoint composes
+   constraints from the existing kernel, motors and PID come from the base class, and the
+   constraint-naming scheme keeps many joints on one rig safe — so each new type is one or
+   two constraint formulations plus tests. In rough order of value:
+   - **Distance / rope joint** — fixed or maximum separation between two anchors; also the
+     building block the FxChain dynamic mode wants.
+   - **Mouse joint** — a soft spring from a world point to a body anchor, paired with
+     `entity_at_point()` for click-dragging; every editor and demo wants it.
+   - **Weld joint** — locks relative pose entirely; breakable variants enable destruction.
+   - **Wheel joint** — revolute plus a sprung suspension axis; the truck example currently
+     fakes this with hand-assembled constraints.
+   - **Pulley and gear** — ratio constraints across two joints; niche but classic.
+
 ## Why These Matter
 
 - Chain colliders finish practical scene authoring for static level geometry.
