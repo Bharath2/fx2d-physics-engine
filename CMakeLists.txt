@@ -256,7 +256,7 @@ endif()
 option(FX2D_BUILD_BENCH "Build the step-time benchmark" OFF)
 
 if (FX2D_BUILD_BENCH)
-  add_executable(Fx2DBench scripts/bench/main.cpp)
+  add_executable(Fx2DBench scripts/bench.cpp)
   target_link_libraries(Fx2DBench PRIVATE Fx2Dlib)
   fx2d_tune_target(Fx2DBench)
 endif()
