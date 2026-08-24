@@ -10,7 +10,7 @@ A successful collision check produces an `FxContact`:
 
 | Field | Type | Description |
 |---|---|---|
-| `entity1`, `entity2` | `shared_ptr<FxEntity>` | The two colliding bodies |
+| `entity1`, `entity2` | `FxEntity*` | The two colliding bodies, **borrowed not owned** — see below |
 | `normal` | `FxVec2f` | Unit contact normal, pointing **entity1 → entity2** |
 | `position` | `FxVec2fArray` | World-space contact point(s) — up to 2 |
 | `count` | `size_t` | Number of active contact points (0, 1, or 2) |
@@ -19,9 +19,36 @@ A successful collision check produces an `FxContact`:
 | `jn_warm`, `jt_warm` | `float[2]` | Previous substep's impulses, used as the warm-start guess |
 | `vn_pre` | `float[2]` | Closing speed captured at substep start, fixing the restitution target for every sweep |
 
+The per-substep solver scratch — lever arms `rA`/`rB`, their cross products with the contact
+basis, the effective masses `K_n`/`K_t`, the inverse masses `wA`/`wB`/`IA`/`IB`, the restitution
+target `vn_pre`, and the mixed material constants — lives in a parallel `FxContactSolverData`
+array rather than on the contact. It is rebuilt every substep by `init_velocity_pass` and never
+read outside the substep, whereas the contact itself is copied into the step buffer once per
+contact per substep; carrying the scratch along made that copy twice the size it needed to be.
+Keeping it in its own array halved `FxContact` to 120 bytes and is also the column layout a
+batched solve would gather.
+
+The remaining fields are solver bookkeeping. They are visible on the contacts `FxScene::contacts()` hands back, but they describe how the solver reached the answer rather than the answer itself, and nothing outside `FxScene::step()` should read them:
+
+| Field | Type | Description |
+|---|---|---|
+| `body1`, `body2` | `int32_t` | Packed registry indices of the two bodies, used to reach the solver velocity columns without dereferencing a `shared_ptr` |
+| `restitution`, `mu_static`, `mu_kinetic` | `float` | Pair material constants, mixed once per substep so the sweeps never touch an entity to read them |
+| `pair_key` | `uint64_t` | The two entity ids packed into one key, identifying the pair |
+| `cache_slot` | `uint32_t` | Index of this pair's slot in the scene's warm-start cache |
+
 `is_valid(full_check)` returns `true` when the contact was constructed valid and — with `full_check`, the default — both entities are non-null, `count != 0`, `penetration_depth` is finite, and `normal` is non-degenerate (`norm() > 1e-3`). Note the depth test is finiteness, not positivity: speculative contacts carry a **negative** depth (a gap that will close within the substep) and are still valid.
 
 Contacts are no longer discarded once solved. `FxScene` retains them for the duration of the step and exposes them, along with begin/end contact events and sensor overlaps — see [contacts_and_events.md](contacts_and_events.md).
+
+**Entity handles are borrowed.** `entity1` and `entity2` are raw pointers, and so are the ones
+on `FxContactEvent`. They were `shared_ptr`, which cost an atomic increment and decrement every
+time a contact was copied — once per contact per substep — to re-establish ownership of a body
+the scene already owns. Lifetime is guaranteed instead by `FxScene` pinning a `shared_ptr` to
+every entity its contact buffers name, rebuilt once per step, so a body deleted between steps
+still survives long enough for its end-contact event to name it. The practical rule for callers
+is unchanged and now explicit: **contacts and events are valid until the next `step()`** — read
+what you need inside the frame, do not store them.
 
 ---
 
@@ -29,11 +56,32 @@ Contacts are no longer discarded once solved. `FxScene` retains them for the dur
 
 ### Broad Phase
 
-`FxSolver::aabb_overlap_check(entity1, entity2)` tests whether the axis-aligned bounding boxes of two entities overlap. It is a cheap pre-filter; pairs that fail are skipped entirely. AABBs are recomputed every substep inside `FxEntity::step()`.
+The candidate pairs come from a SAH-guided dynamic AABB tree (`include/Fx2D/AABBTree.h`), driven by `FxEntityRegistry` (`include/Fx2D/Registry.h`) in two halves:
+
+- **`sync_broad_phase(dt, sweep_all_movers)`** runs every substep. Bodies have just moved, so each proxy is brought up to date from `FxEntity::bounding_box()` — which `FxEntity::step()` refreshed during integration. The tree stores every box **fattened by 20% of its extent**, so a proxy only has to be reinserted when its body leaves that fat box. The function returns whether any leaf was inserted, removed or reinserted.
+
+  On the first substep the box is also **swept along the body's velocity for the whole step**, so a body moving at constant velocity stays inside the box the tree already holds and needs no reinsertion for the rest of the step. That inflates the pair list slightly, which the tight-AABB filter below rejects cheaply. This was tried once before and reverted for costing more than it saved; it only became worth it after the narrow phase got roughly three times cheaper. See [ToDo.md](ToDo.md).
+- **`collect_broad_phase_pairs(pairs)`** walks the tree for overlapping proxies and translates them into packed entity indices, applying the registry-level filters (collision-exclusion pairs, negative collision groups, missing geometry).
+
+`FxScene::step()` runs the walk only when the sync reports the tree changed. If no leaf moved, the tree is the same tree, so the walk would rebuild the identical list in the identical order — skipping it changes nothing and saves a tree descent. In a settling or piling scene about 90% of substeps skip it.
+
+Two filters that used to live in the query now run per substep in the narrow-phase loop, because the pair list outlives the substep that built it and both answers change as the substeps run:
+
+- **Sleeping pairs.** A pair with both bodies asleep is skipped. Filtering this at query time would have stopped a wake from propagating: a body woken partway through the step would have had its pairs dropped from the list *before* it woke.
+- **`FxSolver::aabb_overlap_check(entity1, entity2)`**, which tests the two current tight AABBs directly. It is the cheap pre-filter; pairs that fail are skipped without running any geometry. CCD pairs are exempt, since a speculative contact is generated precisely when the bodies are still apart.
+
+`collision_check()` runs the same test internally, so a contact and a broad-phase rejection can never disagree.
 
 ### Narrow Phase
 
-`FxSolver::collision_check(entity1, entity2)` dispatches to `compute_contact_one_way()` based on the shape types of the two entities.
+`FxSolver::collision_check(entity1, entity2)` dispatches on the shape types of the two entities.
+
+Polygon-vs-polygon is the one case that has to be tested **both ways** — SAT from A's faces and
+from B's — because the smaller penetration is the correct one. Only the winner's contact points
+are ever used, so the two halves are separate: `sat_query()` runs for each direction, and
+`polygon_contact_from_sat()` clips just once, for whichever direction won. A separating axis from
+either side ends the test immediately, without starting the other direction. Everything else —
+circles, capsules, chains — goes through `compute_contact_one_way()` as before.
 
 #### Unified shape model
 
@@ -180,10 +228,27 @@ $$\theta_A \mathrel{-}= I_A \cdot \lambda_P \cdot r_{An}, \qquad \theta_B \mathr
 ## Velocity Resolution — `resolve_velocities`
 
 ```cpp
-FxSolver::resolve_velocities(const FxContact& contact);
+FxSolver::init_velocity_pass(FxContact&, FxContactSolverData&, const FxSolverBodies&);
+FxSolver::warm_start(FxContact&, const FxContactSolverData&, FxSolverBodies&);
+
+// The scalar sweep. Still the reference definition of the semantics, and still used by
+// anything that solves one contact at a time.
+FxSolver::resolve_velocities(FxContact&, const FxContactSolverData&, FxSolverBodies&);
+
+// What FxScene::step actually calls: a whole colour at once. See "Batched solve" below.
+FxSolver::batch_append(FxContactBatch&, const FxContact&, const FxContactSolverData&, uint32_t);
+FxSolver::resolve_velocities_batched(FxContactBatch&, size_t begin, size_t end,
+                                     FxSolverBodies&, int slots);
+FxSolver::batch_write_back(const FxContactBatch&, std::vector<FxContact>&);
 ```
 
-Called once per contact per substep, **after** velocity derivation. Applies impulses for bounce (restitution) and surface friction.
+Called **after** velocity derivation. `init_velocity_pass` runs once per contact per substep and fills everything the sweeps need — lever arms, effective masses, the restitution target, and the mixed material constants. `resolve_velocities` then runs `velocity_passes` times over every contact (default 4), because a single sweep per contact leaves velocity residuals in a stack.
+
+### The solver velocity columns
+
+These three take an `FxSolverBodies` (`include/Fx2D/Solver.h`) rather than reading velocity off the entities. It is a structure of arrays — `vx`, `vy`, `w`, `inv_m`, `inv_i` — indexed by the packed registry index each contact carries in `body1` / `body2`. `FxScene::step()` gathers it once per substep after velocity derivation and scatters it back after the sweeps.
+
+The reason is cost, not style: the sweeps are the hottest phase of the step, and reaching velocity through a `shared_ptr<FxEntity>` is a pointer chase per body per contact per sweep. A sleeping or immovable body gathers a zero inverse mass, which is what makes it immovable in the sweeps. The layout is also what the colored batch solve in [simd_plan.md](simd_plan.md) is built on.
 
 ### Normal Impulse (Restitution)
 
@@ -195,7 +260,9 @@ $$v_n = \mathbf{v}_\text{rel} \cdot \mathbf{n}$$
 
 **2. Restitution target** — captured once per substep as `vn_pre` (relative normal velocity before the velocity sweeps). Bounce only if that approach speed exceeds a small slop:
 
-$$e = \min(e_A, e_B), \qquad v_{n,\text{target}} = \begin{cases} -e \cdot v_{n,\text{pre}} & v_{n,\text{pre}} < -v_{\text{slop}} \\ 0 & \text{otherwise} \end{cases}$$
+$$e = \max(e_A, e_B), \qquad v_{n,\text{target}} = \begin{cases} -e \cdot v_{n,\text{pre}} & v_{n,\text{pre}} < -v_{\text{slop}} \\ 0 & \text{otherwise} \end{cases}$$
+
+Restitution mixes by `max` and friction by `min`; see **Material mixing** under Key Notes for why the two go opposite ways.
 
 **3. Compute and apply normal impulse (with accumulation):**
 
@@ -235,6 +302,38 @@ Unset friction in YAML defaults to `0`, and pair coefficients use $\min(\mu_A,\m
 **4. Apply tangential impulse** to both linear and angular velocities along `t`.
 
 ---
+
+### Batched solve
+
+`FxScene::step()` does not sweep contacts one at a time. `FxContactGraph` (`src/ContactGraph.cpp`)
+colours the broad-phase pair list so that no two pairs in a colour touch the same movable body;
+each contact inherits its pair's colour; and the contacts of one colour are transposed into
+columns (`FxContactBatch`) and solved together. Because a colour's contacts write to disjoint
+bodies, solving them in any order — or all at once — gives the same answer, and the impulses can
+be scattered back without a conflict.
+
+Immovable bodies are excluded from the colouring conflict test: a body with zero inverse mass and
+inertia is never modified, so any number of contacts in one colour may share it. That matters
+more than anything else in the algorithm, because in a pile or a stack the ground is a party to a
+large share of all contacts.
+
+Two properties of the arithmetic make the columns vectorisable:
+
+- **Every contact runs two slots**, whatever its manifold holds, with the unused slot zeroed so
+  it reads as inactive. The scalar kernel's `i < count` bound and `(i + iter) % count` index would
+  otherwise differ from lane to lane; two fixed slots visited as `(slot + iter) & 1` give the
+  identical order.
+- **Every branch is a select.** The effective-mass test and the friction cone become blends, with
+  the divisor forced to 1 where inactive so a masked lane cannot produce an infinity.
+
+Each colour is further split by manifold size, and the kernel is instantiated for one slot and
+for two. Running one-point contacts through the two-slot kernel is correct but doubles their
+arithmetic, and a scene of circles is entirely one-point contacts.
+
+The **grouping changes the order contacts are solved in**, which a Gauss-Seidel solver is
+sensitive to — impulses propagate through a stack differently. It is a reordering, not an
+approximation, and the adversarial suite passed unchanged through it; but it is why the golden
+tables were re-baselined when this landed.
 
 ## Key Notes
 

@@ -87,11 +87,15 @@ double t = scene.time_elapsed();  // total simulation time in seconds since star
 ## Simulation Parameters
 
 ```cpp
-scene.set_substeps(11);                    // solver substeps per step() call (default: 11)
+scene.set_substeps(14);                    // solver substeps per step() call (default: 14)
+scene.set_velocity_passes(4);              // velocity sweeps per substep (default: 4)
 scene.set_gravity(FxVec2f(0.0f, -9.81f)); // override gravity
 ```
 
-Increasing substeps improves constraint and collision accuracy at the cost of CPU time.
+Increasing substeps improves constraint and collision accuracy at the cost of CPU time. The
+14x4 default is the cheapest configuration measured that still passes the full quality suite;
+the two knobs trade against each other, so raise substeps for penetration under load and
+velocity passes for stack convergence.
 
 ---
 

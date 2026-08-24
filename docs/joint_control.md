@@ -1,6 +1,6 @@
 # Joint Control Reference
 
-Fx2D joints connect two entities and expose a motor API built on a shared PID controller. Both joint types (`FxRevoluteJoint`, `FxPrismaticJoint`) inherit the same base interface and differ only in the physical quantity they control (angle vs. translation).
+Fx2D joints connect two entities — or one entity and a world point — and expose a motor API built on a shared PID controller. The motorised types (`FxRevoluteJoint`, `FxPrismaticJoint`) inherit the same base interface and differ only in the physical quantity they control (angle vs. translation). `FxMouseJoint` is the world-anchored one; see below.
 
 Include via:
 
@@ -9,6 +9,41 @@ Include via:
 ```
 
 ---
+
+## Mouse joint
+
+Drags one body by a grab point towards a moving world target — the joint behind click-and-drag.
+
+```cpp
+auto body = scene.entity_at_point(cursor_world);
+if (body) {
+    auto drag = std::make_shared<FxMouseJoint>("drag", body, cursor_world);
+    scene.add_joint(drag);
+}
+// each frame, while the button is held
+drag->set_target(cursor_world);
+// on release
+scene.delete_joint("drag");
+```
+
+The grab point defaults to world coordinates, so passing the cursor position grabs the body
+*where it was clicked*: pull a plank by one end and it swings round, as it should. Pass
+`grab_is_local = true` to give a point in the body's own frame instead.
+
+`set_compliance()` sets how hard it pulls — larger is softer, default `1e-4`. `set_target()`
+also wakes the body, since a sleeping body under the cursor would otherwise ignore the drag.
+
+**It moves the body without imparting velocity.** Velocity in this solver is derived from the
+pose change over a substep, so a constraint that only moves `pose` behaves as an undamped spring:
+it converts every pull into momentum and the body sails past the cursor. Measured on a 10-unit
+drag, that overshoot was 8 units. The mouse constraint moves `prev_pose` with `pose` — the same
+trick penetration recovery uses — so the body follows the cursor and stops there. Overshoot is
+zero, and no damping knob is needed.
+
+This is the first constraint anchored to the **world** rather than to a second body:
+`FxMouseConstraint` leaves `entity2` null, `FxConstraint::resolve` treats an absent second body
+as an immovable one, and the scene's dead-reference sweeps no longer mistake it for a dangling
+pointer. Any future world-anchored constraint gets that for free.
 
 ## Accessing Joints
 

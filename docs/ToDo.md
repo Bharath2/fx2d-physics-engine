@@ -15,33 +15,234 @@ combined — and the elasticity default dropping to 0.1).
 
 The numbered items below are the reference detail; this section is the pickup order. The
 working practice that produced everything delivered so far: measure before changing (the
-benchmark is `scripts/bench.cpp`, the profiler is `FX2D_PROFILE`), let the full 15-suite run
-judge physics changes — the adversarial suite has rejected wrong configurations more than
-once — and reproduce CI (format + Release + Debug/ASan with -Werror) before pushing.
+benchmark is `scripts/bench.cpp` -- three scenes, reporting contact counts as well as time --
+and the profiler is `include/Fx2D/Profile.h`, built with `-DFX2D_PROFILE=ON`), let the full
+16-suite run judge physics changes — the adversarial suite has rejected wrong configurations
+more than once, and `tests/test_solver_regression.cpp` now pins the numbers themselves for
+refactors that are meant to change only speed — and reproduce CI (format + Release + Debug/ASan
+with -Werror) before pushing.
+
+## Recently delivered
+
+These are done; they are recorded here rather than in the pending list because each one changed
+how the next decision should be made.
+
+- **Mouse joint and world-anchored constraints — delivered.** `FxMouseJoint` drags a body by a
+  grab point towards a moving world target, the joint behind click-and-drag. It is the first
+  constraint anchored to the world rather than to a second body: `entity2` is null,
+  `FxConstraint::resolve` treats an absent second body as immovable, and the dead-reference
+  sweeps no longer mistake that for a dangling pointer, so a future weld-to-world is cheap.
+
+  The tests found a design flaw worth recording. A position constraint is an undamped spring
+  here, because velocity is derived from the pose change, so every pull becomes momentum: the
+  first version overshot a 10-unit drag by 8 units. A damping knob recovered only 12% of that,
+  since it runs before integration and the constraint regenerates the velocity afterwards. The
+  fix was `carries_velocity = false`, moving `prev_pose` with `pose` the way penetration
+  recovery does, which takes overshoot to exactly zero and let the damping knob be deleted.
+  Five tests in `tests/test_joints.cpp`, and the overshoot assertion discriminates: reverting
+  the flag fails it at 8.08.
+
+- **Half-wired joints reported success — fixed.** `add_joint` added the joint, looped adding its
+  constraints, and ignored every one of their return values. A joint whose anchor or limit
+  failed to register was reported as added while being silently weaker than asked for. It now
+  rolls back the constraints already added plus the joint, and returns false. Latent rather than
+  live: the only registry warnings in the suite are two deliberate ones in the group tests.
+
+- **Cross-platform and ARM — delivered.** Architecture-aware tuning flags, every one of them
+   probed rather than assumed (`-march=native` is an error on Apple Clang arm64, `/arch:` does
+   not exist for MSVC ARM64); `FX2D_ARCH_BASELINE` for shipping builds; a CI matrix of six jobs
+   across two ISAs and three compiler families; and `cmake/toolchains/aarch64-linux-gnu.cmake`
+   so ARM is testable locally under qemu. The suite passes on GCC x86-64, Clang x86-64, GCC
+   aarch64 and MinGW GCC. Two real defects fell out of building with Clang for the first time:
+   53 signed-index subscripts in the AABB tree, and a pair of write-only fields on the revolute
+   joint. Details in [CONTRIBUTING.md](CONTRIBUTING.md) under Portability.
+
+- **Narrow phase — delivered, and not by batching.** Profiling found 11.5% of the step inside
+   `malloc`/`free`, from `sat_query` allocating two temporary `FxArray`s per edge and
+   `set_world_pose` allocating three per entity per substep. Both are now allocation-free and
+   bit-identical, worth **1.55-1.6x on `stacks`** and 1.15-1.35x on `settling_boxes`. `pile` is
+   circles and never entered SAT, so it barely moves. No SIMD was written and none is currently
+   justified: the allocator is gone from the profile, and what remains is branchy polygon SAT.
+   See [simd_plan.md](simd_plan.md) Phase D.
+
+- **Duplicated SAT sweep — removed.** `sat_query` and `sat_gap_query` shared their whole
+  per-edge body and differed only in what they accumulated: the first keeps the largest gap and
+  exits early on a separating axis, the second keeps the smallest and never exits. Both now call
+  one `sat_axis` helper. Measured interleaved, it is a wash on cycles; the first non-interleaved
+  reading claimed a 4.4% regression and was ordering noise.
+
+- **Narrow phase, two exact wins — delivered. ~14% off the `stacks` step.** Both come from
+  removing work the two-way polygon test was doing and discarding, not from batching:
+
+  | change | stacks | pile | settling_boxes |
+  |---|---|---|---|
+  | stop after the first separating axis instead of testing both directions | **-6.2%** | -4.2% | -1.2% |
+  | split SAT from clipping so only the winning direction is clipped | **-8.3%** | -1.5% | +1.4% |
+
+  `collision_check` has to try both directions to find the smaller penetration, but it was
+  running a full SAT *and* a full clip each way and throwing one result away -- and it computed
+  the second direction even when the first had already found a separating axis. The clip is the
+  expensive half: two normalisations plus the edge clip itself. `polygon_contact_from_sat` is
+  now separate and runs once. Chains still take the general path, since `is_polygon()` and
+  `is_chain()` are mutually exclusive.
+
+  The `settling_boxes` figure is inside the noise band this machine produces; the two other
+  scenes moved consistently.
+
+- **SIMD Phase C2 — delivered. 1.60x on `stacks`, 1.17x on `pile`, 1.08x on `settling_boxes`.**
+  The colour-batched velocity solve, and the first change in this plan where vector width rather
+  than data layout was the thing that paid: roughly a third of the win is the SoA transpose, two
+  thirds the vectorisation itself. Three non-obvious requirements, each of which cost a
+  measurement to find -- a uniform two-slot manifold so no lane has to branch; specialisation on
+  manifold size, without which the circle-heavy `pile` was 14% *slower* than scalar; and raising
+  GCC's `vect-max-version-for-alias-checks` from its default of 10, which was silently refusing
+  both hot loops. No intrinsics, so the same source vectorises to AVX2 and to NEON. Detail in
+  [simd_plan.md](simd_plan.md).
+
+- **Three small exact wins in the hot loops — delivered.** All bit-identical, all measured in
+  cycles rather than wall time:
+
+  | change | stacks | pile | settling_boxes |
+  |---|---|---|---|
+  | cache both bodies' velocities in locals across `resolve_velocities` | **-3.0%** | -0.4% | -1.5% |
+  | reuse the AABB tree's sibling-search stack instead of allocating per insert | +0.4% | **-1.4%** | **-1.1%** |
+  | write `min_projection`'s inner loop in scalars instead of Eigen expressions | **-0.9%** | -0.8% | -0.5% |
+
+  The first is the interesting one. `resolve_velocities` applies up to six impulses per call, and
+  because `FxSolverBodies` is a mutable reference indexed by runtime values, the compiler had to
+  assume each store might alias the arrays and reload all six velocity components afterwards.
+  Only that one contact touches those two bodies within the call, so hoisting them into locals
+  and writing back once is exact.
+
+  The second was the fifth instance of the same allocation trap: `find_best_sibling` built and
+  destroyed a `std::vector` search stack on every tree insertion, and a body that keeps escaping
+  its fat box is reinserted every substep.
+
+- **Storing the collision shape by value — tried and rejected on measurement.** `FxEntity` holds
+  its collision shape behind a `shared_ptr`, so refreshing the world pose chases a pointer to a
+  separate 96-byte allocation once per entity per substep -- 5.3% of the `settling_boxes` step by
+  line-level profile. Inlining the shape removes that indirection. It was implemented, passed all
+  suites with goldens unchanged, and then taken back out.
+
+  Wall-clock A/B was worthless: the same unchanged binary measured `settling_boxes/200` at 8.50,
+  11.89 and 3.47 ms/step across three windows, because the laptop moves on and off turbo. Cycle
+  counts settled it, being frequency-independent:
+
+  | scene | shared_ptr | inline | delta |
+  |---|---|---|---|
+  | pile | 11.76 Gcycles | 12.05 Gcycles | **+2.4%** |
+  | settling_boxes | 4.714 Gcycles | 4.483 Gcycles | **-4.9%** |
+
+  Instruction counts matched to within 0.2%, so this is purely memory layout. A wash overall,
+  against `FxEntity` growing 312 -> 400 bytes and an API change that drops a lifetime guarantee.
+
+  **The mechanism turned out to be the reverse of the hypothesis**, which is the part worth
+  keeping. The prediction was that inlining would help the contact-dense `pile` (fewer bodies,
+  many shape lookups) and hurt body-heavy `settling_boxes`. The opposite happened: shapes behind
+  `shared_ptr` are allocated consecutively, so a pair-heavy scene sweeping many shapes gets a
+  96-byte stride through a dense region, while inlining spreads them 400 bytes apart inside the
+  entities. Integration, which touches an entity and its shape together, prefers them fused.
+  Neither effect dominates, so there is no layout that wins both.
+
+  If it is ever revisited, the shape to aim for is a separate packed shape array indexed by the
+  entity's packed index -- dense for the narrow phase *and* free of the pointer chase -- rather
+  than a choice between the two current layouts.
+
+- **Broad-phase proxies swept over the step — delivered, after being rejected once.** The tree
+  now fattens each moving body's proxy along its velocity for the whole step, so a body at
+  constant velocity stays inside the box the tree already holds and needs no reinsertion for the
+  rest of the step. Worth **1.4-1.6x on `settling_boxes` and 1.8-2.2x on `pile`**, a wash on
+  `stacks`.
+
+  This exact idea was tried earlier and reverted: it inflates the pair list, and at the time the
+  narrow phase was expensive enough that the extra pairs cost more than the tree saved. What
+  changed is that the narrow phase got roughly three times cheaper in between (the allocation
+  and return-by-value fixes below), so the trade reversed. **Re-test rejected ideas when the
+  thing that rejected them has moved** -- that is the reusable lesson, and it is worth more than
+  the speedup.
+
+  It changes contact ordering, so the goldens were re-baselined; every behavioural suite,
+  including the adversarial one, passed unchanged.
+
+- **Integration skipped for immobile bodies — delivered.** A body with no inverse mass or
+  inertia and no velocity cannot change pose, but static level geometry never sleeps
+  (`tick_sleep` exempts zero-mass bodies deliberately), so it re-rotated every vertex and
+  rebuilt its AABB every substep forever. Now skipped, exactly: the check compares against the
+  pose the shape was last built at, so a body moved by writing `pose` directly still updates.
+  Invisible on the benchmarks, which have one or three static bodies; it is scenes built from
+  static geometry that pay this, which is most real ones.
+
+- **Per-substep scratch moved out of `FxContact` — delivered.** Lever arms, effective masses,
+  the restitution target and the mixed material constants are rebuilt every substep and never
+  read outside it, but they were carried through every copy of the contact into the step buffer.
+  Moved to a parallel `FxContactSolverData` array: **`FxContact` went from 256 to 120 bytes**,
+  and the array is also the layout a batched solve would want. Bit-identical.
+
+  Its sibling idea -- sharing the lever arms between `resolve_penetration` and
+  `init_velocity_pass` -- was investigated and is **not viable**: the position solve runs
+  earlier in the substep and moves the poses itself, so the two compute `rA`/`rB` against
+  genuinely different poses. Sharing them would be wrong, not merely awkward.
+
+- **Return-by-value in the hot path — delivered.** Four accessors were handing back copies of
+  things the caller only read: `FxEntity::bounding_box()`, `FxEntity::collision_geometry()` and
+  `visual_geometry()`, and `FxShape::vertices()`. The last is the one to remember -- it copied
+  every vertex into a fresh aligned allocation, and because every call site spells it
+  `const auto& v = shape->vertices()`, the copy was invisible at the point of use while the
+  narrow phase made several per pair per substep. Returning by reference is worth **12-18% on
+  `stacks`** on its own and is bit-identical.
+
+- **Contact slot lookup — delivered.** `bind_contact_slot` hashed the pair key once per contact
+  per substep. The broad-phase pair list is stable across a step, so the resolved slot is now
+  cached against the pair index and the hash runs once per pair per step. Worth ~4% on `pile`,
+  matching its profile share.
+
+- **Reference-count traffic — delivered.** `FxContact` and `FxContactEvent` now borrow their
+   entities as raw pointers instead of owning them through `shared_ptr`, and
+   `FxEntity::collision_geometry()` / `visual_geometry()` return by reference instead of by
+   value. The second of those was by far the larger source: the accessor was called several
+   times per pair per substep and each call was an atomic increment and decrement.
+   `_Sp_counted_base::_M_release` fell from **3.32% of the `pile` step to 0.09%**. Physics is
+   bit-identical.
+
+   The lifetime guarantee those `shared_ptr`s provided -- an entity deleted mid-flight is still
+   nameable by the end-contact event that reports its separation -- is now explicit
+   (`FxScene::pin_contact_entities`) and, for the first time, tested. It was previously relied
+   on by a comment and nothing else.
 
 ## Pending, in order
 
-1. **SIMD, per the plan of record** ([simd_plan.md](simd_plan.md)): SoA gather/scatter inside
-   step(), vectorized bulk loops, then the colored 8-wide velocity solve. Single-threaded;
-   builds the exact layout item 7's threading would need.
-2. **The rope thread** (item 10): distance joint → FxChain dynamic mode → bridge demo →
-   chains-under-tension tests. One connected piece of work; each stage is useful alone, and
-   the end closes the last untested adversarial class from item 8.
-3. **The floor escape** (detail in item 8): the only unexplained defect. 1–2 balls per 200
-   through the 0.8-thick catch floor, substep-independent, pinned at <=3 by the bucket test.
-4. **Mouse joint** then the rest of item 9 — mouse pairs with `entity_at_point()` for
-   click-dragging and improves every demo.
-5. **Tree-accelerated queries** (item 2 follow-up) once query volume justifies it.
-6. **Time-of-impact CCD** (item 3) — also what lets fast bodies hit chains and edges.
-7. **Solver grid diagonal** (small): 11x5, 12x5 and 13x4 were never measured; the analysis
-   predicts 11x5 ~10% cheaper than the current 14x4 default if it passes, but it sits one
-   pass above a configuration that failed by 2x, and buys none of 14's substep-side headroom.
-8. **Broad-phase hoist and threading** (items 3 and 7) — both gated on A/B evidence that has
-   so far said no.
+The whole SIMD plan has now been attempted end to end; what remains is ordinary engine work plus
+a re-ranked performance list. Physics features come first because the engine is fast enough that
+the next users are more likely to be blocked by a missing joint than by a slow step.
 
-Housekeeping, whenever convenient: the Debug/ASan CI job creeps as suites grow — marking the
-slingshot suite slow is the lever; and the bucket spawn constants exist in both the example
-and the adversarial test, which cannot share code, so change them in step.
+1. **The rope thread** (item 10): distance joint -> FxChain dynamic mode -> bridge demo ->
+   chains-under-tension tests. One connected piece of work; each stage is useful alone, and the
+   end closes the last untested adversarial class from item 8.
+2. **The floor escape** (detail in item 8): the only unexplained defect. 1-2 balls per 200
+   through the 0.8-thick catch floor, substep-independent, pinned at <=3 by the bucket test.
+3. **Weld and wheel joints** (the rest of item 9). The mouse joint has landed and brought
+   world-anchored constraints with it, so a weld-to-world is now cheap; the truck example still
+   hand-assembles what a wheel joint should give it.
+4. **`FxScene::step` line-level attribution.** 10-21% of the step depending on scene, but that
+   is inlined lambdas, the sleep scan and the contact write-back rather than one hot loop.
+   Measure before touching it -- the function-level figure has already misled once.
+
+   Two performance items were **examined and declined**, both recorded so they are not
+   re-litigated blind. `sat_query` is the largest single item at 24.9% of the `stacks` step, but
+   annotation shows about half of that is loop control and its compare, not arithmetic; the
+   bit-exact options are worth 3-4% at best. The one large win there is a **rectangle fast path**
+   using the OBB formulation -- two axes per box instead of four, overlap from half-extents --
+   worth perhaps 12-18% on box scenes and nothing on the circle-heavy `pile`. A shape survey
+   confirmed the premise (100% of `stacks` and `settling_boxes` contacts are four-vertex polygon
+   pairs, against 1% for `pile`), but it would be the only change contemplated this session to
+   move results, and it adds a second narrow-phase path. See [next_steps.md](next_steps.md).
+
+5. **Tree-accelerated queries** (item 2 follow-up) once query volume justifies it.
+6. **Time-of-impact CCD** (item 3) -- also what lets fast bodies hit chains and edges.
+7. **Solver grid diagonal** (small): 11x5, 12x5 and 13x4 were never measured, and the 14x4 study
+   predates every solver change since. Worth re-running the harness rather than trusting it.
+8. **Threading** (item 7) -- still gated on A/B evidence that has so far said no. Phase C2's
+   colour partition is what a parallel solve would start from, and it now exists.
 
 ## Priority Targets
 
@@ -81,30 +282,39 @@ and the adversarial test, which cannot share code, so change them in step.
 3. Make the collision pipeline faster and continuous.
    Two halves of the same pipeline: the broad phase decides *which pairs get
    looked at*; CCD is what actually prevents fast bodies passing through thin
-   geometry. Division of labour matters — per-substep broad-phase queries never
-   prevented tunneling (they sample AABBs at substep start; a fast body can
-   cross a thin wall *within* one substep), so hoisting the query out of the
-   substep loop costs no protection.
+   geometry.
 
-   **Broad-phase efficiency.** The tree itself is sound (SAH-guided dynamic
-   AABB tree, fat boxes, dual-tree pair descent), but it is driven wastefully:
-   `get_broad_phase_pairs()` runs per *substep* (`src/Scene.cpp`), so every
-   frame pays N tree syncs + N full pair queries.
-   - Query once per step over **full-step swept AABBs**
-     (`combine(aabb, aabb + velocity * dt_full)`): any pair that can touch
-     during any substep already overlaps in swept-box space at step start, so
-     the once-per-step list is a superset of what per-substep queries find.
-     Narrow phase still runs per substep on that list. The swept-box machinery
-     already exists for CCD bodies in `Registry::get_broad_phase_pairs()` —
-     apply it to all moving bodies with the full-step dt.
-   - De-hash the hot path: store the tree node index on `FxEntity` instead of
-     the `m_entity_node_map` / `m_entity_idx_map` lookups per entity/pair.
-   - Reuse pair/contact buffers across calls instead of reallocating.
-   - Trade: swept boxes admit a few more false-positive pairs (cheaply rejected
-     by narrow phase) in exchange for one tree walk per step instead of N.
-   - Edge case: a hard mid-step impact can redirect a fast body into geometry
-     outside its swept path — mitigate with a small extra sweep margin, or let
-     CCD bodies alone re-query per substep.
+   **Broad-phase efficiency — delivered.** The tree itself was always sound (SAH-guided dynamic
+   AABB tree, fat boxes, dual-tree pair descent); it was driven wastefully, with
+   `get_broad_phase_pairs()` running per *substep*, so every frame paid 14 tree syncs and 14
+   full pair walks.
+
+   The query is now split in two (`include/Fx2D/Registry.h`). `sync_broad_phase()` still runs
+   every substep — bodies moved, the tree must know — and returns whether any leaf was
+   inserted, removed, or reinserted. `collect_broad_phase_pairs()` walks the tree, and runs
+   only when that answer is yes. If no leaf moved, the tree is the same tree and the walk
+   would rebuild the identical list in the identical order, so skipping it changes nothing.
+   Measured skip rate: about 90% of substeps in settling and piling scenes, a third when 1600
+   boxes are still in free fall. Sleeping-pair and tight-AABB filtering moved into the narrow
+   phase, since the list now outlives the substep that built it.
+
+   The result is exact rather than approximate — the golden tables in
+   `tests/test_solver_regression.cpp` did not move — for 1.05-1.30x on `pile` and a wash
+   elsewhere, taking the broad phase from 14% of the step to 4.6%.
+
+   Two things went with it: the tree-node and packed indices moved onto `FxEntity` (they were
+   two hash lookups per entity and per pair), and `FxEntity::bounding_box()` now returns by
+   reference — returning the `FxArray` by value meant every narrow-phase pair paid two aligned
+   heap allocations, and removing that alone cut the narrow phase by 37%.
+
+   **Tried and reverted: full-step swept AABBs.** The original plan here was to query once per
+   step over `combine(aabb, aabb + velocity * dt_full)`, making the list valid by construction.
+   It works and it is correct — an audit against brute force found zero missed pairs across
+   ~5M overlapping pairs — but in a scene of bodies in free fall the swept boxes are long, the
+   list fills with pairs that never touch, and the narrow phase pays for them once per substep.
+   Measured 22% slower on `settling_boxes` at 400 bodies, and it changed contact ordering, so
+   results moved in chaotic scenes for no gain. The fat-box invariant gets the same coverage
+   guarantee for free, because the tree was already fattening every box it stored.
 
    **Continuous collision.** Speculative contacts are done
    (`FxEntity::enable_ccd`, `FxSolver::speculative_contact_check()`, YAML
@@ -320,7 +530,7 @@ and the adversarial test, which cannot share code, so change them in step.
 
 - Chain colliders finish practical scene authoring for static level geometry.
 - Query APIs make Fx2D more usable as an engine subsystem, not just a step-and-render loop. Contacts and events (slice a) covered the reward/game-logic half; ray and overlap queries cover the observation half.
-- The collision pipeline work pays twice: hoisting the broad phase out of the substep loop removes the biggest per-frame waste, and continuous collision closes the biggest correctness gap for fast-moving bodies.
+- The collision pipeline work pays twice. The broad-phase half is done: the tree is still synced every substep, but it is only *walked* when a proxy actually moved, which removed the biggest per-frame waste without moving a single result. Continuous collision is the other half, and still the biggest correctness gap for fast-moving bodies.
 - Input hooks turned the renderer from a viewer into something a playable game can be built on, without gameplay code reaching into raylib — and the same interface drives headless scenes from scripted triggers.
 - Threading is worth having only where it is measured to pay. The parallel policies the engine used to carry were slower than sequential at every body count while burning up to 32x the CPU, so the discipline — A/B first, opt-in, off by default — matters more than the parallelism itself.
 - Adversarial scenes are how solver robustness is actually bought — mature engines earned their trust against tall stacks, mass ratios, and loaded chains, not through architecture; each scene added is envelope the solver provably owns. The scenes now exist, and the solver cleared them: the outcome is a measured envelope rather than a bug list.
