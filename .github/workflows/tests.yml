@@ -28,12 +28,21 @@ jobs:
           echo "OK: no assert() usage in tests/"
 
   build-and-test:
-    name: build + test (${{ matrix.build_type }})
+    name: linux ${{ matrix.build_type }} (native=${{ matrix.native }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        include:
+          # The portable configuration, and the one the sanitizers run in.
+          - build_type: Release
+            native: "OFF"
+          - build_type: Debug
+            native: "OFF"
+          # Vectorised. CI used to build with FX2D_NATIVE=OFF in every job, which meant the
+          # code paths users actually get in a default build were never compiled here.
+          - build_type: Release
+            native: "ON"
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +61,7 @@ jobs:
             -DFX2D_HEADLESS=ON \
             -DFX2D_BUILD_TESTS=ON \
             -DFX2D_BUILD_EXAMPLES=OFF \
-            -DFX2D_NATIVE=OFF \
+            -DFX2D_NATIVE=${{ matrix.native }} \
             -DFX2D_IPO=OFF \
             -DFX2D_WERROR=ON
 
@@ -66,3 +75,132 @@ jobs:
         env:
           FX2D_SKIP_SLOW_TESTS: ${{ matrix.build_type == 'Debug' && '1' || '0' }}
         run: ctest --test-dir build-ci --output-on-failure
+
+  clang:
+    name: linux clang (Release)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Clang is not just a second compiler, it is a stricter one: its -Wconversion implies
+      # -Wsign-conversion, which GCC's does not. Keeping this job green is what stops that
+      # class of warning accumulating between macOS runs.
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang make libeigen3-dev libyaml-cpp-dev libtbb-dev
+
+      - name: Configure
+        env:
+          CXX: clang++
+        run: |
+          cmake -S . -B build-clang \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFX2D_HEADLESS=ON -DFX2D_BUILD_TESTS=ON -DFX2D_BUILD_EXAMPLES=OFF \
+            -DFX2D_NATIVE=ON -DFX2D_IPO=OFF -DFX2D_WERROR=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build-clang --target Fx2DTests -j"$(nproc)"
+          ctest --test-dir build-clang --output-on-failure
+
+  macos-arm64:
+    name: macos arm64 (Release)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # macos-14 runners are Apple silicon, so this is the real ARM build: a different ISA and
+      # a different compiler (Apple Clang) at once. Note -march=native does not exist on Apple
+      # Clang for arm64 -- CMakeLists probes -mcpu=native instead, which is why FX2D_NATIVE=ON
+      # is safe to pass here.
+      - name: Install dependencies
+        run: brew install cmake eigen yaml-cpp
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-mac \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFX2D_HEADLESS=ON -DFX2D_BUILD_TESTS=ON -DFX2D_BUILD_EXAMPLES=OFF \
+            -DFX2D_NATIVE=ON -DFX2D_IPO=OFF -DFX2D_WERROR=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build-mac --target Fx2DTests -j"$(sysctl -n hw.ncpu)"
+          ctest --test-dir build-mac --output-on-failure
+
+  windows-msvc:
+    name: windows msvc (Release)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      # The third compiler family. MSVC has never built this codebase, so treat a failure here
+      # as news rather than as a regression.
+      #
+      # FX2D_WERROR is deliberately OFF: MSVC /W4 flags a different set of things than GCC and
+      # Clang do, and a wall of warnings would hide whether the code actually builds and passes.
+      # Turn it on once this job is green and the warnings have been worked through.
+      - name: Install dependencies (vcpkg)
+        run: |
+          vcpkg install eigen3:x64-windows yaml-cpp:x64-windows
+        shell: pwsh
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-win `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DFX2D_HEADLESS=ON -DFX2D_BUILD_TESTS=ON -DFX2D_BUILD_EXAMPLES=OFF `
+            -DFX2D_NATIVE=ON -DFX2D_IPO=OFF -DFX2D_WERROR=OFF
+        shell: pwsh
+
+      - name: Build and test
+        run: |
+          cmake --build build-win --config Release --target Fx2DTests
+          ctest --test-dir build-win -C Release --output-on-failure
+        shell: pwsh
+
+  cross-arm64:
+    name: linux cross-compile arm64 + qemu
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Belt and braces alongside the macOS job. This one is GCC rather than Clang, so between
+      # the two, both major compilers are exercised on ARM -- and it runs the full suite under
+      # emulation, which is what proves the golden tables in tests/test_solver_regression.cpp
+      # hold on a second ISA rather than only compiling for it.
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake make g++-aarch64-linux-gnu qemu-user libeigen3-dev git
+
+      # yaml-cpp has to exist for the target. Eigen is header-only, so the host copy serves.
+      - name: Build yaml-cpp for aarch64
+        run: |
+          git clone --depth 1 --branch 0.8.0 https://github.com/jbeder/yaml-cpp.git yaml-cpp-src
+          cmake -S yaml-cpp-src -B yaml-cpp-arm64 \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchains/aarch64-linux-gnu.cmake" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/arm64-sysroot" \
+            -DYAML_BUILD_SHARED_LIBS=OFF -DYAML_CPP_BUILD_TESTS=OFF -DYAML_CPP_BUILD_TOOLS=OFF
+          cmake --build yaml-cpp-arm64 -j"$(nproc)"
+          cmake --install yaml-cpp-arm64
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-arm64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchains/aarch64-linux-gnu.cmake" \
+            -DCMAKE_PREFIX_PATH="$HOME/arm64-sysroot" \
+            -DFX2D_HEADLESS=ON -DFX2D_BUILD_TESTS=ON -DFX2D_BUILD_EXAMPLES=OFF \
+            -DFX2D_NATIVE=ON -DFX2D_IPO=OFF -DFX2D_WERROR=ON
+
+      - name: Build
+        run: cmake --build build-arm64 --target Fx2DTests -j"$(nproc)"
+
+      - name: Test under qemu-aarch64
+        run: qemu-aarch64 -L /usr/aarch64-linux-gnu ./build-arm64/Fx2DTests

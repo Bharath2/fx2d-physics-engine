@@ -93,7 +93,8 @@ class FxJoint {
 class FxRevoluteJoint : public FxJoint {
   private:
     FxVec2f m_anchor_point; // Anchor point in entity1's local coordinates
-    float m_angle_min, m_angle_max; // Angular limits
+    // The angular limits are not held here: the FxAngularLimitConstraint this joint builds owns
+    // them, and a second copy on the joint was written once and never read again.
     float m_target_theta = 0.0f; // Target angle for PID control
     float m_target_omega = 0.0f; // Target angular velocity for PID control
 
@@ -123,6 +124,30 @@ class FxRevoluteJoint : public FxJoint {
 };
 
 // Prismatic joint with motion, separation, and angle lock constraints
+// Drags one body by a grab point towards a moving world target -- the joint behind click-and-
+// drag. Soft by default: a stiff pull through a heavy body is what makes a scene explode.
+class FxMouseJoint : public FxJoint {
+  private:
+    std::shared_ptr<FxMouseConstraint> m_grab;
+
+  public:
+    FxMouseJoint(const std::string& name, const std::shared_ptr<FxEntity>& body,
+                 const FxVec2f& grab_point, bool grab_is_local = false);
+
+    // Where the body is being pulled to. Set this from the cursor each frame.
+    void set_target(const FxVec2f& world_point);
+    FxVec2f target() const;
+    // The grabbed point, in the body's own frame.
+    FxVec2f grab_point() const;
+
+    // Larger is softer. The default trails the cursor visibly rather than snapping to it.
+    void set_compliance(double compliance);
+
+    // Nothing to drive per substep: the constraint moves the body, and because it does not
+    // carry velocity there is no momentum to bleed off afterwards.
+    void apply_controls(double) override {}
+};
+
 class FxPrismaticJoint : public FxJoint {
   private:
     FxVec2f m_axis; // Local axis on entity1 (normalized)

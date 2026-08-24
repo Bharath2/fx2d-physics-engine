@@ -44,8 +44,10 @@ class FxEntityGroup {
 
 // A pair of entities that started or stopped touching during a step.
 struct FxContactEvent {
-    std::shared_ptr<FxEntity> entity1 = nullptr;
-    std::shared_ptr<FxEntity> entity2 = nullptr;
+    // Borrowed, like FxContact's -- and kept alive by the same pins. Valid until the next
+    // step(); do not hold on to an event past the frame that produced it.
+    FxEntity* entity1 = nullptr;
+    FxEntity* entity2 = nullptr;
     // True if either entity is a sensor, so no impulse was applied for this pair.
     bool is_trigger = false;
 };
@@ -53,11 +55,22 @@ struct FxContactEvent {
 // Scene class takes care of entities motion and collisions
 class FxScene {
   private:
-    struct FxContactImpulseCache {
+    // Per-pair solver state surviving between substeps and steps. Held in a slot vector rather
+    // than looked up by key each time: at 14 substeps that lookup was the bulk of the step's
+    // hashing.
+    struct FxContactPairSlot {
+        // Warm-start impulses. Scalars only, so the cache never keeps entities alive.
         float jn[2] = {0.0f, 0.0f};
         float jt[2] = {0.0f, 0.0f};
         FxVec2f normal{0.0f, 0.0f}; // contact normal at time of caching, used to detect basis flips
+
+        // Which step this pair was last seen in, and where its contact sits in m_step_contacts
+        // for that step. Together they let the per-substep write-back skip the hash entirely
+        // after the first substep that sees the pair.
+        uint64_t step_stamp = 0;
+        size_t step_slot = kNoStepSlot;
     };
+    static constexpr size_t kNoStepSlot = static_cast<size_t>(-1);
 
     // no of entities in the scene can not exceed 4096
     static constexpr size_t m_enitities_limit = 4096;
@@ -72,8 +85,19 @@ class FxScene {
     bool m_entities_dirty = false;
     // total time elapsed since scene start
     double m_time_elapsed = 0.0;
-    // Stores only scalar impulses so the cache never keeps entities alive accidentally.
-    std::unordered_map<uint64_t, FxContactImpulseCache> m_contact_cache;
+    // Pair slots, plus the key -> slot map and the free list that recycles slots of pairs that
+    // stopped touching. A contact carries its slot index, so only the first substep that sees a
+    // pair in a given step pays for a lookup.
+    std::vector<FxContactPairSlot> m_contact_slots;
+    std::unordered_map<uint64_t, uint32_t> m_contact_slot_index;
+    std::vector<uint32_t> m_free_contact_slots;
+    // Slot already resolved for each entry of the current broad-phase pair list, or kNoSlot.
+    // Reset whenever that list is rebuilt; the pair list is stable across the substeps of a
+    // step, so after the first substep a contact finds its slot by index instead of by hash.
+    std::vector<uint32_t> m_pair_slot;
+    // Monotonic step counter, used only to stamp pair slots. Never reset by reset(), because a
+    // stale stamp equal to the current step would revive a dead slot's step_slot.
+    uint64_t m_step_counter = 0;
 
     // This step's touching pairs and the previous step's, keeping the last occurrence of each
     // so impulses are final. The previous buffer lets end events still name their entities.
@@ -84,8 +108,49 @@ class FxScene {
     std::vector<FxContactEvent> m_begin_contacts;
     std::vector<FxContactEvent> m_end_contacts;
 
+    // Ownership for the borrowed pointers in the contact buffers. Rebuilt once per step and
+    // swapped alongside them, so an entity deleted between steps stays alive exactly as long as
+    // a buffer still names it.
+    std::vector<std::shared_ptr<FxEntity>> m_step_pins;
+    std::vector<std::shared_ptr<FxEntity>> m_prev_pins;
+
+    // Solver-local velocity columns, gathered and scattered once per substep around the
+    // velocity passes. A member so the allocation happens once per scene, not once per step.
+    FxSolverBodies m_solver_bodies;
+    // Per-substep velocity-solver scratch, one entry per live contact.
+    std::vector<FxContactSolverData> m_contact_solver_data;
+
+    // Colour partition of the broad-phase pair list, the colour each contact inherited from its
+    // pair, the contact order that groups them, and the transposed batch the sweeps run over.
+    // All members for their capacity: rebuilt every substep, allocating only on the first.
+    FxContactGraph m_contact_graph;
+    std::vector<uint32_t> m_contact_colors;
+    std::vector<uint32_t> m_colored_contacts;
+    FxContactBatch m_contact_batch;
+
+    // One contiguous run of the batch: a single colour and a single manifold size.
+    struct FxBatchRun {
+        uint32_t begin = 0;
+        uint32_t end = 0;
+        int slots = 2;
+    };
+    std::vector<FxBatchRun> m_batch_runs;
+
     // Inserts a contact into the current step buffer, replacing any earlier one for the pair.
-    void record_contact(const FxContact& contact, uint64_t key);
+    void record_contact(const FxContact& contact);
+    // Takes ownership of every entity the current step buffer names, so the buffer can outlive
+    // a delete_entity call.
+    void pin_contact_entities();
+    // The velocity half of one substep: gather, solve colour by colour, scatter.
+    void solve_contact_velocities(std::vector<FxContact>& contacts,
+                                  const std::vector<std::shared_ptr<FxEntity>>& entities_vec,
+                                  size_t iter);
+    // Resolves (or allocates) the pair slot for a contact, stamping the key and slot onto it.
+    // `pair_index` addresses the broad-phase pair list, which is what lets the hash lookup
+    // happen once per pair per step rather than once per pair per substep.
+    void bind_contact_slot(FxContact& contact, size_t pair_index);
+    // Drops slots for pairs that produced no contact this step.
+    void evict_stale_contact_slots();
     // Diffs the current step buffer against the previous one to build begin/end events.
     void build_contact_events();
 

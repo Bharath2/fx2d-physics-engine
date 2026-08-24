@@ -192,7 +192,9 @@ struct FxShape {
     FxShapeType shape_type() const { return m_shape_type; }
     float radius() const { return m_radius; }
     float skin_radius() const { return m_skin_radius; }
-    FxVec2fArray vertices() const { return m_world_vertices; }
+    // By reference: returning by value copied every vertex into a fresh aligned allocation,
+    // invisibly, because every caller writes `const auto& v = shape->vertices()`.
+    const FxVec2fArray& vertices() const { return m_world_vertices; }
     FxVec2fArray __vertices() const {
         return m_vertices;
     } // native coordinates of vertices with centroid as (0,0)
@@ -331,25 +333,56 @@ struct FxShape {
 
     // Returns current axis aligned bounding box of the shape and sets world pose
     FxArray<float> set_world_pose(const FxVec3f& world_pose) {
+        FxArray<float> bb(4);
+        set_world_pose(world_pose, bb);
+        return bb;
+    }
+
+    // Allocation-free form, for the caller that runs per entity per substep: the form above
+    // builds three temporary FxArrays. `out_aabb` must already hold four elements and is
+    // written as {minX, minY, maxX, maxY}.
+    void set_world_pose(const FxVec3f& world_pose, FxArray<float>& out_aabb) {
         m_world_pose = world_pose;
         m_centroid = world_pose.xy() + m_offset_pose.xy();
         if (is_circle()) {
-            float pX = m_centroid.x();
-            float pY = m_centroid.y();
-            float r = m_skin_radius;
-            return {pX - r, pY - r, pX + r, pY + r}; // AABB for circle
+            const float pX = m_centroid.x();
+            const float pY = m_centroid.y();
+            const float r = m_skin_radius;
+            out_aabb[0] = pX - r;
+            out_aabb[1] = pY - r;
+            out_aabb[2] = pX + r;
+            out_aabb[3] = pY + r;
+            return;
         }
-        // Capsule and polygon: rotate local vertices into world frame, then inflate AABB by skin.
-        m_world_vertices = m_vertices.rotate_rad(world_pose.theta() + m_offset_pose.theta());
-        m_world_vertices += m_centroid;
-        FxArray<float> bb = m_world_vertices.bounds();
-        if (m_skin_radius > 0.0f) {
-            bb[0] -= m_skin_radius;
-            bb[1] -= m_skin_radius;
-            bb[2] += m_skin_radius;
-            bb[3] += m_skin_radius;
+
+        // Capsule and polygon: rotate local vertices into the world frame, then inflate the
+        // AABB by the skin. Same arithmetic and same order as FxVec2f::rotate_inplace_rad
+        // followed by a translate, so results are unchanged to the bit.
+        const std::size_t n = m_vertices.size();
+        if (m_world_vertices.size() != n) m_world_vertices = FxVec2fArray(n);
+        if (n == 0) return;
+
+        const float theta = world_pose.theta() + m_offset_pose.theta();
+        const float cos_t = std::cos(theta), sin_t = std::sin(theta);
+        const float cx = m_centroid.x(), cy = m_centroid.y();
+
+        float min_x = FxInfinityf, min_y = FxInfinityf;
+        float max_x = -FxInfinityf, max_y = -FxInfinityf;
+        for (std::size_t i = 0; i < n; ++i) {
+            const float xi = m_vertices[i].x(), yi = m_vertices[i].y();
+            const float x = xi * cos_t - yi * sin_t + cx;
+            const float y = xi * sin_t + yi * cos_t + cy;
+            m_world_vertices[i] = FxVec2f(x, y);
+            if (x < min_x) min_x = x;
+            if (x > max_x) max_x = x;
+            if (y < min_y) min_y = y;
+            if (y > max_y) max_y = y;
         }
-        return bb;
+
+        out_aabb[0] = min_x - m_skin_radius;
+        out_aabb[1] = min_y - m_skin_radius;
+        out_aabb[2] = max_x + m_skin_radius;
+        out_aabb[3] = max_y + m_skin_radius;
     }
 
     // Getter for the current world pose of the shape
@@ -379,30 +412,33 @@ struct FxShape {
         set_world_pose(m_world_pose);
     }
 
-    // Skin-inclusive projection interval [min, max] of the shape along an axis.
-    FxArray<float> project_onto(const FxVec2f& axis) const {
+    // Smallest projection of (vertex - origin) onto axis, with the index that achieved it. No
+    // skin applied; SAT subtracts both skin radii explicitly. A running minimum, deliberately:
+    // the array-building spelling put ~11% of a box-stack step in malloc and free.
+    std::pair<std::size_t, float> min_projection(const FxVec2f& axis, const FxVec2f& origin) const {
         if (is_circle()) {
-            float p = m_centroid.dot(axis);
-            return {p - m_skin_radius, p + m_skin_radius};
+            // A circle projects as a single point; the caller applies its radius via the skin.
+            return {0, (m_centroid - origin).dot(axis)};
         }
-        FxArray<float> raw = m_world_vertices.dot(axis);
-        float lo = raw[0], hi = raw[0];
-        for (std::size_t i = 1; i < raw.size(); ++i) {
-            if (raw[i] < lo) lo = raw[i];
-            if (raw[i] > hi) hi = raw[i];
-        }
-        return {lo - m_skin_radius, hi + m_skin_radius};
-    }
+        const std::size_t n = m_world_vertices.size();
+        if (n == 0) return {0, FxInfinityf};
 
-    // Per-vertex raw projection along axis with origin shifted (no skin applied).
-    // SAT routines subtract the sum of both shapes' skin radii explicitly.
-    FxArray<float> project_onto(const FxVec2f& axis, const FxVec2f& origin) const {
-        if (is_circle()) {
-            float p = (m_centroid - origin).dot(axis);
-            // For circles, treat the centroid as a single "vertex" so argmin works uniformly.
-            return {p, p};
+        // Scalars rather than (vertex - origin).dot(axis): the same arithmetic, but Eigen's
+        // expression templates showed up across the profile for a loop this hot. Same operands
+        // in the same order, so with FP contraction pinned off it is bit-identical.
+        const float ox = origin.x(), oy = origin.y();
+        const float ax = axis.x(), ay = axis.y();
+        std::size_t best_index = 0;
+        float best = FxInfinityf;
+        for (std::size_t i = 0; i < n; ++i) {
+            const float px = m_world_vertices[i].x(), py = m_world_vertices[i].y();
+            const float projection = (px - ox) * ax + (py - oy) * ay;
+            if (projection < best) {
+                best = projection;
+                best_index = i;
+            }
         }
-        return (m_world_vertices - origin).dot(axis);
+        return {best_index, best};
     }
 
     // get the closest vertex of the shape from a point (returns surface point, skin-inclusive)

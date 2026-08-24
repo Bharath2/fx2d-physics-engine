@@ -3,6 +3,7 @@
 #include "Fx2D/YamlUtils.h"
 
 #include "test_harness.h"
+#include "test_scene_builders.h"
 
 #include <cmath>
 #include <iostream>
@@ -10,6 +11,8 @@
 #include <stdexcept>
 
 namespace {
+
+constexpr double kFrame = 1.0 / 60.0;
 
 bool approx_equal(float lhs, float rhs, float eps = 1e-4f) {
     return std::fabs(lhs - rhs) <= eps;
@@ -293,9 +296,118 @@ void test_two_joints_on_one_pair_keep_their_constraints() {
             "the surviving joint must keep its constraints");
 }
 
+// A mouse joint drags a body to wherever its target is put, and keeps holding it there.
+void test_mouse_joint_drags_a_body_to_its_target() {
+    FxScene scene = ::make_scene(FxVec2f{40.0f, 40.0f}, 0.0f);
+    auto box = ::add_box(scene, "box", {10.0f, 10.0f}, {1.0f, 1.0f});
+
+    auto joint = std::make_shared<FxMouseJoint>("drag", box, box->pose.get_xy());
+    require(scene.add_joint(joint), "the mouse joint should register");
+
+    const FxVec2f target{18.0f, 14.0f};
+    joint->set_target(target);
+    for (int i = 0; i < 240; ++i)
+        scene.step(kFrame);
+
+    const float miss = (box->pose.get_xy() - target).norm();
+    require(miss < 0.25f, "the box should end up at the cursor, missed by " + std::to_string(miss));
+}
+
+// The grab point is on the body, not at its centre: pulling a corner should rotate it.
+void test_mouse_joint_grabs_the_point_it_was_given() {
+    FxScene scene = ::make_scene(FxVec2f{40.0f, 40.0f}, 0.0f);
+    auto box = ::add_box(scene, "box", {10.0f, 10.0f}, {4.0f, 1.0f});
+
+    const FxVec2f corner{12.0f, 10.0f}; // right-hand end, in world coordinates
+    auto joint = std::make_shared<FxMouseJoint>("drag", box, corner);
+    require(scene.add_joint(joint), "the mouse joint should register");
+
+    joint->set_target(FxVec2f{12.0f, 16.0f}); // straight up from the grabbed end
+    for (int i = 0; i < 240; ++i)
+        scene.step(kFrame);
+
+    require(std::fabs(box->pose.theta()) > 0.2f,
+            "pulling one end sideways must rotate the body, theta = " +
+                std::to_string(box->pose.theta()));
+}
+
+// Compliance sets how hard the pull is. Sampled early, before either has arrived: once a body
+// reaches the cursor the stiff one is simply pinned there and the comparison stops meaning
+// anything.
+void test_mouse_joint_compliance_controls_how_hard_it_pulls() {
+    auto travel_after = [](double compliance, int steps) {
+        FxScene scene = ::make_scene(FxVec2f{40.0f, 40.0f}, 0.0f);
+        auto box = ::add_box(scene, "box", {10.0f, 10.0f}, {1.0f, 1.0f});
+        auto joint = std::make_shared<FxMouseJoint>("drag", box, box->pose.get_xy());
+        scene.add_joint(joint);
+        joint->set_compliance(compliance);
+        joint->set_target(FxVec2f{20.0f, 10.0f});
+        for (int i = 0; i < steps; ++i)
+            scene.step(kFrame);
+        return box->pose.x() - 10.0f;
+    };
+
+    const float stiff = travel_after(1e-6, 3);
+    const float soft = travel_after(1e-2, 3);
+    require(stiff > soft * 1.5f, "a stiffer mouse joint must pull harder: stiff " +
+                                     std::to_string(stiff) + " vs soft " + std::to_string(soft));
+}
+
+// The property a drag actually has to have: the body arrives at the cursor and stops, rather
+// than being launched at it. Velocity is derived from the pose change, so a constraint that
+// moves only pose converts every pull into momentum -- this one moves prev_pose with it.
+void test_mouse_joint_settles_instead_of_oscillating() {
+    FxScene scene = ::make_scene(FxVec2f{40.0f, 40.0f}, 0.0f);
+    auto box = ::add_box(scene, "box", {10.0f, 10.0f}, {1.0f, 1.0f});
+    auto joint = std::make_shared<FxMouseJoint>("drag", box, box->pose.get_xy());
+    scene.add_joint(joint);
+
+    const FxVec2f target{20.0f, 10.0f};
+    joint->set_target(target);
+    float peak = 0.0f;
+    for (int i = 0; i < 300; ++i) {
+        scene.step(kFrame);
+        peak = std::max(peak, box->pose.x() - target.x());
+    }
+    require(peak < 0.2f, "the drag must not launch the body past the cursor; overshot by " +
+                             std::to_string(peak));
+
+    const float miss = (box->pose.get_xy() - target).norm();
+    const float speed = box->velocity.get_xy().norm();
+    require(miss < 0.2f, "the drag must settle on the cursor, missed by " + std::to_string(miss));
+    require(speed < 0.5f, "and come to rest there, still moving at " + std::to_string(speed));
+}
+
+// The joint holds one body and a world point, so deleting that body must retire it -- and the
+// sweep must not mistake the absent second body for a dangling reference in the meantime.
+void test_mouse_joint_survives_the_sweep_and_dies_with_its_body() {
+    FxScene scene = ::make_scene(FxVec2f{40.0f, 40.0f}, 0.0f);
+    auto box = ::add_box(scene, "box", {10.0f, 10.0f}, {1.0f, 1.0f});
+    auto other = ::add_box(scene, "other", {30.0f, 10.0f}, {1.0f, 1.0f});
+
+    auto joint = std::make_shared<FxMouseJoint>("drag", box, box->pose.get_xy());
+    scene.add_joint(joint);
+
+    // Deleting an unrelated entity runs the sweep; the mouse joint must come through it.
+    scene.delete_entity("other");
+    scene.step(kFrame);
+    require(scene.get_joint("drag") != nullptr,
+            "a world-anchored joint must survive a sweep triggered by an unrelated deletion");
+
+    scene.delete_entity("box");
+    scene.step(kFrame);
+    require(scene.get_joint("drag") == nullptr, "the joint must retire with the body it held");
+    (void)other;
+}
+
 } // namespace
 
 void run_joint_tests() {
+    test_mouse_joint_drags_a_body_to_its_target();
+    test_mouse_joint_grabs_the_point_it_was_given();
+    test_mouse_joint_compliance_controls_how_hard_it_pulls();
+    test_mouse_joint_settles_instead_of_oscillating();
+    test_mouse_joint_survives_the_sweep_and_dies_with_its_body();
     test_two_joints_on_one_pair_keep_their_constraints();
     test_pid_round_trip();
     test_effort_aliases();

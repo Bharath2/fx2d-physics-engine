@@ -19,7 +19,9 @@ std::string FxConstraint::get_entity2_name() const {
 
 // FxConstraint implementation
 void FxConstraint::resolve(double dt) {
-    if (!entity1 || !entity2) return;
+    // entity2 may be null: a world-anchored constraint has only one body to move, and an
+    // absent second body behaves exactly like an immovable one.
+    if (!entity1) return;
 
     float C = 0; // Constraint violation value
     auto g1 = FxVec2f(0.0f, 0.0f);
@@ -33,9 +35,9 @@ void FxConstraint::resolve(double dt) {
 
     // Get inverse mass and inertia properties
     const float w1 = entity1->inv_mass();
-    const float w2 = entity2->inv_mass();
+    const float w2 = entity2 ? entity2->inv_mass() : 0.0f;
     const float I1 = entity1->inv_inertia();
-    const float I2 = entity2->inv_inertia();
+    const float I2 = entity2 ? entity2->inv_inertia() : 0.0f;
 
     // Calculate compliance term (alpha = compliance / dt^2)
     const float alpha = std::max(static_cast<float>(compliance / (dt * dt)), 0.0f);
@@ -49,8 +51,22 @@ void FxConstraint::resolve(double dt) {
     // would round away entirely.
     const FxVec2f dxy1 = w1 * dLambda * g1;
     const FxVec2f dxy2 = w2 * dLambda * g2;
-    entity1->apply_pose_correction(FxVec3f{dxy1.x(), dxy1.y(), I1 * dLambda * gth1});
-    entity2->apply_pose_correction(FxVec3f{dxy2.x(), dxy2.y(), I2 * dLambda * gth2});
+    const FxVec3f landed1 =
+        entity1->apply_pose_correction(FxVec3f{dxy1.x(), dxy1.y(), I1 * dLambda * gth1});
+    FxVec3f landed2{0.0f, 0.0f, 0.0f};
+    if (entity2)
+        landed2 = entity2->apply_pose_correction(FxVec3f{dxy2.x(), dxy2.y(), I2 * dLambda * gth2});
+
+    if (carries_velocity) return;
+    // Drag the reference pose along so the move produces no velocity, exactly as penetration
+    // recovery does. Uses the delta that actually landed, not the one asked for.
+    auto follow = [](FxEntity& e, const FxVec3f& d) {
+        e.prev_pose.x() += d.x();
+        e.prev_pose.y() += d.y();
+        e.prev_pose.theta() = FxAngleWrap(e.prev_pose.theta() + d.theta());
+    };
+    follow(*entity1, landed1);
+    if (entity2) follow(*entity2, landed2);
 }
 
 // FxAngleLockConstraint constructors
@@ -166,6 +182,42 @@ void FxAnchorConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2, float& gth
 }
 
 // FxSeparationConstraint constructors
+FxMouseConstraint::FxMouseConstraint(const std::shared_ptr<FxEntity>& e1, const FxVec2f& anchor,
+                                     bool anchor_is_local) {
+    entity1 = e1;
+    entity2 = nullptr; // the target is a point in the world, not a body
+    m_local_anchor = anchor_is_local ? anchor : e1->to_entity_frame(anchor);
+    m_target = e1->to_world_frame(m_local_anchor);
+    m_name = "MouseConstraint";
+    compliance = 1e-4; // soft by default; a stiff drag through a heavy body explodes
+    carries_velocity = false; // a dragged body should follow the cursor, not be launched by it
+}
+
+void FxMouseConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2, float& gth1, float& gth2,
+                                 bool& active) const {
+    g2 = FxVec2f(0.0f, 0.0f);
+    gth2 = 0.0f;
+    if (!enabled || !entity1) {
+        active = false;
+        return;
+    }
+
+    const FxVec2f grabbed = entity1->to_world_frame(m_local_anchor);
+    const FxVec2f delta = grabbed - m_target;
+    const float distance = delta.norm();
+    if (distance < 1e-6f) {
+        active = false;
+        return;
+    }
+
+    // Pull the grabbed point straight at the target; the lever arm turns the body with it.
+    C = distance;
+    g1 = delta / distance;
+    const FxVec2f r = grabbed - entity1->pose.get_xy();
+    gth1 = r.cross(g1);
+    active = true;
+}
+
 FxSeparationConstraint::FxSeparationConstraint(const std::shared_ptr<FxEntity>& e1,
                                                const std::shared_ptr<FxEntity>& e2,
                                                const FxVec2f& axis, bool axis_is_local) :
@@ -332,49 +384,265 @@ void resolve_penetration(const FxContact& contact, double dt) {
     }
 }
 
-void init_velocity_pass(FxContact& contact) {
+void init_velocity_pass(FxContact& contact, FxContactSolverData& data,
+                        const FxSolverBodies& bodies) {
     for (size_t i = 0; i < 2; ++i)
-        contact.vn_pre[i] = 0.0f;
-    if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return;
-    if (!contact.entity1 || !contact.entity2) return;
+        data.vn_pre[i] = 0.0f;
+    if (!contact_is_solvable(contact)) return;
 
     FxEntity& A = *contact.entity1;
     FxEntity& B = *contact.entity2;
     const FxVec2f n = contact.normal;
     const FxVec2f t(-n.y(), n.x());
 
-    contact.wA = eff_inv_mass(A);
-    contact.wB = eff_inv_mass(B);
-    contact.IA = eff_inv_inertia(A);
-    contact.IB = eff_inv_inertia(B);
+    const size_t ia = static_cast<size_t>(contact.body1);
+    const size_t ib = static_cast<size_t>(contact.body2);
+    data.wA = bodies.inv_m[ia];
+    data.wB = bodies.inv_m[ib];
+    data.IA = bodies.inv_i[ia];
+    data.IB = bodies.inv_i[ib];
+
+    // Restitution mixes by max so a bouncy body bounces off anything; friction by min so the
+    // slipperiest surface wins. Resolved once per substep so the sweeps never touch an entity.
+    data.restitution = std::clamp(std::max(A.elasticity, B.elasticity), 0.0f, 1.0f);
+    data.mu_static = std::clamp(std::min(A.static_friction, B.static_friction), 0.0f, 10.0f);
+    data.mu_kinetic = std::clamp(std::min(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
+
+    // Slots past the manifold are zeroed, not left stale: the batched solve reads a zero
+    // effective mass as inactive, and this record is reused across substeps, so an old second
+    // point would otherwise still look live.
+    for (size_t i = contact.count; i < 2; ++i) {
+        data.K_n[i] = 0.0f;
+        data.K_t[i] = 0.0f;
+        data.rA[i] = {0.0f, 0.0f};
+        data.rB[i] = {0.0f, 0.0f};
+        data.ra_n[i] = data.rb_n[i] = data.ra_t[i] = data.rb_t[i] = 0.0f;
+    }
 
     const FxVec2f pA = A.pose.get_xy();
     const FxVec2f pB = B.pose.get_xy();
     for (size_t i = 0; i < contact.count; ++i) {
         const FxVec2f p = contact.position[i];
-        contact.rA[i] = p - pA;
-        contact.rB[i] = p - pB;
-        contact.ra_n[i] = contact.rA[i].cross(n);
-        contact.rb_n[i] = contact.rB[i].cross(n);
-        contact.ra_t[i] = contact.rA[i].cross(t);
-        contact.rb_t[i] = contact.rB[i].cross(t);
-        contact.K_n[i] = contact.wA + contact.wB + contact.IA * contact.ra_n[i] * contact.ra_n[i] +
-                         contact.IB * contact.rb_n[i] * contact.rb_n[i];
-        contact.K_t[i] = contact.wA + contact.wB + contact.IA * contact.ra_t[i] * contact.ra_t[i] +
-                         contact.IB * contact.rb_t[i] * contact.rb_t[i];
+        data.rA[i] = p - pA;
+        data.rB[i] = p - pB;
+        data.ra_n[i] = data.rA[i].cross(n);
+        data.rb_n[i] = data.rB[i].cross(n);
+        data.ra_t[i] = data.rA[i].cross(t);
+        data.rb_t[i] = data.rB[i].cross(t);
+        data.K_n[i] = data.wA + data.wB + data.IA * data.ra_n[i] * data.ra_n[i] +
+                      data.IB * data.rb_n[i] * data.rb_n[i];
+        data.K_t[i] = data.wA + data.wB + data.IA * data.ra_t[i] * data.ra_t[i] +
+                      data.IB * data.rb_t[i] * data.rb_t[i];
 
-        const FxVec2f vA = A.velocity_at_local_point(contact.rA[i]);
-        const FxVec2f vB = B.velocity_at_local_point(contact.rB[i]);
-        contact.vn_pre[i] = (vB - vA).dot(n);
+        const FxVec2f vA = bodies.velocity_at(contact.body1, data.rA[i]);
+        const FxVec2f vB = bodies.velocity_at(contact.body2, data.rB[i]);
+        data.vn_pre[i] = (vB - vA).dot(n);
     }
 }
 
-void warm_start(FxContact& contact) {
-    if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return;
-    if (!contact.entity1 || !contact.entity2) return;
+void batch_append(FxContactBatch& b, const FxContact& contact, const FxContactSolverData& data,
+                  uint32_t contact_index) {
+    b.ia.push_back(contact.body1);
+    b.ib.push_back(contact.body2);
+    b.nx.push_back(contact.normal.x());
+    b.ny.push_back(contact.normal.y());
+    b.tx.push_back(-contact.normal.y());
+    b.ty.push_back(contact.normal.x());
+    b.wA.push_back(data.wA);
+    b.wB.push_back(data.wB);
+    b.IA.push_back(data.IA);
+    b.IB.push_back(data.IB);
+    b.restitution.push_back(data.restitution);
+    b.mu_s.push_back(data.mu_static);
+    b.mu_k.push_back(data.mu_kinetic);
+    b.contact_index.push_back(contact_index);
+    for (size_t s = 0; s < 2; ++s) {
+        b.rAx[s].push_back(data.rA[s].x());
+        b.rAy[s].push_back(data.rA[s].y());
+        b.rBx[s].push_back(data.rB[s].x());
+        b.rBy[s].push_back(data.rB[s].y());
+        b.ra_n[s].push_back(data.ra_n[s]);
+        b.rb_n[s].push_back(data.rb_n[s]);
+        b.ra_t[s].push_back(data.ra_t[s]);
+        b.rb_t[s].push_back(data.rb_t[s]);
+        b.K_n[s].push_back(data.K_n[s]);
+        b.K_t[s].push_back(data.K_t[s]);
+        b.vn_pre[s].push_back(data.vn_pre[s]);
+        b.jn[s].push_back(contact.jn_accumulated[s]);
+        b.jt[s].push_back(contact.jt_accumulated[s]);
+    }
+}
 
-    FxEntity& A = *contact.entity1;
-    FxEntity& B = *contact.entity2;
+// The velocity sweep, a whole colour at a time. Every branch is a select so all lanes run the
+// same instructions, and (i + iter) % count becomes (slot + iter) & 1 over two fixed slots --
+// the same visit order, 0,1,1,0 for two points and 0,0 for one.
+template<int SLOTS>
+static void resolve_velocities_slots(FxContactBatch& b, std::size_t begin, std::size_t end,
+                                     FxSolverBodies& bodies) {
+    if (begin >= end) return;
+
+    // Gather. Once per colour per pass rather than once per solve: the six components stay in
+    // the columns while all six solves run over them.
+    for (std::size_t i = begin; i < end; ++i) {
+        const std::size_t ia = static_cast<std::size_t>(b.ia[i]);
+        const std::size_t ib = static_cast<std::size_t>(b.ib[i]);
+        b.vax[i] = bodies.vx[ia];
+        b.vay[i] = bodies.vy[ia];
+        b.wav[i] = bodies.w[ia];
+        b.vbx[i] = bodies.vx[ib];
+        b.vby[i] = bodies.vy[ib];
+        b.wbv[i] = bodies.w[ib];
+    }
+
+    float* __restrict vax = b.vax.data();
+    float* __restrict vay = b.vay.data();
+    float* __restrict wav = b.wav.data();
+    float* __restrict vbx = b.vbx.data();
+    float* __restrict vby = b.vby.data();
+    float* __restrict wbv = b.wbv.data();
+    const float* __restrict nx = b.nx.data();
+    const float* __restrict ny = b.ny.data();
+    const float* __restrict tx = b.tx.data();
+    const float* __restrict ty = b.ty.data();
+    const float* __restrict wA = b.wA.data();
+    const float* __restrict wB = b.wB.data();
+    const float* __restrict IA = b.IA.data();
+    const float* __restrict IB = b.IB.data();
+
+    for (size_t iter = 0; iter < 2; ++iter) {
+        for (size_t slot = 0; slot < static_cast<size_t>(SLOTS); ++slot) {
+            // One-point manifolds solve point 0 twice, which is what the scalar kernel's
+            // (i + iter) % count does when count is 1. Two-point manifolds visit 0,1,1,0.
+            const size_t k = (SLOTS == 1) ? 0u : ((slot + iter) & 1u);
+            const float* __restrict rAx = b.rAx[k].data();
+            const float* __restrict rAy = b.rAy[k].data();
+            const float* __restrict rBx = b.rBx[k].data();
+            const float* __restrict rBy = b.rBy[k].data();
+            const float* __restrict ra_n = b.ra_n[k].data();
+            const float* __restrict rb_n = b.rb_n[k].data();
+            const float* __restrict Kn = b.K_n[k].data();
+            const float* __restrict vn_pre = b.vn_pre[k].data();
+            const float* __restrict e = b.restitution.data();
+            float* __restrict jn = b.jn[k].data();
+
+            for (std::size_t i = begin; i < end; ++i) {
+                const float vn = ((vbx[i] - wbv[i] * rBy[i]) - (vax[i] - wav[i] * rAy[i])) * nx[i] +
+                                 ((vby[i] + wbv[i] * rBx[i]) - (vay[i] + wav[i] * rAx[i])) * ny[i];
+
+                const float vn_target = (vn_pre[i] < -kRestitutionSlop) ? -e[i] * vn_pre[i] : 0.0f;
+
+                // Repeat the comparison rather than hold it in a bool: a bool temporary has no
+                // vector type and the vectoriser abandons the loop. Forcing the divisor to 1
+                // where inactive stops a masked lane producing an infinity.
+                const float k_safe = (Kn[i] > 1e-6f) ? Kn[i] : 1.0f;
+                const float fresh = -(vn - vn_target) / k_safe;
+                const float old_jn = jn[i];
+                const float raised = std::max(0.0f, old_jn + fresh);
+                const float new_jn = (Kn[i] > 1e-6f) ? raised : old_jn;
+                const float delta = new_jn - old_jn;
+                jn[i] = new_jn;
+
+                const float pnx = nx[i] * delta, pny = ny[i] * delta;
+                vax[i] -= wA[i] * pnx;
+                vay[i] -= wA[i] * pny;
+                vbx[i] += wB[i] * pnx;
+                vby[i] += wB[i] * pny;
+                wav[i] -= IA[i] * delta * ra_n[i];
+                wbv[i] += IB[i] * delta * rb_n[i];
+            }
+        }
+    }
+
+    // Friction cone budget = the normal impulse this substep, summed once over both slots. A
+    // one-point contact leaves slot 1 at zero, so the sum is right for both manifold sizes.
+    {
+        const float* __restrict jn0 = b.jn[0].data();
+        const float* __restrict jn1 = b.jn[1].data();
+        float* __restrict sum = b.jn_sum.data();
+        for (std::size_t i = begin; i < end; ++i)
+            sum[i] = (SLOTS == 1) ? jn0[i] : (jn0[i] + jn1[i]);
+    }
+
+    for (size_t slot = 0; slot < static_cast<size_t>(SLOTS); ++slot) {
+        const float* __restrict rAx = b.rAx[slot].data();
+        const float* __restrict rAy = b.rAy[slot].data();
+        const float* __restrict rBx = b.rBx[slot].data();
+        const float* __restrict rBy = b.rBy[slot].data();
+        const float* __restrict ra_t = b.ra_t[slot].data();
+        const float* __restrict rb_t = b.rb_t[slot].data();
+        const float* __restrict Kt = b.K_t[slot].data();
+        const float* __restrict mu_s = b.mu_s.data();
+        const float* __restrict mu_k = b.mu_k.data();
+        const float* __restrict jn_sum = b.jn_sum.data();
+        float* __restrict jt = b.jt[slot].data();
+
+        for (std::size_t i = begin; i < end; ++i) {
+            const float vt = ((vbx[i] - wbv[i] * rBy[i]) - (vax[i] - wav[i] * rAy[i])) * tx[i] +
+                             ((vby[i] + wbv[i] * rBx[i]) - (vay[i] + wav[i] * rAx[i])) * ty[i];
+
+            const float kt_safe = (Kt[i] > 1e-8f) ? Kt[i] : 1.0f;
+            const float fresh = -vt / kt_safe;
+            const float old_jt = jt[i];
+            float candidate = old_jt + fresh;
+
+            const float budget = std::max(0.0f, jn_sum[i]);
+            const float max_static = mu_s[i] * budget;
+            const float max_dynamic = mu_k[i] * budget;
+            const float clamped = (candidate >= 0.0f ? 1.0f : -1.0f) * max_dynamic;
+            candidate = (std::fabs(candidate) > max_static) ? clamped : candidate;
+
+            const float new_jt = (Kt[i] > 1e-8f) ? candidate : old_jt;
+            const float delta = new_jt - old_jt;
+            jt[i] = new_jt;
+
+            const float ptx = tx[i] * delta, pty = ty[i] * delta;
+            vax[i] -= wA[i] * ptx;
+            vay[i] -= wA[i] * pty;
+            vbx[i] += wB[i] * ptx;
+            vby[i] += wB[i] * pty;
+            wav[i] -= IA[i] * delta * ra_t[i];
+            wbv[i] += IB[i] * delta * rb_t[i];
+        }
+    }
+
+    // Scatter. Safe precisely because this range is one colour: no two entries in it touch the
+    // same movable body, so no two writes can land on the same slot.
+    for (std::size_t i = begin; i < end; ++i) {
+        const std::size_t ia = static_cast<std::size_t>(b.ia[i]);
+        const std::size_t ib = static_cast<std::size_t>(b.ib[i]);
+        bodies.vx[ia] = b.vax[i];
+        bodies.vy[ia] = b.vay[i];
+        bodies.w[ia] = b.wav[i];
+        bodies.vx[ib] = b.vbx[i];
+        bodies.vy[ib] = b.vby[i];
+        bodies.w[ib] = b.wbv[i];
+    }
+}
+
+// Manifold size is a property of the range, not of a lane: FxScene sorts each colour by it and
+// calls this once per run. One-point contacts in the two-slot kernel are correct but do double
+// the arithmetic -- on the circle-heavy `pile` that was 14% slower than scalar.
+void resolve_velocities_batched(FxContactBatch& b, std::size_t begin, std::size_t end,
+                                FxSolverBodies& bodies, int slots) {
+    if (slots == 1) resolve_velocities_slots<1>(b, begin, end, bodies);
+    else resolve_velocities_slots<2>(b, begin, end, bodies);
+}
+
+void batch_write_back(const FxContactBatch& b, std::vector<FxContact>& contacts) {
+    for (std::size_t i = 0; i < b.size(); ++i) {
+        FxContact& c = contacts[b.contact_index[i]];
+        for (size_t s = 0; s < 2; ++s) {
+            c.jn_accumulated[s] = b.jn[s][i];
+            c.jt_accumulated[s] = b.jt[s][i];
+        }
+    }
+}
+
+void warm_start(FxContact& contact, const FxContactSolverData& data, FxSolverBodies& bodies) {
+    if (!contact_is_solvable(contact)) return;
+
+    const size_t ia = static_cast<size_t>(contact.body1);
+    const size_t ib = static_cast<size_t>(contact.body2);
     FxVec2f n = contact.normal;
     FxVec2f t(-n.y(), n.x());
 
@@ -382,106 +650,16 @@ void warm_start(FxContact& contact) {
         const float jn = contact.jn_warm[i];
         const float jt = contact.jt_warm[i];
         FxVec2f impulse = n * jn + t * jt;
-        A.velocity.xy() -= contact.wA * impulse;
-        B.velocity.xy() += contact.wB * impulse;
-        A.velocity.theta() -= contact.IA * (jn * contact.ra_n[i] + jt * contact.ra_t[i]);
-        B.velocity.theta() += contact.IB * (jn * contact.rb_n[i] + jt * contact.rb_t[i]);
+        bodies.vx[ia] -= data.wA * impulse.x();
+        bodies.vy[ia] -= data.wA * impulse.y();
+        bodies.vx[ib] += data.wB * impulse.x();
+        bodies.vy[ib] += data.wB * impulse.y();
+        bodies.w[ia] -= data.IA * (jn * data.ra_n[i] + jt * data.ra_t[i]);
+        bodies.w[ib] += data.IB * (jn * data.rb_n[i] + jt * data.rb_t[i]);
         // Book the warm-start as applied so excess can be released later.
         contact.jn_accumulated[i] = jn;
         contact.jt_accumulated[i] = jt;
     }
 }
 
-// Post-constraint velocity impulses for restitution and dynamic friction
-void resolve_velocities(FxContact& contact) {
-    if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return;
-    if (!contact.entity1 || !contact.entity2) return;
-
-    // Get entity references
-    FxEntity& A = *contact.entity1;
-    FxEntity& B = *contact.entity2;
-    FxVec2f n = (contact.normal);
-    FxVec2f t(-n.y(), n.x()); // fixed tangent (no normalize of vRel_t)
-
-    // Restitution takes max so the liveliest surface sets the bounce and a bouncy body bounces
-    // off anything; friction takes min so the slipperiest surface wins and ice stays slippery.
-    const float e = std::clamp(std::max(A.elasticity, B.elasticity), 0.0f, 1.0f);
-    const float mu_s = std::clamp(std::min(A.static_friction, B.static_friction), 0.0f, 10.0f);
-    const float mu_k = std::clamp(std::min(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
-
-    // Lever arms and effective masses come from the per-substep cache in init_velocity_pass:
-    // this function sweeps every contact several times per substep, and none of them change
-    // between sweeps.
-    const float wA = contact.wA, wB = contact.wB, IA = contact.IA, IB = contact.IB;
-
-    // Iteratively resolve normal impulses
-    for (int iter = 0; iter < 2; iter++) {
-        for (size_t i = 0; i < contact.count; i++) {
-            size_t k = (i + iter) % contact.count;
-            auto vA = A.velocity_at_local_point(contact.rA[k]);
-            auto vB = B.velocity_at_local_point(contact.rB[k]);
-
-            // Relative velocity and its normal component
-            float vn = (vB - vA).dot(n);
-
-            // --- Velocity Correction (Normal Impulse) ---
-            const float ra_n = contact.ra_n[k], rb_n = contact.rb_n[k];
-            const float K_n = contact.K_n[k];
-
-            // Fixed restitution target from substep start (later sweeps must not cancel bounce).
-            const float vn_target =
-                (contact.vn_pre[k] < -kRestitutionSlop) ? -e * contact.vn_pre[k] : 0.0f;
-            if (K_n > 1e-6f) {
-                float fresh_jn = -(vn - vn_target) / K_n;
-                float old_jn = contact.jn_accumulated[k];
-                float new_jn = std::max(0.0f, old_jn + fresh_jn);
-                float delta_jn = new_jn - old_jn;
-                contact.jn_accumulated[k] = new_jn;
-
-                // Negative delta releases excess impulse already applied this substep.
-                if (delta_jn != 0.0f) {
-                    FxVec2f Pn = n * delta_jn;
-                    A.velocity.xy() -= wA * Pn;
-                    B.velocity.xy() += wB * Pn;
-                    A.velocity.theta() -= IA * delta_jn * ra_n;
-                    B.velocity.theta() += IB * delta_jn * rb_n;
-                }
-            }
-        }
-    }
-
-    // Friction cone budget = normal impulse this substep (sum once, not per iter).
-    float jn_sum = 0.0f;
-    for (size_t i = 0; i < contact.count; i++)
-        jn_sum += contact.jn_accumulated[i];
-
-    // Single pass friction resolution using accumulated normal impulses
-    for (size_t i = 0; i < contact.count; i++) {
-        FxVec2f vA = A.velocity_at_local_point(contact.rA[i]);
-        FxVec2f vB = B.velocity_at_local_point(contact.rB[i]);
-        float vt = (vB - vA).dot(t);
-
-        const float ra_t = contact.ra_t[i], rb_t = contact.rb_t[i];
-        const float Kt = contact.K_t[i];
-        if (Kt <= 1e-8f) continue;
-
-        float fresh_jt = -vt / Kt;
-        float old_jt = contact.jt_accumulated[i];
-        float new_jt = old_jt + fresh_jt;
-        float max_static = mu_s * std::max(0.f, jn_sum);
-        if (std::fabs(new_jt) > max_static) {
-            float max_dynamic = mu_k * std::max(0.f, jn_sum);
-            new_jt = (new_jt >= 0.f ? 1.f : -1.f) * max_dynamic;
-        }
-
-        contact.jt_accumulated[i] = new_jt;
-        float delta_jt = new_jt - old_jt;
-
-        FxVec2f Pt = t * delta_jt;
-        A.velocity.xy() -= wA * Pt;
-        B.velocity.xy() += wB * Pt;
-        A.velocity.theta() -= IA * delta_jt * ra_t;
-        B.velocity.theta() += IB * delta_jt * rb_t;
-    }
-}
 } // namespace FxSolver

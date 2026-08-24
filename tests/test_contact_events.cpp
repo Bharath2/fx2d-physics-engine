@@ -278,6 +278,40 @@ void test_reset_clears_contacts() {
     require(scene.end_contact_events().empty(), "reset must clear end events");
 }
 
+// A deleted entity must still be nameable by the end-contact event reporting its separation;
+// FxScene's pins are what keep the borrowed pointers valid. The box is added *after* the first
+// step on purpose -- the reset() snapshot would otherwise hold it alive and the test prove nothing.
+void test_end_event_names_a_deleted_entity() {
+    FxScene scene = make_scene();
+    make_ground(scene, "ground", 6.0f, 1.0f, 8.0f, 0.5f);
+
+    scene.step(kFrame); // takes the reset snapshot, which must not include the box
+
+    auto faller = make_box(scene, "faller", 6.0f, 2.0f, 0.5f, 0.5f);
+    faller.reset(); // the test holds no handle either
+
+    for (int i = 0; i < 120; ++i)
+        scene.step(kFrame);
+
+    bool touching = false;
+    for (const auto& c : scene.contacts()) {
+        if (!c.entity1 || !c.entity2) continue;
+        if (c.entity1->get_name() == "faller" || c.entity2->get_name() == "faller") touching = true;
+    }
+    require(touching, "the box must be resting on the ground before it is deleted");
+
+    require(scene.delete_entity("faller"), "the entity should delete cleanly");
+
+    scene.step(kFrame);
+
+    bool named = false;
+    for (const auto& event : scene.end_contact_events()) {
+        if (event.entity1 && event.entity1->get_name() == "faller") named = true;
+        if (event.entity2 && event.entity2->get_name() == "faller") named = true;
+    }
+    require(named, "the end-contact event must still name the deleted entity");
+}
+
 } // namespace
 
 void run_contact_event_tests() {
@@ -290,5 +324,6 @@ void run_contact_event_tests() {
     test_sensor_does_not_wake_sleeper();
     test_events_visible_in_step_callback();
     test_reset_clears_contacts();
+    test_end_event_names_a_deleted_entity();
     std::cout << "Contact event and sensor tests passed." << std::endl;
 }
