@@ -7,17 +7,20 @@ A 2D rigid body physics engine written in C++20, using SAT collision detection, 
 
 ## Key Features
 - **Unified shape model:** Circles, capsules, edges, chains (open polylines for level geometry), polygons, and rounded (skin-radius) rectangles and polygons, all stored as `vertices[] + skin_radius` and handled by one skin-aware SAT narrow phase
-- **Dynamic AABB broad phase:** SAH-guided dynamic AABB tree with fat boxes and dual-tree pair descent
+- **Dynamic AABB broad phase:** SAH-guided dynamic AABB tree with fat boxes and dual-tree pair descent, walked only on the substeps where a proxy actually moved
 - **Continuous collision:** Opt-in speculative contacts (`ccd: true`) that anticipate impacts to curb tunneling for fast bodies
 - **XPBD constraint solver:** Substepped position-based dynamics with compliance control, warm starting, and Coulomb friction
-- **Joints with motors:** Revolute and prismatic joints with position / velocity / effort control modes and PID tuning
+- **Vectorised contact solve:** Contacts are graph-coloured into independent batches and solved several lanes at a time — portable C++ with no intrinsics, vectorising to AVX2 on x86-64 and NEON on ARM
+- **Joints with motors:** Revolute and prismatic joints with position / velocity / effort control modes and PID tuning, plus a mouse joint for click-and-drag that holds a body against a world point
 - **Spatial queries:** Ray casts, overlap and point queries sharing the simulation's own narrow phase, for line of sight, area effects, click-picking and RL observations
 - **Entity groups:** Named sets managed as one thing — bulk delete/enable, restored by reset, and intra-group collision filtering via one integer per body
 - **Contacts, events, and sensors:** Buffered contacts after each step, begin/end contact events, and trigger-only sensor entities
 - **Keyboard and mouse input:** Renderer-agnostic input for gameplay code, with world-space cursor position and headless injection for scripted or agent-driven scenes
 - **Sleeping:** Resting bodies fall asleep and stop consuming solver time until disturbed
+- **Measured performance:** Structure-of-arrays velocity solve, an allocation-free step, a per-phase profiler and a three-scene benchmark — every optimisation in the engine landed with an A/B behind it and a golden-value test proving physics did not move
 - **YAML based scene description:** Declarative setup of entities, textures, and physics parameters in `.yml` files
 - **Headless mode:** Build and run the physics core with no renderer, for testing, CI, and data collection
+- **Cross-platform:** x86-64 and ARM64, GCC / Clang / MSVC / MinGW, with the full test suite green on each — including a cross-compiled ARM build run under emulation in CI
 - **FxArray & Math Utilities**: NumPy-style `FxArray` and comprehensive linear-algebra utilities in Fx2D/Math.h
 - **raylib-based rendering:** Lightweight, cross-platform renderer with raylib and ImGui integration
 
@@ -125,7 +128,8 @@ Headless examples skip the graphics stack entirely:
 | [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |
 | [contacts_and_events.md](./docs/contacts_and_events.md) | Reading contacts after a step, begin/end contact events, and sensor (trigger) entities |
 | [queries.md](./docs/queries.md) | Ray casts, overlap and point queries — line of sight, lidar fans, explosions, click-picking |
-| [simd_plan.md](./docs/simd_plan.md) | The plan of record for vectorizing the solver — SoA gather/scatter, bulk loops, colored 8-wide velocity solve |
+| [next_steps.md](./docs/next_steps.md) | Session handoff — current state, where the step time goes now, and what to pick up next |
+| [simd_plan.md](./docs/simd_plan.md) | The plan of record for vectorizing the solver — SoA gather/scatter, bulk loops, colored 8-wide velocity solve, and the measured phase split behind the ordering |
 | [entity_groups.md](./docs/entity_groups.md) | Named entity sets — bulk operations, intra-group collision filtering, reset semantics, naming |
 | [input.md](./docs/input.md) | Keyboard and mouse input for gameplay — renderer polling, world-space cursor, headless injection |
 | [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |

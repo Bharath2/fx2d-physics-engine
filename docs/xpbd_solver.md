@@ -61,8 +61,8 @@ After position update, the entity's collision shape and AABB are synchronised to
 
 Contacts are recomputed every substep using a two-phase process:
 
-1. **Broad phase** — entities whose AABBs overlap are identified as candidate pairs.
-2. **Narrow phase** — `FxSolver::collision_check()` runs SAT/geometry tests on each candidate pair, producing `FxContact` structs.
+1. **Broad phase** — the dynamic AABB tree is re-synced with the poses integration just produced, and walked for overlapping proxies. The walk is skipped when the sync reports no leaf moved, since the tree would produce the identical list; in a settling scene that skips about 90% of substeps. Proxies are swept along velocity for the whole step on the first substep, so a body at constant velocity needs no reinsertion for the rest of it.
+2. **Narrow phase** — each candidate pair is rejected cheaply on its current tight AABBs, then `FxSolver::collision_check()` runs SAT/geometry tests on what survives, producing `FxContact` structs.
 
 Sleeping entities that receive a new contact are woken up automatically.
 
@@ -110,7 +110,11 @@ This replaces the velocity that was integrated in step 1, letting positional cor
 
 Restitution (bounce) and friction are applied as velocity impulses after position solving. This order ensures friction and restitution act on the corrected positions and velocities.
 
-See [collision_resolution.md](collision_resolution.md) for the impulse equations.
+Velocity is gathered into solver-local columns (`FxSolverBodies`) first and scattered back afterwards, so the sweeps address bodies by index instead of chasing `shared_ptr`s. The sweep runs `velocity_passes` times — the default is 4, because one sweep per contact leaves residual velocity in a stack.
+
+The sweep itself is **batched, not per contact**: the contacts are grouped into colours that touch disjoint movable bodies, transposed into columns, and solved a colour at a time so the arithmetic vectorises. The grouping changes the order contacts are solved in, which is a real change to a Gauss-Seidel solver. See [collision_resolution.md](collision_resolution.md) under *Batched solve*.
+
+See [collision_resolution.md](collision_resolution.md) for the impulse equations and the column layout.
 
 ---
 

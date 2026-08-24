@@ -261,8 +261,8 @@ bool is_edge() const;      // capsule with skin_radius <= 1e-6
 
 float radius() const;       // bounding radius from the centroid, skin included
 float skin_radius() const;
-FxVec2fArray vertices() const;    // world-space vertices
-FxVec2fArray __vertices() const;  // local vertices, centroid at the origin
+const FxVec2fArray& vertices() const;  // world-space vertices, by reference
+FxVec2fArray __vertices() const;       // local vertices, centroid at the origin
 FxVec2f centroid() const;         // world-space centroid
 
 float area() const;                     // skin included
@@ -283,12 +283,22 @@ second moment.
 ```cpp
 void set_offset_pose(const FxVec3f& pose);   // shape pose relative to the entity
 FxVec3f offset_pose() const;
-FxArray<float> set_world_pose(const FxVec3f& world_pose);  // returns the AABB
+
+FxArray<float> set_world_pose(const FxVec3f& world_pose);          // returns the AABB
+void set_world_pose(const FxVec3f& world_pose, FxArray<float>& out_aabb);  // writes it
 ```
 
-`set_world_pose()` transforms the local vertices into world space and returns the
+`set_world_pose()` transforms the local vertices into world space and produces the
 axis-aligned bounding box, inflated by the skin radius on all sides. `FxEntity::step()`
 calls it every substep, so `vertices()` and `centroid()` always reflect the current pose.
+
+Prefer the **out-parameter form** anywhere it runs per body per substep. The returning form
+allocates an `FxArray` for four floats, and the expression form it replaced built three
+temporaries per call. For the same reason `vertices()` returns a **const reference**: it used
+to return the array by value, which copied every vertex into a fresh aligned allocation, and
+because every call site writes `const auto& v = shape->vertices()` the copy was invisible at
+the point of use. See [CONTRIBUTING.md](CONTRIBUTING.md) under *Look for allocator traffic
+first*.
 
 > **Inertia is computed from the *visual* shape.** `FxEntity::set_inertia()` reads
 > `visual_geometry()`, not the collision shape, and returns zero if no visual shape is

@@ -17,12 +17,23 @@ One entry per pair that touched during the step. Each `FxContact` carries:
 
 | Field | Meaning |
 |---|---|
-| `entity1`, `entity2` | the two bodies, as `shared_ptr<FxEntity>` |
+| `entity1`, `entity2` | the two bodies, as **borrowed** `FxEntity*` — see the lifetime note below |
 | `count` | number of valid contact points (1 or 2) |
 | `position` | up to 2 contact points, in world coordinates |
 | `normal` | unit contact normal |
 | `penetration_depth` | positive when overlapping |
 | `jn_accumulated`, `jt_accumulated` | normal and tangent impulse actually applied |
+
+Contacts carry solver bookkeeping alongside the geometry — packed body indices, mixed material
+constants, and the pair's warm-start cache slot. Those fields are internal; read `normal`,
+`position`, `penetration_depth` and the accumulated impulses, and treat the rest as private.
+See [collision_resolution.md](collision_resolution.md) for the full field list.
+
+The `entity1` / `entity2` handles on both contacts and events are **raw pointers into the
+scene**, valid until the next `step()`. Read what you need from them inside the frame; do not
+store a contact or an event and expect it to stay good. The scene keeps the entities alive for
+exactly that long, including ones deleted while they were touching, so an end-contact event can
+still name a body that has just been removed.
 
 A pair is usually found in several substeps. The buffer keeps the last one seen,
 so the impulses are the ones accumulated by the end of the step.
