@@ -7,8 +7,8 @@ namespace FxSolver {
 
 // AABB overlap check
 bool aabb_overlap_check(const FxEntity& entity1, const FxEntity& entity2) {
-    auto aabb1 = entity1.bounding_box();
-    auto aabb2 = entity2.bounding_box();
+    const auto& aabb1 = entity1.bounding_box();
+    const auto& aabb2 = entity2.bounding_box();
     return !(aabb1(2) < aabb2(0) || aabb2(2) < aabb1(0) || aabb1(3) < aabb2(1) ||
              aabb2(3) < aabb1(1));
 }
@@ -199,6 +199,28 @@ static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) 
     return c;
 }
 
+// One SAT axis: the outward normal of A's edge i, and how far B reaches along it. Shared so the
+// two SAT sweeps below differ only in what they keep, not in how an axis is computed.
+struct FxSatAxis {
+    FxVec2f dir; // along the edge, normalised
+    FxVec2f axis; // outward normal
+    float gap; // signed separation, both skins already subtracted
+    size_t b_vertex; // B's deepest vertex on this axis
+};
+
+static FxSatAxis sat_axis(const FxVec2fArray& A_vertices, const FxShape* B_shape, size_t i,
+                          size_t n, float skin_sum) {
+    const FxVec2f& s = A_vertices[i];
+    const FxVec2f& e = A_vertices[(i + 1) % n];
+    FxSatAxis out;
+    out.dir = (e - s).normalized();
+    out.axis = out.dir.perp();
+    const auto [b_min_idx, b_min_val] = B_shape->min_projection(out.axis, s);
+    out.gap = b_min_val - skin_sum;
+    out.b_vertex = b_min_idx;
+    return out;
+}
+
 // tests A's edge normals against B; early-exits on first sep axis, else tracks min-penetration
 // axis. Returned `gap` is skin-inclusive (raw B_min_val - rA - rB), so gap > 0 means full
 // separation.
@@ -207,22 +229,18 @@ static FxSatResult sat_query(const FxShape* A_shape, const FxShape* B_shape) {
     const float skin_sum = A_shape->skin_radius() + B_shape->skin_radius();
     FxSatResult result;
     for (size_t i = 0, n = A_vertices.size(); i < n; ++i) {
-        const FxVec2f& s = A_vertices[i];
-        const FxVec2f& e = A_vertices[(i + 1) % n];
-        FxVec2f dir = (e - s).normalized();
-        FxVec2f axis = dir.perp();
-        auto [B_min_idx, B_min_val] = B_shape->project_onto(axis, s).argmin();
-        float gap_val = B_min_val - skin_sum;
-        if (gap_val > 0.f) {
+        const FxSatAxis a = sat_axis(A_vertices, B_shape, i, n, skin_sum);
+        if (a.gap > 0.f) {
             result.has_sep = true;
             return result;
         } // separating axis
-        if (gap_val > result.gap) {
-            result.normal = axis;
-            result.gap = gap_val;
-            result.ref_edge_dir = dir;
+        // Keeps the largest gap: the axis of least penetration is the one to resolve along.
+        if (a.gap > result.gap) {
+            result.normal = a.axis;
+            result.gap = a.gap;
+            result.ref_edge_dir = a.dir;
             result.ref_edge_index = i;
-            result.pen_vertex_index = B_min_idx;
+            result.pen_vertex_index = a.b_vertex;
         }
     }
     return result;
@@ -272,14 +290,49 @@ static FxContact circle_vs_polygon_contact(const FxVec2f& vc, float vrA, const F
     return contact;
 }
 
+// Build the contact for a polygon pair whose SAT result is known: find B's incident edge, clip
+// it against A's reference edge, place the points on B's skin surface. Split out from the SAT
+// so it runs once -- only the winning direction's points are used, and this half is the costly one.
+static FxContact polygon_contact_from_sat(const FxShape* A_shape, const FxShape* B_shape,
+                                          const FxSatResult& sat) {
+    FxContact contact(true);
+    contact.normal = sat.normal;
+    contact.penetration_depth = -sat.gap; // positive when overlapping (gap <= 0)
+
+    const auto& A_vertices = A_shape->vertices();
+    const auto& B_vertices = B_shape->vertices();
+    if (B_vertices.empty()) return contact;
+
+    const float rB = B_shape->skin_radius();
+    const size_t B_N = B_vertices.size();
+    const size_t ifwd = (sat.pen_vertex_index + 1) % B_N;
+    const size_t ibwd = (sat.pen_vertex_index + B_N - 1) % B_N;
+    const FxVec2f B_edge_start = B_vertices[sat.pen_vertex_index];
+    const float dot_fwd =
+        std::abs((B_vertices[ifwd] - B_edge_start).normalized().dot(sat.ref_edge_dir));
+    const float dot_bwd =
+        std::abs((B_edge_start - B_vertices[ibwd]).normalized().dot(sat.ref_edge_dir));
+    const FxVec2f B_edge_end = dot_bwd > dot_fwd ? B_vertices[ibwd] : B_vertices[ifwd];
+    const FxVec2f& A_edge_start = A_vertices[sat.ref_edge_index];
+    const FxVec2f& A_edge_end = A_vertices[(sat.ref_edge_index + 1) % A_vertices.size()];
+    const auto contact_points = clip_edge(B_edge_start, B_edge_end, A_edge_start, A_edge_end);
+    // Shift onto B's skin surface (which faces A along -normal).
+    const FxVec2f skin_shift = -rB * sat.normal;
+    contact.position[0] = contact_points.first + skin_shift;
+    contact.position[1] = contact_points.second + skin_shift;
+    // Check if points are too close and resolve to one point if needed
+    float dist = (contact.position[1] - contact.position[0]).norm();
+    contact.count = (dist < 0.01f) ? 1 : 2;
+    return contact;
+}
+
 FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape) {
     auto contact = FxContact(true);
     contact.penetration_depth = 0.0f;
 
     // ----------- CHAIN -----------
-    // One-sided (front = left of the authored direction), and solved with neighbour knowledge
-    // for round bodies: joint contacts are clamped into the arc the adjacent faces admit, or an
-    // endpoint normal could point along the surface and eject the body through it.
+    // One-sided (front = left of the authored direction). Joint contacts are clamped into the
+    // arc the adjacent faces admit, or an endpoint normal could eject the body through it.
     if (A_shape->is_chain() || B_shape->is_chain()) {
         const bool a_is_chain = A_shape->is_chain();
         const FxShape* chain = a_is_chain ? A_shape : B_shape;
@@ -459,40 +512,13 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
         return contact;
     }
 
-    // Polygon vs Polygon (skin-aware via sat_query — `sat.gap` already includes both skins)
-    const auto& A_vertices = A_shape->vertices();
-    const auto& B_vertices = B_shape->vertices();
-    const float rB = B_shape->skin_radius();
+    // Polygon vs Polygon (skin-aware via sat_query -- `sat.gap` already includes both skins)
     FxSatResult sat = sat_query(A_shape, B_shape);
     if (sat.has_sep) {
         contact.set_valid(false);
         return contact;
     }
-    contact.normal = sat.normal;
-    contact.penetration_depth = -sat.gap; // positive when overlapping (gap <= 0)
-
-    if (!B_vertices.empty()) {
-        const size_t B_N = B_vertices.size();
-        const size_t ifwd = (sat.pen_vertex_index + 1) % B_N;
-        const size_t ibwd = (sat.pen_vertex_index + B_N - 1) % B_N;
-        const FxVec2f B_edge_start = B_vertices[sat.pen_vertex_index];
-        const float dot_fwd =
-            std::abs((B_vertices[ifwd] - B_edge_start).normalized().dot(sat.ref_edge_dir));
-        const float dot_bwd =
-            std::abs((B_edge_start - B_vertices[ibwd]).normalized().dot(sat.ref_edge_dir));
-        const FxVec2f B_edge_end = dot_bwd > dot_fwd ? B_vertices[ibwd] : B_vertices[ifwd];
-        const FxVec2f& A_edge_start = A_vertices[sat.ref_edge_index];
-        const FxVec2f& A_edge_end = A_vertices[(sat.ref_edge_index + 1) % A_vertices.size()];
-        const auto contact_points = clip_edge(B_edge_start, B_edge_end, A_edge_start, A_edge_end);
-        // Shift onto B's skin surface (which faces A along -normal).
-        const FxVec2f skin_shift = -rB * sat.normal;
-        contact.position[0] = contact_points.first + skin_shift;
-        contact.position[1] = contact_points.second + skin_shift;
-        // Check if points are too close and resolve to one point if needed
-        float dist = (contact.position[1] - contact.position[0]).norm();
-        contact.count = (dist < 0.01f) ? 1 : 2;
-    }
-    return contact;
+    return polygon_contact_from_sat(A_shape, B_shape, sat);
 }
 
 // Separating Axis Theorem collision check method
@@ -521,13 +547,38 @@ const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1,
         contact = compute_contact_one_way(B, A);
         if (contact.is_valid(false)) contact.normal = -contact.normal; // restore A->B convention
     } else {
-        FxContact cAB = compute_contact_one_way(A, B);
-        FxContact cBA = compute_contact_one_way(B, A);
-        if (!cAB.is_valid(false) || !cBA.is_valid(false)) return FxContact(false);
-        // bias toward cAB: prevents jitter from flipping the reference edge each frame
-        float bias = 0.005f * cAB.penetration_depth + 1e-6f;
-        const bool picked_ba = cBA.penetration_depth < cAB.penetration_depth - bias;
-        contact = picked_ba ? cBA : cAB;
+        // Both directions are needed to find the smaller penetration, but only the winner's
+        // points are used, so the SAT runs twice and the clip once. A separating axis from
+        // either side settles it before the second SAT starts.
+        const bool polygons = A->is_polygon() && B->is_polygon();
+        FxSatResult satAB, satBA;
+        if (polygons) {
+            satAB = sat_query(A, B);
+            if (satAB.has_sep) return FxContact(false);
+            satBA = sat_query(B, A);
+            if (satBA.has_sep) return FxContact(false);
+        }
+
+        const float depth_ab = polygons ? -satAB.gap : 0.0f;
+        const float depth_ba = polygons ? -satBA.gap : 0.0f;
+        // bias toward A->B: prevents jitter from flipping the reference edge each frame
+        const float bias = 0.005f * depth_ab + 1e-6f;
+        bool picked_ba = polygons && (depth_ba < depth_ab - bias);
+
+        if (polygons) {
+            contact = picked_ba ? polygon_contact_from_sat(B, A, satBA) :
+                                  polygon_contact_from_sat(A, B, satAB);
+            if (!contact.is_valid(false)) return FxContact(false);
+        } else {
+            // Chains and other non-polygon pairs still go through the general path.
+            FxContact cAB = compute_contact_one_way(A, B);
+            if (!cAB.is_valid(false)) return FxContact(false);
+            FxContact cBA = compute_contact_one_way(B, A);
+            if (!cBA.is_valid(false)) return FxContact(false);
+            const float b2 = 0.005f * cAB.penetration_depth + 1e-6f;
+            picked_ba = cBA.penetration_depth < cAB.penetration_depth - b2;
+            contact = picked_ba ? cBA : cAB;
+        }
         // one_way(B, A) reports B->A; chains skip the centre-to-centre fixup below, so restore
         // the convention here instead.
         if (picked_ba && (A->is_chain() || B->is_chain())) contact.normal = -contact.normal;
@@ -542,8 +593,8 @@ const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1,
             FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
             if (delta.dot(contact.normal) < 0.0f) contact.normal = -contact.normal;
         }
-        contact.entity1 = entity1;
-        contact.entity2 = entity2;
+        contact.entity1 = entity1.get();
+        contact.entity2 = entity2.get();
         contact.normal = contact.normal.normalized();
     }
     return contact;
@@ -557,15 +608,12 @@ static std::pair<FxVec2f, float> sat_gap_query(const FxShape* A_shape, const FxS
     FxVec2f best_normal{1.0f, 0.0f};
     float best_val = FxInfinityf;
     for (size_t i = 0, n = A_vertices.size(); i < n; ++i) {
-        const FxVec2f& s = A_vertices[i];
-        const FxVec2f& e = A_vertices[(i + 1) % n];
-        FxVec2f dir = (e - s).normalized();
-        FxVec2f axis = dir.perp();
-        auto [B_min_idx, B_min_val] = B_shape->project_onto(axis, s).argmin();
-        float gap_val = B_min_val - skin_sum;
-        if (gap_val < best_val) {
-            best_val = gap_val;
-            best_normal = axis;
+        const FxSatAxis a = sat_axis(A_vertices, B_shape, i, n, skin_sum);
+        // Keeps the smallest gap, and never exits early: a speculative contact needs the
+        // closest approach across every axis, including ones that already separate.
+        if (a.gap < best_val) {
+            best_val = a.gap;
+            best_normal = a.axis;
         }
     }
     return {best_normal, best_val};
@@ -697,8 +745,8 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
     c.penetration_depth = spec_depth;
     // Anchor at the deepest feature of A; falls back to A's centroid for polygons.
     c.position[0] = contact_anchor + normal * A->skin_radius();
-    c.entity1 = entity1;
-    c.entity2 = entity2;
+    c.entity1 = entity1.get();
+    c.entity2 = entity2.get();
     return c;
 }
 

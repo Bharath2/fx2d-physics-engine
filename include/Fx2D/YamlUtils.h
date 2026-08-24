@@ -23,7 +23,7 @@ std::string deIndent(const std::string& raw);
 template<int N>
 inline FxArray<float> parseArray(const YAML::Node& node) {
     FxArray<float> arr(N);
-    for (int i = 0; i < N; ++i)
+    for (std::size_t i = 0; i < static_cast<std::size_t>(N); ++i)
         arr[i] = node[i].as<float>();
     return arr;
 }

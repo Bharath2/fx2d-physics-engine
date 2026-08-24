@@ -74,10 +74,11 @@ void FxJoint::set_control_mode(ControlMode mode) {
 // FxJoint base class implementation
 FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
                  const std::shared_ptr<FxEntity>& e2) {
-    if (!e1 || !e2) {
-        throw std::invalid_argument("Joint entities cannot be null");
+    // e2 may be null: a world-anchored joint, such as the mouse joint, holds one body only.
+    if (!e1) {
+        throw std::invalid_argument("Joint entity1 cannot be null");
     }
-    if (e1.get() == e2.get()) {
+    if (e2 && e1.get() == e2.get()) {
         throw std::invalid_argument("Joint cannot connect an entity to itself");
     }
     if (!is_valid_name(name)) {
@@ -92,10 +93,7 @@ FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
 FxRevoluteJoint::FxRevoluteJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
                                  const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor_point,
                                  float angle_min, float angle_max) :
-    FxJoint(name, e1, e2),
-    m_anchor_point(anchor_point),
-    m_angle_min(angle_min),
-    m_angle_max(angle_max) {
+    FxJoint(name, e1, e2), m_anchor_point(anchor_point) {
     m_constraints.reserve(2);
 
     auto anchor_constraint = std::make_shared<FxAnchorConstraint>(e1, e2, anchor_point, true);
@@ -197,6 +195,33 @@ void FxRevoluteJoint::apply_controls(double dt) {
     }
 
     apply_torque_effort(effort);
+}
+
+// FxMouseJoint implementation
+FxMouseJoint::FxMouseJoint(const std::string& name, const std::shared_ptr<FxEntity>& body,
+                           const FxVec2f& grab_point, bool grab_is_local) :
+    FxJoint(name, body, nullptr) {
+    m_grab = std::make_shared<FxMouseConstraint>(body, grab_point, grab_is_local);
+    m_constraints.push_back(m_grab);
+    namespace_constraints();
+}
+
+void FxMouseJoint::set_target(const FxVec2f& world_point) {
+    m_grab->set_target(world_point);
+    // A body asleep under the cursor would otherwise ignore the drag entirely.
+    wake_entities();
+}
+
+FxVec2f FxMouseJoint::target() const {
+    return m_grab->target();
+}
+
+FxVec2f FxMouseJoint::grab_point() const {
+    return m_grab->local_anchor();
+}
+
+void FxMouseJoint::set_compliance(double compliance) {
+    m_grab->setCompliance(compliance);
 }
 
 // FxPrismaticJoint implementation

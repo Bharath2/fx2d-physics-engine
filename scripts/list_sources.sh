@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 if [[ "${1:-}" == "--core" ]]; then
   printf '%s
-'     src/Entity.cpp     src/Scene.cpp     src/Collisions.cpp     src/Constraints.cpp     src/Joints.cpp     src/Query.cpp     src/YamlUtils.cpp
+'     src/Entity.cpp     src/Profile.cpp     src/Scene.cpp     src/Collisions.cpp     src/ContactGraph.cpp     src/Constraints.cpp     src/Joints.cpp     src/Query.cpp     src/YamlUtils.cpp
   exit 0
 fi
 

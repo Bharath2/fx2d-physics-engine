@@ -111,8 +111,10 @@ endif()
 # ============================================================
 set(FX2D_CORE_SOURCES
   src/Entity.cpp
+  src/Profile.cpp
   src/Scene.cpp
   src/Collisions.cpp
+  src/ContactGraph.cpp
   src/Constraints.cpp
   src/Joints.cpp
   src/Query.cpp
@@ -171,6 +173,57 @@ option(FX2D_WERROR     "Treat warnings as errors"    OFF)
 option(FX2D_NATIVE     "Enable native CPU tuning (SIMD etc.)" ON)
 option(FX2D_IPO        "Enable interprocedural optimization (LTO/IPO) in Release" ON)
 
+# Floating-point contraction (a*b+c fused into one FMA) is a compiler's choice by default:
+# GCC and Clang both contract, MSVC does not, and whether a given expression fuses depends on
+# the target ISA. That makes a bench A/B between two builds, or between x86 and ARM, compare
+# two different sets of arithmetic. Pinning it off costs a little speed and buys results that
+# only move when the code moves. It is PUBLIC on Fx2Dlib because the maths lives in headers,
+# so a consumer compiling Math.h with contraction on would not match the library it links.
+option(FX2D_PIN_FP_CONTRACT "Pin off FP contraction (FMA) so results are build-independent" ON)
+
+# The per-phase step profiler. Off by default: the timers are cheap but not free, and a
+# release build should not pay for them. Fx2DBench prints the split when this is on.
+option(FX2D_PROFILE "Build with the per-phase step profiler (FxProfile)" OFF)
+
+# FX2D_NATIVE tunes for the machine doing the build, which is right for development and wrong
+# for anything you ship. Set FX2D_ARCH_BASELINE instead to pin a fixed instruction set that the
+# binary can assume everywhere it runs; it takes precedence over FX2D_NATIVE when non-empty.
+# Accepted: sse2, avx2, avx512 (x86) and armv8-a, armv8.2-a (arm64). Empty means "follow
+# FX2D_NATIVE".
+set(FX2D_ARCH_BASELINE "" CACHE STRING "Fixed ISA baseline for distributable builds")
+set_property(CACHE FX2D_ARCH_BASELINE PROPERTY STRINGS "" sse2 avx2 avx512 armv8-a armv8.2-a)
+
+# ============================================================
+# Target architecture
+# ============================================================
+# CMAKE_SYSTEM_PROCESSOR spells the same architecture differently on every platform -- x86_64
+# on Linux, AMD64 on Windows, arm64 on macOS, aarch64 on Linux ARM. Normalise it once so the
+# tuning flags below can be chosen by architecture rather than by guessing from the compiler.
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+  set(FX2D_ARCH "arm64")
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+  set(FX2D_ARCH "x86_64")
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86|X86)$")
+  set(FX2D_ARCH "x86")
+else()
+  set(FX2D_ARCH "other")
+endif()
+message(STATUS "Fx2D target architecture: ${FX2D_ARCH} (CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})")
+
+include(CheckCXXCompilerFlag)
+
+# Adds a compile flag only if this compiler accepts it. Every architecture flag goes through
+# here: -march=native is rejected by Apple Clang on arm64, /arch: does not exist for MSVC ARM64,
+# and -mcpu=native is missing from older Apple Clang -- all of which are hard errors, not
+# warnings, so probing is the only way to stay portable.
+function(fx2d_add_flag_if_supported tgt flag)
+  string(MAKE_C_IDENTIFIER "FX2D_HAS_FLAG_${flag}" probe)
+  check_cxx_compiler_flag("${flag}" ${probe})
+  if (${probe})
+    target_compile_options(${tgt} PRIVATE "${flag}")
+  endif()
+endfunction()
+
 # ============================================================
 # Helper function to apply common compile options
 # ============================================================
@@ -197,13 +250,69 @@ function(fx2d_tune_target tgt)
     target_compile_options(${tgt} PRIVATE $<$<CONFIG:Release>:-O3>)
   endif()
 
+  # --- Vectoriser budget ---
+  # GCC abandons a loop that would need more runtime alias checks than this budget allows
+  # (default 10), and the batched contact solve reads and writes around twenty columns. Without
+  # this the two hot solve loops silently fall back to scalar; with it they vectorise to 32-byte
+  # vectors, measured at 26% off the `stacks` step and 14% off `pile`.
+  #
+  # Gated on the compiler being GCC rather than probed: Clang *accepts* the spelling and then
+  # warns that it went unused, which -Werror turns into an error. Clang has its own budget and
+  # vectorises these loops without help.
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(${tgt} PRIVATE "--param=vect-max-version-for-alias-checks=200")
+  endif()
+
   # --- CPU features (auto-vectorization benefits) ---
-  if (FX2D_NATIVE)
+  if (NOT FX2D_ARCH_BASELINE STREQUAL "")
+    # A fixed baseline: the binary may assume this ISA wherever it runs.
     if (MSVC)
-      # AVX2 is a solid baseline; bump to AVX512 if you know your CPUs
-      target_compile_options(${tgt} PRIVATE /arch:AVX2)
+      if (FX2D_ARCH_BASELINE STREQUAL "sse2" AND FX2D_ARCH STREQUAL "x86")
+        target_compile_options(${tgt} PRIVATE /arch:SSE2)
+      elseif (FX2D_ARCH_BASELINE STREQUAL "avx2")
+        target_compile_options(${tgt} PRIVATE /arch:AVX2)
+      elseif (FX2D_ARCH_BASELINE STREQUAL "avx512")
+        target_compile_options(${tgt} PRIVATE /arch:AVX512)
+      endif()
+      # x86-64 MSVC is SSE2 by default and ARM64 MSVC is NEON by default, so those two
+      # baselines need no flag at all.
+    elseif (FX2D_ARCH_BASELINE STREQUAL "sse2")
+      fx2d_add_flag_if_supported(${tgt} "-msse2")
+    elseif (FX2D_ARCH_BASELINE STREQUAL "avx2")
+      fx2d_add_flag_if_supported(${tgt} "-mavx2")
+      fx2d_add_flag_if_supported(${tgt} "-mfma")
+    elseif (FX2D_ARCH_BASELINE STREQUAL "avx512")
+      fx2d_add_flag_if_supported(${tgt} "-mavx512f")
+    elseif (FX2D_ARCH_BASELINE MATCHES "^armv8")
+      fx2d_add_flag_if_supported(${tgt} "-march=${FX2D_ARCH_BASELINE}")
     else()
-      target_compile_options(${tgt} PRIVATE -march=native -mtune=native)
+      message(WARNING "Fx2D: unknown FX2D_ARCH_BASELINE '${FX2D_ARCH_BASELINE}', ignoring")
+    endif()
+  elseif (FX2D_NATIVE)
+    # Tune for the machine doing the build. Never use this for a binary you ship.
+    if (MSVC)
+      if (FX2D_ARCH STREQUAL "x86_64" OR FX2D_ARCH STREQUAL "x86")
+        # AVX2 is a solid baseline; bump to AVX512 if you know your CPUs
+        target_compile_options(${tgt} PRIVATE /arch:AVX2)
+      endif()
+      # MSVC ARM64 rejects /arch: entirely. NEON is mandatory in ARMv8, so there is nothing
+      # to ask for -- the vector unit is already assumed.
+    elseif (FX2D_ARCH STREQUAL "arm64")
+      # -march=native is an error on Apple Clang for arm64; -mcpu=native is the spelling that
+      # works on both GCC and Clang, and the probe covers Apple Clang versions predating it.
+      fx2d_add_flag_if_supported(${tgt} "-mcpu=native")
+    else()
+      fx2d_add_flag_if_supported(${tgt} "-march=native")
+      fx2d_add_flag_if_supported(${tgt} "-mtune=native")
+    endif()
+  endif()
+
+  # --- Determinism: no silent FMA contraction (see FX2D_PIN_FP_CONTRACT) ---
+  if (FX2D_PIN_FP_CONTRACT)
+    if (MSVC)
+      target_compile_options(${tgt} PRIVATE /fp:precise)
+    else()
+      target_compile_options(${tgt} PRIVATE -ffp-contract=off)
     endif()
   endif()
 
@@ -220,6 +329,20 @@ endfunction()
 fx2d_tune_target(Fx2Dlib)
 if (NOT FX2D_HEADLESS)
   fx2d_tune_target(${TARGET_NAME})
+endif()
+
+# Both of these have to reach anything that includes the headers, not just the library's own
+# translation units: FxProfile's storage is only defined when the library was built with the
+# profiler on, and the FP-contract pin is meaningless if a consumer compiles Math.h differently.
+if (FX2D_PROFILE)
+  target_compile_definitions(Fx2Dlib PUBLIC FX2D_PROFILE)
+endif()
+if (FX2D_PIN_FP_CONTRACT)
+  if (MSVC)
+    target_compile_options(Fx2Dlib PUBLIC /fp:precise)
+  else()
+    target_compile_options(Fx2Dlib PUBLIC -ffp-contract=off)
+  endif()
 endif()
 
 # ============================================================
@@ -281,6 +404,8 @@ if (FX2D_BUILD_TESTS)
     tests/test_chain.cpp
     tests/test_groups.cpp
     tests/test_slingshot.cpp
+    tests/test_contact_graph.cpp
+    tests/test_solver_regression.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

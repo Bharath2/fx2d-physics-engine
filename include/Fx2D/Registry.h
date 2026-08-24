@@ -134,16 +134,59 @@ class FxNamedRegistry {
         m_name_map.rehash(0);
     }
 
+  private:
+    // Scratch for the raw-pointer snapshot below, kept as a member so its capacity survives.
+    std::vector<T*> m_raw_items;
+    bool m_raw_items_in_use = false;
+
+    void fill_raw(std::vector<T*>& out) const {
+        out.clear();
+        out.reserve(m_items_vec.size());
+        for (const auto& item : m_items_vec) {
+            out.push_back(item.get());
+        }
+    }
+
+    // Borrows the shared scratch buffer for one sweep, falling back to a local vector if a
+    // sweep is already using it. A fresh vector per sweep was tens of allocations per step; the
+    // fallback keeps that safe when a callback starts a second sweep of the same registry.
+    class RawSweep {
+      public:
+        explicit RawSweep(FxNamedRegistry& registry) : m_registry(registry) {
+            if (m_registry.m_raw_items_in_use) {
+                m_registry.fill_raw(m_local);
+                m_items = &m_local;
+                return;
+            }
+            m_registry.m_raw_items_in_use = true;
+            m_owns_shared = true;
+            m_registry.fill_raw(m_registry.m_raw_items);
+            m_items = &m_registry.m_raw_items;
+        }
+        ~RawSweep() {
+            if (m_owns_shared) m_registry.m_raw_items_in_use = false;
+        }
+        RawSweep(const RawSweep&) = delete;
+        RawSweep& operator=(const RawSweep&) = delete;
+
+        std::vector<T*>& items() const { return *m_items; }
+
+      private:
+        FxNamedRegistry& m_registry;
+        std::vector<T*> m_local;
+        std::vector<T*>* m_items = nullptr;
+        bool m_owns_shared = false;
+    };
+
+  public:
     template<typename ExecPolicy, typename Func>
     void for_each(ExecPolicy&& policy, Func&& func) {
-        // Snapshot raw pointers first so parallel algorithms iterate a simple contiguous array.
-        std::vector<T*> raw_items_vec;
-        raw_items_vec.reserve(m_items_vec.size());
-        for (const auto& item : m_items_vec) {
-            raw_items_vec.push_back(item.get());
-        }
+        // Snapshot raw pointers first so parallel algorithms iterate a simple contiguous array,
+        // and so the callee cannot invalidate the range it is walking.
+        RawSweep sweep(*this);
+        std::vector<T*>& raw = sweep.items();
 
-        std::for_each(std::forward<ExecPolicy>(policy), raw_items_vec.begin(), raw_items_vec.end(),
+        std::for_each(std::forward<ExecPolicy>(policy), raw.begin(), raw.end(),
                       std::forward<Func>(func));
     }
 
@@ -153,15 +196,12 @@ class FxNamedRegistry {
         // Pre-size the output so std::transform can write by index in one pass.
         results.resize(m_items_vec.size());
 
-        // Reuse the same raw-pointer snapshot pattern as for_each for lighter parallel dispatch.
-        std::vector<T*> raw_items_vec;
-        raw_items_vec.reserve(m_items_vec.size());
-        for (const auto& item : m_items_vec) {
-            raw_items_vec.push_back(item.get());
-        }
+        // Same snapshot as for_each, for the same reasons.
+        RawSweep sweep(*this);
+        std::vector<T*>& raw = sweep.items();
 
-        std::transform(std::forward<ExecPolicy>(policy), raw_items_vec.begin(), raw_items_vec.end(),
-                       results.begin(), std::forward<Func>(func));
+        std::transform(std::forward<ExecPolicy>(policy), raw.begin(), raw.end(), results.begin(),
+                       std::forward<Func>(func));
     }
 };
 
@@ -173,15 +213,25 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
     std::unordered_set<uint64_t> m_no_collision_pairs; // excluded collision pairs
     uint32_t m_next_entity_id = 0; // entity ID counter
     mutable FxAABBTree m_aabb_tree; // dynamic AABB tree
-    mutable std::unordered_map<uint32_t, int32_t> m_entity_node_map; // entity_id -> tree node idx
-    std::unordered_map<uint32_t, size_t> m_entity_idx_map; // entity_id -> packed entity index
+    // entity_id -> packed index. Ids are dense and issued in order from zero, so a vector is
+    // both smaller and faster than the hash map this used to be, and the broad phase resolves
+    // two of these per pair. -1 marks an id that has been removed.
+    std::vector<int32_t> m_id_to_index;
 
-    void remove_entity_from_tree(uint32_t entity_id) const {
+    // Scratch for the tree pair query, reused across substeps.
+    mutable std::vector<std::pair<int32_t, int32_t>> m_tree_pairs;
+
+    void remove_entity_from_tree(FxEntity& entity) const {
         // Keep the tree free of stale leaves when an entity disappears or loses collision geometry.
-        auto it = m_entity_node_map.find(entity_id);
-        if (it == m_entity_node_map.end()) return;
-        m_aabb_tree.remove(it->second);
-        m_entity_node_map.erase(it);
+        const int32_t node = entity.broad_phase_node();
+        if (node < 0) return;
+        m_aabb_tree.remove(node);
+        entity.set_broad_phase_node(-1);
+    }
+
+    int32_t index_of_id(uint32_t entity_id) const {
+        if (entity_id >= m_id_to_index.size()) return -1;
+        return m_id_to_index[entity_id];
     }
 
     void erase_collision_pairs_for(uint32_t entity_id) {
@@ -219,7 +269,12 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         if (success) {
             // Broad-phase queries translate tree entity ids back to packed indices through this
             // map.
-            m_entity_idx_map[m_next_entity_id] = m_items_vec.size() - 1;
+            const int32_t packed = static_cast<int32_t>(m_items_vec.size() - 1);
+            if (m_next_entity_id >= m_id_to_index.size()) {
+                m_id_to_index.resize(static_cast<size_t>(m_next_entity_id) + 1, -1);
+            }
+            m_id_to_index[m_next_entity_id] = packed;
+            entity->set_packed_index(packed);
             m_next_entity_id++;
         }
         return success;
@@ -240,24 +295,33 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
 
         // Clean broad-phase and collision-filter state before the packed storage changes underneath
         // us.
-        remove_entity_from_tree(removed_id);
+        remove_entity_from_tree(*m_items_vec[idx]);
         erase_collision_pairs_for(removed_id);
-        m_entity_idx_map.erase(removed_id);
+        m_items_vec[idx]->set_packed_index(-1);
+        m_id_to_index[removed_id] = -1;
 
         bool success = _remove(name);
         if (success && moved_last) {
             // Swap-pop removal can move the last entity into idx, so refresh its cached packed
             // index.
-            m_entity_idx_map[moved_id] = idx;
+            m_id_to_index[moved_id] = static_cast<int32_t>(idx);
+            m_items_vec[idx]->set_packed_index(static_cast<int32_t>(idx));
         }
         return success;
     }
 
     void clear() {
+        // Entities outlive the registry that held them, so their cached indices have to be
+        // invalidated here rather than left pointing into storage that no longer exists.
+        for (const auto& e : m_items_vec) {
+            if (e) {
+                e->set_broad_phase_node(-1);
+                e->set_packed_index(-1);
+            }
+        }
         FxNamedRegistry<FxEntity>::clear();
         m_no_collision_pairs.clear();
-        m_entity_node_map.clear();
-        m_entity_idx_map.clear();
+        m_id_to_index.clear();
         // Rebuild the tree pool from scratch so old node indices cannot leak across clear().
         m_aabb_tree = FxAABBTree{};
         m_next_entity_id = 0;
@@ -281,18 +345,39 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
         }
     }
 
-    // Sync the tree from current entity state, then collect overlapping pairs. CCD bodies'
-    // boxes are swept by their travel over sweep_dt so fast movers pair early.
+    // Sync the tree from current entity state, then collect overlapping pairs. Convenience
+    // overload; FxScene uses the out-parameter form so the pair buffer is allocated once.
     std::vector<std::pair<size_t, size_t>> get_broad_phase_pairs(float sweep_dt = 0.0f) const {
+        std::vector<std::pair<size_t, size_t>> pairs;
+        get_broad_phase_pairs(pairs, sweep_dt);
+        return pairs;
+    }
+
+    // sweep_all_movers extends every mover's box along its velocity, not just CCD bodies, so
+    // the list stays valid for the whole of sweep_dt. skip_sleeping_pairs must be false for a
+    // list reused across a step, or a body woken partway through loses its pairs.
+    void get_broad_phase_pairs(std::vector<std::pair<size_t, size_t>>& pairs, float sweep_dt = 0.0f,
+                               bool sweep_all_movers = false,
+                               bool skip_sleeping_pairs = true) const {
+        sync_broad_phase(sweep_dt, sweep_all_movers);
+        collect_broad_phase_pairs(pairs, skip_sleeping_pairs);
+    }
+
+    // Bring every proxy up to date and report whether any leaf was inserted, removed or
+    // reinserted. That return value is what lets FxScene skip the pair walk: an unchanged tree
+    // would rebuild the identical list. Syncing is a linear sweep; the walk is a descent.
+    bool sync_broad_phase(float sweep_dt = 0.0f, bool sweep_all_movers = false) const {
+        bool tree_changed = false;
         for (size_t i = 0; i < m_items_vec.size(); ++i) {
             const auto& e = m_items_vec[i];
-            uint32_t eid = e->get_entity_id();
-            bool in_tree = (m_entity_node_map.count(eid) > 0);
+            const int32_t node = e->broad_phase_node();
+            const bool in_tree = (node >= 0);
 
             if (!e->enabled || !e->collision_geometry()) {
                 // Disabled or geometry-less entities should never leave a broad-phase proxy behind.
                 if (in_tree) {
-                    remove_entity_from_tree(eid);
+                    remove_entity_from_tree(*e);
+                    tree_changed = true;
                 }
                 continue;
             }
@@ -313,10 +398,11 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             }
             if (!tight.is_valid()) continue;
 
-            // Only CCD bodies sweep their box: sweeping all movers was measured to flood the
-            // tree with false pairs when many bodies fall together.
+            // Sweeping every mover was measured to flood the tree with false pairs when many
+            // bodies fall together, so only CCD bodies extend their box by default -- they are
+            // the ones whose speculative contacts need to see a partner before they reach it.
             FxAABB query_aabb = tight;
-            if (e->enable_ccd && sweep_dt > 0.0f) {
+            if ((sweep_all_movers || e->enable_ccd) && sweep_dt > 0.0f) {
                 float dx = e->velocity.x() * sweep_dt;
                 float dy = e->velocity.y() * sweep_dt;
                 if (dx != 0.0f || dy != 0.0f) {
@@ -328,30 +414,37 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
 
             if (!in_tree) {
                 // New or re-enabled entities lazily create their tree leaf on demand.
-                int32_t node = m_aabb_tree.insert(static_cast<int32_t>(eid), query_aabb);
-                m_entity_node_map[eid] = node;
-            } else {
-                m_aabb_tree.update(m_entity_node_map.at(eid), query_aabb);
+                e->set_broad_phase_node(
+                    m_aabb_tree.insert(static_cast<int32_t>(e->get_entity_id()), query_aabb));
+                tree_changed = true;
+            } else if (m_aabb_tree.update(node, query_aabb)) {
+                tree_changed = true;
             }
         }
+        return tree_changed;
+    }
 
-        // Ask the tree for raw entity-id pairs.
-        std::vector<std::pair<int32_t, int32_t>> tree_pairs;
-        m_aabb_tree.query_pairs(tree_pairs);
+    // Walk the synced tree for overlapping proxies and translate them into packed indices,
+    // applying the registry-level filters. Assumes sync_broad_phase has already run.
+    void collect_broad_phase_pairs(std::vector<std::pair<size_t, size_t>>& pairs,
+                                   bool skip_sleeping_pairs = true) const {
+        // The scratch buffer is a member so its capacity carries across calls; query_pairs
+        // clears it before filling.
+        m_aabb_tree.query_pairs(m_tree_pairs);
 
-        // Finally translate ids back to packed indices and apply registry-level filters.
-        std::vector<std::pair<size_t, size_t>> pairs;
-        pairs.reserve(tree_pairs.size());
-        for (const auto& [eid_a, eid_b] : tree_pairs) {
-            auto ia = m_entity_idx_map.find(static_cast<uint32_t>(eid_a));
-            auto ib = m_entity_idx_map.find(static_cast<uint32_t>(eid_b));
-            if (ia == m_entity_idx_map.end() || ib == m_entity_idx_map.end()) continue;
+        pairs.clear();
+        pairs.reserve(m_tree_pairs.size());
+        for (const auto& [eid_a, eid_b] : m_tree_pairs) {
+            const int32_t ia = index_of_id(static_cast<uint32_t>(eid_a));
+            const int32_t ib = index_of_id(static_cast<uint32_t>(eid_b));
+            if (ia < 0 || ib < 0) continue;
 
-            size_t i = ia->second;
-            size_t j = ib->second;
+            size_t i = static_cast<size_t>(ia);
+            size_t j = static_cast<size_t>(ib);
 
-            if (m_items_vec[i]->is_sleeping() && m_items_vec[j]->is_sleeping() &&
-                !m_items_vec[i]->enable_ccd && !m_items_vec[j]->enable_ccd)
+            if (skip_sleeping_pairs && m_items_vec[i]->is_sleeping() &&
+                m_items_vec[j]->is_sleeping() && !m_items_vec[i]->enable_ccd &&
+                !m_items_vec[j]->enable_ccd)
                 continue;
             if (!is_collision_pair(static_cast<uint32_t>(eid_a), static_cast<uint32_t>(eid_b)))
                 continue;
@@ -366,7 +459,6 @@ class FxEntityRegistry : public FxNamedRegistry<FxEntity> {
             if (i > j) std::swap(i, j);
             pairs.emplace_back(i, j);
         }
-        return pairs;
     }
 
   private:
