@@ -209,13 +209,13 @@ slider->set_velocity(1.5f);
 scene.add_joint(slider);
 ```
 
-For YAML-based joint configuration see [scene_yml.md](scene_yml.md).
+For YAML-based joint configuration see [Scene YAML](../reference/scene-yaml).
 
 ---
 
 ## Runnable Example
 
-[`../examples/joint_control_demo/`](../examples/joint_control_demo/) is a complete headless demo. Its `Scene.yml` declares an `arm_motor` (revolute) and a `slider_motor` (prismatic), and `main.cpp` drives both through `POSITION`, `VELOCITY`, and `EFFORT` phases, printing angle, angular velocity, slider offset, and slider velocity as they track. Swap the step loops for `FxRylbRenderer(scene, 60).run()` to watch it instead.
+[The joint-control demo](https://github.com/Bharath2/fx2d-physics-engine/tree/main/examples/joint_control_demo) is a complete headless demo. Its `Scene.yml` declares an `arm_motor` (revolute) and a `slider_motor` (prismatic), and `main.cpp` drives both through `POSITION`, `VELOCITY`, and `EFFORT` phases, printing angle, angular velocity, slider offset, and slider velocity as they track. Swap the step loops for `FxRylbRenderer(scene, 60).run()` to watch it instead.
 
 Two things the example demonstrates that are easy to get wrong:
 

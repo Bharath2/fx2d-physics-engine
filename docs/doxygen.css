@@ -1,0 +1,55 @@
+/* Fx2D's generated API keeps Doxygen's useful navigation but shares the site palette. */
+html, body {
+  background: #f7fbfc;
+  color: #163040;
+}
+
+#titlearea {
+  padding: 14px 20px;
+  border: 0;
+  background: #071c2b;
+}
+
+#projectname, #projectbrief {
+  color: #e9faf9;
+}
+
+#projectnumber { color: #9bc6cb; }
+
+#titlearea img { max-height: 44px; }
+
+a { color: #007b8e; }
+a:hover { color: #005f71; }
+
+.tabs, .tabs2, .tabs3 {
+  border-color: #d6e6e8;
+  background: #eff7f8;
+}
+
+.tablist li.current a, .tablist a:hover {
+  border-color: #16b9c5;
+  background: #dff7f6;
+  color: #073c49;
+}
+
+div.header, div.contents {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+div.header {
+  border-bottom-color: #b7dfe2;
+  background: #eff8f8;
+}
+
+div.fragment, pre.fragment {
+  border-color: #cde4e7;
+  background: #082131;
+  color: #e2f3f4;
+}
+
+div.memitem, div.memproto, div.memdoc, table.memberdecls, table.fieldtable {
+  border-color: #d3e6e8;
+}
+
+div.memproto, .memtitle { background: #eaf5f6; }

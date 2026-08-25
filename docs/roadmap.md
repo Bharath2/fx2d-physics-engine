@@ -21,7 +21,7 @@ once — and reproduce CI (format + Release + Debug/ASan with -Werror) before pu
 
 ## Pending, in order
 
-1. **SIMD, per the plan of record** ([simd_plan.md](simd_plan.md)): SoA gather/scatter inside
+1. **SIMD, per the plan of record** ([SIMD plan](./roadmap/simd)): SoA gather/scatter inside
    step(), vectorized bulk loops, then the colored 8-wide velocity solve. Single-threaded;
    builds the exact layout item 7's threading would need.
 2. **The rope thread** (item 10): distance joint → FxChain dynamic mode → bridge demo →
@@ -49,7 +49,7 @@ and the adversarial test, which cannot share code, so change them in step.
    `FxShapeType::Chain`, built with `FxShape::make_chain()` or the YAML `chain:` key, is an open
    polyline of at least 3 points authored as one entity. It resolves to the deepest contact any
    of its segments makes, each handed to the existing edge routines, so it adds no new geometry.
-   Covered by `tests/test_chain.cpp` and documented in [scene_yml.md](scene_yml.md).
+   Covered by `tests/test_chain.cpp` and documented in the [Scene YAML reference](./reference/scene-yaml).
 
    It inherits the edge limitations as expected: chain-vs-chain and chain-vs-edge produce no
    contacts, and chains are skipped by speculative-contact CCD, so a fast enough body tunnels.
@@ -58,10 +58,10 @@ and the adversarial test, which cannot share code, so change them in step.
 2. Spatial query APIs — delivered.
    Both slices have landed. Slice (a): buffered contacts, begin/end contact events and sensors
    (`FxScene::contacts()`, `begin_contact_events()`, `end_contact_events()`,
-   `FxEntity::is_sensor`), documented in [contacts_and_events.md](contacts_and_events.md).
+   `FxEntity::is_sensor`), documented in [contacts and events](./guides/events).
    Slice (b): ray casts, overlap and point queries (`raycast()`, `raycast_all()`,
    `overlap_circle/box/point/shape()`, `entity_at_point()`), documented in
-   [queries.md](queries.md) and covered by `tests/test_queries.cpp`.
+   [spatial queries](./guides/queries) and covered by `tests/test_queries.cpp`.
 
    Overlap runs the same narrow phase the simulation does, so a query and a contact cannot
    disagree, with a containment check layered on because the solver reports nothing when one
@@ -149,7 +149,7 @@ and the adversarial test, which cannot share code, so change them in step.
    compiles windowed and headless. `FxRylbRenderer` polls once per rendered frame and
    yields to ImGui when a panel has focus; a headless scene reports `available() == false`
    until user code injects state through the same producer API, which is the event-trigger
-   path for scripted demos and RL agents. Documented in [input.md](input.md) and covered by
+   path for scripted demos and RL agents. Documented in [input](./guides/input) and covered by
    `tests/test_input.cpp`. Mouse position is reported in scene units so picking needs no
    conversion.
 
@@ -221,7 +221,7 @@ and the adversarial test, which cannot share code, so change them in step.
      accumulation, no parallel writes to `m_contact_cache` (write-back stays serial),
      concatenation in pair order. A nondeterministic sim would undermine the RL story.
    - **SoA/SIMD batch solving** is no longer out of scope: it is the plan of record, see
-     [simd_plan.md](simd_plan.md). Its gather/scatter layout and colored contact graph are
+     [SIMD plan](./roadmap/simd). Its gather/scatter layout and colored contact graph are
      also the prerequisites any future threading starts from.
 
 8. Push past the envelope the adversarial scenes established.

@@ -9,7 +9,7 @@ Contributions are welcome! Please follow the existing code style and conventions
 - Run `./scripts/format.sh` before opening a PR; `./scripts/lint.sh` should
   pass. Both are gated in CI on every push and pull request.
 - **Looking for something to work on?** The roadmap of open targets lives in
-  [docs/ToDo.md](./docs/ToDo.md) — each item records the motivation, the
+  [roadmap](./roadmap) — each item records the motivation, the
   relevant code paths, and the suggested approach.
 
 ## Linting
@@ -90,7 +90,7 @@ times the CPU is usually the wrong trade for a library that may be one subsystem
 and a bad trade for RL rollouts where many independent sims already saturate the machine. A
 `cpu/wall` ratio near 1.0 means serial; well above 1.0 is only a win if wall time actually
 fell. Any threading change needs a before/after from this target — see item 7 in
-[docs/ToDo.md](docs/ToDo.md).
+[roadmap](./roadmap).
 
 ### What CI runs
 
