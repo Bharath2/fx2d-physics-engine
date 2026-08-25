@@ -1,0 +1,149 @@
+/**
+ * @defgroup fx2d_world World & entities
+ * @brief Physics-world ownership, rigid bodies, contacts, groups, and constraints.
+ */
+
+/** @class FxScene
+ * @ingroup fx2d_world
+ * @brief Owns a simulated world and advances it with step().
+ */
+/** @class FxEntity
+ * @ingroup fx2d_world
+ * @brief A named rigid body with state, material properties, geometry, and forces.
+ */
+/** @class FxEntityGroup
+ * @ingroup fx2d_world
+ * @brief A named collection of entities managed as one unit.
+ */
+/** @struct FxContact
+ * @ingroup fx2d_world
+ * @brief Contact data produced by the narrow phase and solver.
+ */
+/** @struct FxContactEvent
+ * @ingroup fx2d_world
+ * @brief A begin/end contact event from the latest simulation step.
+ */
+/** @class FxConstraint
+ * @ingroup fx2d_world
+ * @brief Base type for solver constraints.
+ */
+
+/**
+ * @defgroup fx2d_geometry Geometry & queries
+ * @brief Collision shapes, bounding boxes, broad-phase indexing, and query results.
+ */
+
+/** @struct FxShape
+ * @ingroup fx2d_geometry
+ * @brief Unified circle, capsule, polygon, edge, and chain representation.
+ */
+/** @struct FxAABB
+ * @ingroup fx2d_geometry
+ * @brief Axis-aligned bounding box used by broad-phase operations.
+ */
+/** @struct FxRayHit
+ * @ingroup fx2d_geometry
+ * @brief Result from a ray cast against the scene.
+ */
+/** @class FxAABBTree
+ * @ingroup fx2d_geometry
+ * @brief Dynamic broad-phase tree used to find candidate pairs.
+ */
+
+/**
+ * @defgroup fx2d_math Math & arrays
+ * @brief Vector, matrix, and fixed-size array types used throughout the engine.
+ */
+
+/** @class FxVec2f
+ * @ingroup fx2d_math
+ * @brief Single-precision 2D vector.
+ */
+/** @class FxVec2d
+ * @ingroup fx2d_math
+ * @brief Double-precision 2D vector.
+ */
+/** @class FxVec3f
+ * @ingroup fx2d_math
+ * @brief Single-precision three-component vector, including poses.
+ */
+/** @class FxVec3d
+ * @ingroup fx2d_math
+ * @brief Double-precision three-component vector.
+ */
+/** @class FxVec4f
+ * @ingroup fx2d_math
+ * @brief Four-component floating-point vector.
+ */
+/** @class FxMat2f
+ * @ingroup fx2d_math
+ * @brief 2×2 floating-point matrix.
+ */
+/** @class FxMat3f
+ * @ingroup fx2d_math
+ * @brief 3×3 floating-point matrix.
+ */
+/** @class FxArray
+ * @ingroup fx2d_math
+ * @brief Fixed-size, aligned value array.
+ */
+
+/**
+ * @defgroup fx2d_joints Joints & motors
+ * @brief Revolute and prismatic joints with position, velocity, and effort control.
+ */
+
+/** @class FxJoint
+ * @ingroup fx2d_joints
+ * @brief Base type shared by engine joints.
+ */
+/** @class FxRevoluteJoint
+ * @ingroup fx2d_joints
+ * @brief A pivot joint with angular limits and motor control.
+ */
+/** @class FxPrismaticJoint
+ * @ingroup fx2d_joints
+ * @brief A sliding joint with limits and motor control.
+ */
+/** @enum ControlMode
+ * @ingroup fx2d_joints
+ * @brief Selects position, velocity, or direct-effort control.
+ */
+
+/**
+ * @defgroup fx2d_renderer Renderer
+ * @brief Raylib/ImGui visual runtime and world-to-screen helpers.
+ */
+
+/** @class FxRylbRenderer
+ * @ingroup fx2d_renderer
+ * @brief Runs and draws an FxScene in a raylib window.
+ */
+
+/**
+ * @defgroup fx2d_input Input
+ * @brief Renderer-agnostic keyboard and mouse state.
+ */
+
+/** @class FxInput
+ * @ingroup fx2d_input
+ * @brief Input state read by gameplay code or injected by a headless producer.
+ */
+/** @enum FxKey
+ * @ingroup fx2d_input
+ * @brief Supported keyboard keys.
+ */
+/** @enum FxMouseButton
+ * @ingroup fx2d_input
+ * @brief Supported mouse buttons.
+ */
+
+/**
+ * @defgroup fx2d_yaml YAML scene building
+ * @brief Builders that turn YAML into scenes, entities, shapes, and joints.
+ */
+
+/** @namespace FxYAML
+ * @ingroup fx2d_yaml
+ * @brief YAML parsing and scene-builder functions.
+ */
