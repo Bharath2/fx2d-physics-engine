@@ -294,5 +294,5 @@ calls it every substep, so `vertices()` and `centroid()` always reflect the curr
 > `visual_geometry()`, not the collision shape, and returns zero if no visual shape is
 > attached or if mass is zero. Attach the visual geometry **before** calling it.
 
-See [scene_yml.md](scene_yml.md) for the YAML spelling of every shape, and
-[collision_resolution.md](collision_resolution.md) for how each pair is tested.
+See [Scene YAML](./scene-yaml) for the YAML spelling of every shape, and
+[the collision pipeline](../concepts/collisions) for how each pair is tested.

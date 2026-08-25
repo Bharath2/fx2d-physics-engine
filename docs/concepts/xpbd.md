@@ -66,7 +66,7 @@ Contacts are recomputed every substep using a two-phase process:
 
 Sleeping entities that receive a new contact are woken up automatically.
 
-See [collision_resolution.md](collision_resolution.md) for the full detection pipeline.
+See [the collision pipeline](./collisions) for the full detection pipeline.
 
 ---
 
@@ -76,7 +76,7 @@ For each valid `FxContact`, `FxSolver::resolve_penetration(contact, h)` pushes o
 
 Both `pose` and `prev_pose` are corrected so the velocity derivation in step 5 does not introduce a spurious velocity from the positional fix.
 
-See [collision_resolution.md](collision_resolution.md) for the equations.
+See [the collision pipeline](./collisions) for the equations.
 
 ---
 
@@ -110,7 +110,7 @@ This replaces the velocity that was integrated in step 1, letting positional cor
 
 Restitution (bounce) and friction are applied as velocity impulses after position solving. This order ensures friction and restitution act on the corrected positions and velocities.
 
-See [collision_resolution.md](collision_resolution.md) for the impulse equations.
+See [the collision pipeline](./collisions) for the impulse equations.
 
 ---
 

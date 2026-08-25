@@ -71,9 +71,10 @@ int main() {
 }
 ```
 
-For headless simulation, testing, or data collection. Include `Fx2D/Physics.h` instead of `Fx2D/Core.h` — it pulls in no raylib, Dear ImGui or rlImGui headers, so no graphics stack is needed at all.
+For headless simulation, testing, or data collection, include `Fx2D/Scene.h` and `Fx2D/YamlUtils.h` instead of `Fx2D/Core.h` — they pull in no raylib, Dear ImGui, or rlImGui headers, so no graphics stack is needed at all.
 ```cpp
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
+#include "Fx2D/YamlUtils.h"
 
 int main() {
     // Load scene from YAML
@@ -120,22 +121,16 @@ Headless examples skip the graphics stack entirely:
 
 | Doc | Description |
 |---|---|
-| [scene_yml.md](./docs/scene_yml.md) | Full reference for writing `Scene.yml` files — scene block, entities, geometry types, physics fields |
-| [xpbd_solver.md](./docs/xpbd_solver.md) | How the XPBD solver works — per-substep pipeline, constraint kernel equations, constraint types |
-| [collision_resolution.md](./docs/collision_resolution.md) | Collision detection and response — SAT narrow phase, penetration correction, restitution & friction |
-| [contacts_and_events.md](./docs/contacts_and_events.md) | Reading contacts after a step, begin/end contact events, and sensor (trigger) entities |
-| [queries.md](./docs/queries.md) | Ray casts, overlap and point queries — line of sight, lidar fans, explosions, click-picking |
-| [simd_plan.md](./docs/simd_plan.md) | The plan of record for vectorizing the solver — SoA gather/scatter, bulk loops, colored 8-wide velocity solve |
-| [entity_groups.md](./docs/entity_groups.md) | Named entity sets — bulk operations, intra-group collision filtering, reset semantics, naming |
-| [input.md](./docs/input.md) | Keyboard and mouse input for gameplay — renderer polling, world-space cursor, headless injection |
-| [raylib_renderer.md](./docs/raylib_renderer.md) | Raylib renderer API — window setup, background, camera, draw callbacks |
-| [headless_mode.md](./docs/headless_mode.md) | Running the simulation without a renderer for testing and data collection |
-| [joint_control.md](./docs/joint_control.md) | Joint motor API — revolute and prismatic joints, control modes (position/velocity/effort), PID tuning |
-| [math_utils.md](./docs/math_utils.md) | `FxArray`, vector/matrix math utilities, and helper functions |
+| [Documentation site](https://bharath2.github.io/fx2d-physics-engine/) | Guided introduction, runnable demos, and full API reference |
+| [Scene YAML](./docs/reference/scene-yaml.md) | Scene blocks, entities, geometry types, and physics fields |
+| [XPBD solver](./docs/concepts/xpbd.md) | Per-substep pipeline, constraint kernel equations, and constraint types |
+| [Collision pipeline](./docs/concepts/collisions.md) | SAT narrow phase, penetration correction, restitution, and friction |
+| [Guides](./docs/guides/index.md) | Headless simulation, input, queries, contacts, groups, renderer, and joints |
+| [Math utilities](./docs/reference/math.md) | `FxArray`, vector/matrix types, and helper functions |
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for the
+Contributions are welcome — see [CONTRIBUTING.md](./docs/contributing.md) for the
 workflow, lint gate (`./scripts/lint.sh`), and how to run the test suite.
 
 ## License

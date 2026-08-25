@@ -98,5 +98,4 @@ for (const auto& contact : scene.contacts()) {
 
 ## Not covered yet
 
-Ray casts, overlap queries, and shape queries are still unimplemented — see item
-2 in [ToDo.md](ToDo.md).
+For ray casts, overlap queries, and shape queries, see [spatial queries](./queries).

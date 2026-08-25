@@ -131,7 +131,7 @@ void clear();         // full reset, including availability
 `FxScene::reset()` calls `clear()`, so a replayed scene does not inherit stale key state.
 
 An agent stepping the scene directly uses exactly the same shape — set the action as key state,
-step, read [contacts and events](contacts_and_events.md) for the reward.
+step, read [contacts and events](./events) for the reward.
 
 ## Keys
 

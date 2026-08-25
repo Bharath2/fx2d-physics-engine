@@ -14,6 +14,8 @@ imgui.ini
 .vscode
 .vscode/*
 *.json
+!docs/package.json
+!docs/package-lock.json
 .cursorignore
 ./Makefile
 ./Scene.yml

@@ -21,7 +21,7 @@ A successful collision check produces an `FxContact`:
 
 `is_valid(full_check)` returns `true` when the contact was constructed valid and — with `full_check`, the default — both entities are non-null, `count != 0`, `penetration_depth` is finite, and `normal` is non-degenerate (`norm() > 1e-3`). Note the depth test is finiteness, not positivity: speculative contacts carry a **negative** depth (a gap that will close within the substep) and are still valid.
 
-Contacts are no longer discarded once solved. `FxScene` retains them for the duration of the step and exposes them, along with begin/end contact events and sensor overlaps — see [contacts_and_events.md](contacts_and_events.md).
+Contacts are no longer discarded once solved. `FxScene` retains them for the duration of the step and exposes them, along with begin/end contact events and sensor overlaps — see [contacts and sensors](../guides/events).
 
 ---
 
@@ -136,7 +136,7 @@ A negative depth is what makes this work: the position solver treats it as "do n
 
 Edges are excluded (`A->is_edge() || B->is_edge()` returns early). A bare segment has no skin, so the distance-minus-radii math degenerates, and edges are static level geometry where discrete contacts suffice.
 
-Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see item 3 in [ToDo.md](ToDo.md)).
+Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see item 3 in the [roadmap](../roadmap)).
 
 ---
 
