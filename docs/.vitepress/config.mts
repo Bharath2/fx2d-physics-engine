@@ -11,7 +11,7 @@ export default defineConfig({
   ignoreDeadLinks: [
     /localhost/,
     /github\.com/,
-    /cpp-api\/index\.html/,
+    /cpp-api\//,
   ],
   head: [
     ["meta", { name: "theme-color", content: "#071c2b" }],
@@ -75,6 +75,26 @@ export default defineConfig({
             { text: "Scene YAML", link: "/reference/scene-yaml" },
             { text: "Math utilities", link: "/reference/math" },
             { text: "C++ API", link: "/api/" },
+          ],
+        },
+      ],
+      "/api/": [
+        {
+          text: "C++ API",
+          items: [
+            { text: "Overview", link: "/api/" },
+            { text: "Headers and entry points", link: "/api/headers" },
+            { text: "Link Fx2Dlib", link: "/api/linking" },
+            { text: "Headless simulation", link: "/api/headless" },
+            { text: "Renderer integration", link: "/api/renderer" },
+          ],
+        },
+        {
+          text: "Generated reference",
+          items: [
+            { text: "All public symbols ↗", link: "/cpp-api/index.html" },
+            { text: "FxScene ↗", link: "/cpp-api/classFxScene.html" },
+            { text: "FxEntity ↗", link: "/cpp-api/classFxEntity.html" },
           ],
         },
       ],
