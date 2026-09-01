@@ -6,7 +6,7 @@ title: Guides
 
 These guides are organized around the parts of an application you will actually build: author a scene, run it with or without a window, then add interaction and game logic.
 
-- [Scene authoring](/reference/scene-yaml) — create entities, shapes, physical properties, and joints.
+- [Scene authoring](/guides/scene-authoring) — create entities, shapes, physical properties, and joints.
 - [Math and geometry](/guides/math) — use vectors, poses, transforms, and the unified shape model safely.
 - [Collision setup](/guides/collisions) — configure colliders, materials, sensors, filtering, and CCD.
 - [Constraints](/guides/constraints) — assemble direct XPBD constraints or choose a motorized joint.

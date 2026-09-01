@@ -8,26 +8,27 @@ A scene describes simulation settings and named entities. Save the following as 
 
 ```yaml
 scene:
-  gravity: [0, 9.81]
-  dt: 0.0166667
+  size: [16, 9]
+  gravity: [0, -9.81]
 
 entities:
   floor:
-    pose: [0, 500, 0]
+    pose: [8, 0.5, 0]
     physics:
-      static: true
+      mass: 0
+      gravity_scale: 0
     collision:
-      type: rectangle
-      size: [960, 40]
+      geometry:
+        rectangle: [16, 1]
 
   ball:
-    pose: [480, 80, 0]
+    pose: [8, 7, 0]
     physics:
-      density: 1.0
-      restitution: 0.5
+      mass: 1.0
+      elasticity: 0.5
     collision:
-      type: circle
-      radius: 24
+      geometry:
+        circle: 0.25
 ```
 
 Load it with the standard renderer entry point:
