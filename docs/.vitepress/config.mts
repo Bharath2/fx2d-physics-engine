@@ -48,7 +48,7 @@ export default defineConfig({
         {
           text: "Build with Fx2D",
           items: [
-            { text: "Scene authoring", link: "/reference/scene-yaml" },
+            { text: "Scene authoring", link: "/guides/scene-authoring" },
             { text: "Math and geometry", link: "/guides/math" },
             { text: "Collision setup", link: "/guides/collisions" },
             { text: "Constraints", link: "/guides/constraints" },
@@ -75,7 +75,7 @@ export default defineConfig({
         {
           text: "Reference",
           items: [
-            { text: "Scene YAML", link: "/reference/scene-yaml" },
+            { text: "Scene YAML specification", link: "/reference/scene-yaml" },
             { text: "Math utilities", link: "/reference/math" },
             { text: "C++ API", link: "/api/" },
           ],
