@@ -8,7 +8,7 @@ Fx2D can run without a window or renderer — useful for data collection, testin
 
 `FxScene::step(dt)` advances the physics simulation by `dt` seconds entirely in CPU memory. You can call it in a plain `main()` without ever constructing an `FxRylbRenderer`.
 
-Include `"Fx2D/Physics.h"` rather than `"Fx2D/Core.h"`: it aggregates the math, entity, joint, solver, scene and YAML headers and pulls in **no** raylib, Dear ImGui or rlImGui header. `"Fx2D/Core.h"` is `Physics.h` plus the renderer, so it still requires the full graphics stack.
+Include `"Fx2D/Scene.h"` for programmatic scenes, and add `"Fx2D/YamlUtils.h"` when loading YAML. Both pull in **no** raylib, Dear ImGui, or rlImGui header. `"Fx2D/Core.h"` includes the renderer too, so it requires the full graphics stack.
 
 Headless builds therefore need only:
 
@@ -41,7 +41,8 @@ See `examples/truck/main_headless.cpp` and `examples/joint_control_demo/main.cpp
 ## Basic Loop
 
 ```cpp
-#include "Fx2D/Physics.h"
+#include "Fx2D/Scene.h"
+#include "Fx2D/YamlUtils.h"
 #include <iostream>
 
 int main() {

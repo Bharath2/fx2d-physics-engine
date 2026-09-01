@@ -29,7 +29,7 @@ export default defineConfig({
     logo: "/mark.svg",
     siteTitle: "Fx2D",
     nav: [
-      { text: "Guides", link: "/getting-started/install" },
+      { text: "Guides", link: "/guides/" },
       { text: "Demos", link: "/demos" },
       { text: "API", link: "/api/" },
       { text: "GitHub", link: github },
@@ -49,6 +49,9 @@ export default defineConfig({
           text: "Build with Fx2D",
           items: [
             { text: "Scene authoring", link: "/reference/scene-yaml" },
+            { text: "Math and geometry", link: "/guides/math" },
+            { text: "Collision setup", link: "/guides/collisions" },
+            { text: "Constraints", link: "/guides/constraints" },
             { text: "Headless simulation", link: "/guides/headless" },
             { text: "Renderer", link: "/guides/renderer" },
             { text: "Input", link: "/guides/input" },
