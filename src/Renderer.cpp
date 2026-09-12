@@ -1,4 +1,7 @@
 #include "Fx2D/Renderer.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
 #include "Fx2D/Math.h"
 
 FxRylbRenderer::FxRylbRenderer(FxScene& scene, int fps, unsigned int scale) :
@@ -33,7 +36,11 @@ void FxRylbRenderer::init(int fps) {
     m_display_h = static_cast<unsigned int>(m_scale * m_scene.size.y());
 
     SetTraceLogLevel(LOG_NONE);
+#ifndef __EMSCRIPTEN__
+    // Not in the browser: raylib's web resize handler sizes a resizable canvas to the whole
+    // window, which detaches the framebuffer from the canvas box the page laid out.
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+#endif
     InitWindow(static_cast<int>(m_display_w), static_cast<int>(m_display_h), "Fx2D");
     SetTargetFPS(fps);
     rlImGuiSetup(true);
@@ -130,12 +137,29 @@ void FxRylbRenderer::poll_input() {
     }
 }
 
+#ifdef __EMSCRIPTEN__
+namespace {
+void emscripten_frame(void* renderer) {
+    static_cast<FxRylbRenderer*>(renderer)->frame();
+}
+} // namespace
+#endif
+
 void FxRylbRenderer::run(bool play) {
-    double curr_rt_factor = 0.0;
     m_play = play;
     m_scene.step(m_min_time_step);
-    // Main loop
-    while (!WindowShouldClose()) {
+#ifdef __EMSCRIPTEN__
+    // The browser owns the loop: a blocking while() would never yield to the page.
+    emscripten_set_main_loop_arg(emscripten_frame, this, 0, 1);
+#else
+    while (!WindowShouldClose())
+        frame();
+#endif
+}
+
+void FxRylbRenderer::frame() {
+    double curr_rt_factor = 0.0;
+    {
         // Polled before stepping so the callbacks in this frame's steps see current input.
         poll_input();
         double org_frame_dt = static_cast<double>(GetFrameTime());
@@ -474,6 +498,17 @@ void FxRylbRenderer::draw_scene() {
             }
         }
     });
+
+    // The click-drag spring: a band from the held anchor to the cursor target.
+    const FxMouseJoint& drag = m_scene.mouse_joint();
+    if (drag.attached()) {
+        const FxVec2f a = world_to_screen(drag.anchor_world());
+        const FxVec2f t = world_to_screen(drag.target());
+        DrawLineEx({a.x(), a.y()}, {t.x(), t.y()}, 3.0f, Color{255, 214, 92, 230});
+        DrawCircleV({a.x(), a.y()}, 5.0f, Color{255, 214, 92, 255});
+        DrawCircleLines(static_cast<int>(t.x()), static_cast<int>(t.y()), 7.0f,
+                        Color{255, 214, 92, 255});
+    }
 }
 
 void FxRylbRenderer::draw_ui(double curr_rt_factor) {

@@ -384,6 +384,9 @@ FxScene buildScene(const YAML::Node& config) {
         scene.set_gravity({gravity_array[0], gravity_array[1]});
     }
 
+    // Click-drag any dynamic body with the left mouse button; see FxScene::enable_mouse_drag.
+    if (auto drag = scene_config["mouse_drag"]) scene.enable_mouse_drag(drag.as<bool>());
+
     // Read background from scene config
     if (auto tex = scene_config["background"]) {
         // 1) sequence of 4 numbers -> RGBA color

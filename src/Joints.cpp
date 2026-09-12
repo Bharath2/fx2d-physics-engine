@@ -1,4 +1,7 @@
 #include "Fx2D/Joints.h"
+#include <algorithm>
+#include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 // Entity name accessor methods for FxJoint
@@ -335,4 +338,81 @@ void FxPrismaticJoint::apply_controls(double dt) {
     }
 
     apply_force_effort(effort);
+}
+
+// ---------------------------------------------------------------- FxMouseJoint
+
+bool FxMouseJoint::attach(const std::shared_ptr<FxEntity>& entity, const FxVec2f& world_point) {
+    release();
+    if (!entity || !entity->enabled || entity->is_sensor || entity->inv_mass() <= 0.0f)
+        return false;
+
+    m_entity = entity;
+    m_local_anchor = entity->to_entity_frame(world_point);
+    m_target = world_point;
+
+    // Spring constants for this mass: k = m (2 pi f)^2, c = 2 m zeta (2 pi f). XPBD wants
+    // compliance 1/k and, for damping, the coefficient beta = c; see resolve().
+    const double mass = static_cast<double>(entity->mass());
+    const double omega =
+        2.0 * std::numbers::pi * static_cast<double>(std::max(frequency_hz, 0.01f));
+    const double k = mass * omega * omega;
+    m_compliance = 1.0 / k;
+    m_beta = 2.0 * mass * static_cast<double>(std::max(damping_ratio, 0.0f)) * omega;
+    m_max_lambda = (max_force_per_kg > 0.0f) ? max_force_per_kg * entity->mass() : FxInfinityf;
+
+    entity->wake();
+    return true;
+}
+
+void FxMouseJoint::release() {
+    if (m_entity) m_entity->wake();
+    m_entity.reset();
+}
+
+FxVec2f FxMouseJoint::anchor_world() const {
+    return m_entity ? m_entity->to_world_frame(m_local_anchor) : FxVec2f{0.0f, 0.0f};
+}
+
+void FxMouseJoint::resolve(double dt) {
+    if (!m_entity || dt <= 0.0) return;
+    if (!m_entity->enabled) {
+        release();
+        return;
+    }
+    // A held body never sleeps, and any sleep it was in ends now.
+    m_entity->wake();
+
+    const FxVec2f anchor = m_entity->to_world_frame(m_local_anchor);
+    const FxVec2f d = anchor - m_target;
+    const float C = d.norm();
+    if (C < 1e-6f) return;
+    const FxVec2f n = d / C;
+
+    // Gradient on the body: n on the centre, n . (r perp) on the angle, r the lever arm.
+    const FxVec2f r = anchor - m_entity->pose.xy();
+    const float gth = n.dot(r.perp());
+    const float w = m_entity->inv_mass();
+    const float I = m_entity->inv_inertia();
+
+    // XPBD with damping (Macklin et al. 2016, eq. 26): the damping term acts on how far the
+    // anchor moved along the constraint this substep, so it opposes velocity, not position.
+    const double alpha_t = m_compliance / (dt * dt);
+    const double gamma = m_compliance * m_beta / dt;
+    const FxVec2f anchor_prev =
+        m_entity->prev_pose.xy() + m_local_anchor.rotate_rad(m_entity->prev_pose.theta());
+    const float moved = n.dot(anchor - anchor_prev);
+
+    const double numer = -static_cast<double>(C) - gamma * static_cast<double>(moved);
+    const double denom = (1.0 + gamma) * static_cast<double>(w + I * gth * gth) + alpha_t;
+    if (denom <= 1e-12) return;
+    double dlambda = numer / denom;
+
+    // The multiplier is force x dt^2, so the force cap becomes a bound on it.
+    const double lambda_cap = static_cast<double>(m_max_lambda) * dt * dt;
+    dlambda = std::clamp(dlambda, -lambda_cap, lambda_cap);
+
+    const float dl = static_cast<float>(dlambda);
+    const FxVec2f dxy = w * dl * n;
+    m_entity->apply_pose_correction(FxVec3f{dxy.x(), dxy.y(), I * dl * gth});
 }

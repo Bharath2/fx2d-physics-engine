@@ -1,0 +1,185 @@
+# The browser playground scene: a little of everything, all of it draggable.
+scene:
+    size: [16, 9]
+    gravity: [0, -10]
+    background: [24, 30, 42, 255]
+    mouse_drag: true
+
+entities:
+    ground:
+        pose: [8.0, 0.3, 0]
+        physics: &static_physics
+            mass: 0.0
+            elasticity: 0.05
+            gravity_scale: 0.0
+            external_forces_enabled: false
+            static_friction: 0.7
+            dynamic_friction: 0.6
+        visual:
+            geometry:
+                rectangle: [16.0, 0.6]
+            texture: [58, 68, 88, 255]
+        collision:
+            geometry:
+                rectangle: [16.0, 0.6]
+
+    wall_left:
+        pose: [0.15, 4.5, 0]
+        physics: *static_physics
+        visual: &wall_visual
+            geometry:
+                rectangle: [0.3, 9.0]
+            texture: [58, 68, 88, 255]
+        collision:
+            geometry:
+                rectangle: [0.3, 9.0]
+
+    wall_right:
+        pose: [15.85, 4.5, 0]
+        physics: *static_physics
+        visual: *wall_visual
+        collision:
+            geometry:
+                rectangle: [0.3, 9.0]
+
+    # A hillside on the left, one chain entity.
+    ramp:
+        pose: [0, 0, 0]
+        physics: *static_physics
+        visual:
+            geometry:
+                chain: [[0.3, 4.2], [1.6, 3.6], [3.0, 2.4], [4.4, 1.4], [5.6, 0.9], [6.4, 0.6]]
+            border_color: [122, 196, 140, 255]
+            border_thickness: 5.0
+        collision:
+            geometry:
+                chain: [[0.3, 4.2], [1.6, 3.6], [3.0, 2.4], [4.4, 1.4], [5.6, 0.9], [6.4, 0.6]]
+
+    # A seesaw: a static pivot with a plank hinged on it.
+    pivot:
+        pose: [12.0, 1.4, 0]
+        physics: *static_physics
+        visual:
+            geometry:
+                polygon: [[-0.5, -0.8], [0.5, -0.8], [0.0, 0.0]]
+            texture: [96, 104, 124, 255]
+        collision:
+            geometry:
+                polygon: [[-0.5, -0.8], [0.5, -0.8], [0.0, 0.0]]
+
+    plank:
+        pose: [12.0, 1.5, 0]
+        physics:
+            mass: 2.0
+            elasticity: 0.1
+            static_friction: 0.6
+            dynamic_friction: 0.5
+        visual:
+            geometry:
+                rectangle: [4.4, 0.2]
+            texture: [196, 150, 96, 255]
+        collision:
+            geometry:
+                rectangle: [4.4, 0.2]
+
+    # A stack to knock over.
+    crate_1:
+        pose: [8.0, 1.1, 0]
+        physics: &crate_physics
+            mass: 1.0
+            elasticity: 0.05
+            static_friction: 0.6
+            dynamic_friction: 0.5
+        visual: &crate_visual
+            geometry:
+                rectangle: [1.0, 1.0]
+            texture: [214, 160, 92, 255]
+            border_color: [90, 60, 30, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                rectangle: [1.0, 1.0]
+    crate_2:
+        pose: [8.0, 2.1, 0]
+        physics: *crate_physics
+        visual: *crate_visual
+        collision:
+            geometry:
+                rectangle: [1.0, 1.0]
+    crate_3:
+        pose: [8.0, 3.1, 0]
+        physics: *crate_physics
+        visual: *crate_visual
+        collision:
+            geometry:
+                rectangle: [1.0, 1.0]
+    crate_4:
+        pose: [8.0, 4.1, 0]
+        physics: *crate_physics
+        visual: *crate_visual
+        collision:
+            geometry:
+                rectangle: [1.0, 1.0]
+
+    # Something to roll down the hill.
+    ball:
+        pose: [1.2, 5.2, 0]
+        physics:
+            mass: 0.8
+            elasticity: 0.3
+            static_friction: 0.5
+            dynamic_friction: 0.4
+        visual:
+            geometry:
+                circle: 0.4
+            texture: [232, 122, 92, 255]
+            border_color: [20, 24, 34, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                circle: 0.4
+
+    # A capsule on the plank's far end, so the seesaw starts tipped.
+    capsule:
+        pose: [13.6, 2.0, 0.3]
+        physics:
+            mass: 1.5
+            elasticity: 0.2
+            static_friction: 0.5
+            dynamic_friction: 0.4
+        visual:
+            geometry:
+                capsule: [1.2, 0.3]
+            texture: [110, 176, 232, 255]
+            border_color: [20, 24, 34, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                capsule: [1.2, 0.3]
+
+    # A rounded hexagon: a polygon with a skin radius.
+    hexagon:
+        pose: [5.0, 6.0, 0]
+        physics:
+            mass: 1.2
+            elasticity: 0.2
+            static_friction: 0.5
+            dynamic_friction: 0.4
+        visual:
+            geometry:
+                polygon: [[0.5, 0.0], [0.25, 0.43], [-0.25, 0.43], [-0.5, 0.0], [-0.25, -0.43], [0.25, -0.43]]
+                radius: 0.12
+            texture: [196, 140, 224, 255]
+            border_color: [20, 24, 34, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                polygon: [[0.5, 0.0], [0.25, 0.43], [-0.25, 0.43], [-0.5, 0.0], [-0.25, -0.43], [0.25, -0.43]]
+                radius: 0.12
+
+joints:
+    seesaw:
+        type: revolute
+        parent: pivot
+        child: plank
+        anchor: [0.0, 0.0]

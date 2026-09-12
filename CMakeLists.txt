@@ -198,7 +198,7 @@ function(fx2d_tune_target tgt)
   endif()
 
   # --- CPU features (auto-vectorization benefits) ---
-  if (FX2D_NATIVE)
+  if (FX2D_NATIVE AND NOT EMSCRIPTEN)
     if (MSVC)
       # AVX2 is a solid baseline; bump to AVX512 if you know your CPUs
       target_compile_options(${tgt} PRIVATE /arch:AVX2)
@@ -240,12 +240,33 @@ if (FX2D_BUILD_EXAMPLES)
   add_executable(example_angry_boxes   examples/angry_boxes/main.cpp)
   add_executable(example_chain_terrain examples/chain_terrain/main.cpp)
   add_executable(example_bucket_fill   examples/bucket_fill/main.cpp)
+  add_executable(example_playground    examples/playground/main.cpp)
 
   foreach(example_target example_truck example_joint_control example_stacked_boxes example_angry_boxes
-                         example_chain_terrain example_bucket_fill)
+                         example_chain_terrain example_bucket_fill example_playground)
     target_link_libraries(${example_target} PRIVATE Fx2Dlib)
     fx2d_tune_target(${example_target})
   endforeach()
+endif()
+
+# ============================================================
+# Browser playground (Emscripten)
+# ============================================================
+# Configure through emcmake; scripts/build_web.sh does the whole thing, dependencies included.
+option(FX2D_BUILD_WEB "Build the browser playground (needs the Emscripten toolchain)" OFF)
+
+if (FX2D_BUILD_WEB)
+  if (NOT EMSCRIPTEN)
+    message(FATAL_ERROR "FX2D_BUILD_WEB needs the Emscripten toolchain: configure with emcmake.")
+  endif()
+  add_executable(playground_web examples/playground/main.cpp)
+  target_link_libraries(playground_web PRIVATE Fx2Dlib)
+  fx2d_tune_target(playground_web)
+  set_target_properties(playground_web PROPERTIES OUTPUT_NAME playground SUFFIX ".js")
+  # The scene file is read at the same relative path the desktop build uses.
+  target_link_options(playground_web PRIVATE
+    -sUSE_GLFW=3 -sALLOW_MEMORY_GROWTH=1 -sASSERTIONS=0 -sSTACK_SIZE=1MB
+    "--preload-file=${CMAKE_SOURCE_DIR}/examples/playground/Scene.yml@examples/playground/Scene.yml")
 endif()
 
 # ============================================================
@@ -281,6 +302,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_chain.cpp
     tests/test_groups.cpp
     tests/test_slingshot.cpp
+    tests/test_mouse_joint.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

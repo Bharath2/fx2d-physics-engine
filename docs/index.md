@@ -13,6 +13,9 @@ hero:
     alt: Angry Boxes demo — a slingshot ball topples a tower of boxes simulated by Fx2D
   actions:
     - theme: brand
+      text: Try it in your browser
+      link: /playground
+    - theme: alt
       text: Get started
       link: /getting-started/install
     - theme: alt
@@ -31,7 +34,7 @@ features:
     details: XPBD substeps, compliance, warm starting, friction, and motorized joints keep worlds feeling solid — verified by an adversarial test suite.
   - icon: ↗
     title: Built for interaction
-    details: Queries, contacts, sensors, entity groups, keyboard and mouse input are part of the engine, not add-ons.
+    details: Queries, contacts, sensors, entity groups, keyboard and mouse input, and a click-drag mouse joint are part of the engine, not add-ons.
   - icon: ▣
     title: Headless by design
     details: Step scenes with no window, no GPU, and no raylib. Inject input, read contacts, cast rays, batch rollouts for RL.
@@ -42,6 +45,12 @@ features:
     title: Declarative scenes
     details: Describe bodies, textures, joints and solver settings in YAML, load them in one line, reset at any time.
 ---
+
+<p class="section-kicker">No install</p>
+
+## Play with it first
+
+The [playground](/playground) is the engine compiled to WebAssembly: drag any body with the mouse, spawn shapes, topple the stack. It is the same `examples/playground` program the desktop build runs.
 
 <p class="section-kicker">Start building</p>
 

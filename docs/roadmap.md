@@ -29,8 +29,7 @@ once — and reproduce CI (format + Release + Debug/ASan with -Werror) before pu
    the end closes the last untested adversarial class from item 8.
 3. **The floor escape** (detail in item 8): the only unexplained defect. 1–2 balls per 200
    through the 0.8-thick catch floor, substep-independent, pinned at <=3 by the bucket test.
-4. **Mouse joint** then the rest of item 9 — mouse pairs with `entity_at_point()` for
-   click-dragging and improves every demo.
+4. **The rest of item 9** now that the mouse joint has landed: distance, weld, wheel.
 5. **Tree-accelerated queries** (item 2 follow-up) once query volume justifies it.
 6. **Time-of-impact CCD** (item 3) — also what lets fast bodies hit chains and edges.
 7. **Solver grid diagonal** (small): 11x5, 12x5 and 13x4 were never measured; the analysis
@@ -288,8 +287,12 @@ and the adversarial test, which cannot share code, so change them in step.
    two constraint formulations plus tests. In rough order of value:
    - **Distance / rope joint** — fixed or maximum separation between two anchors; also the
      building block the FxChain dynamic mode wants.
-   - **Mouse joint** — a soft spring from a world point to a body anchor, paired with
-     `entity_at_point()` for click-dragging; every editor and demo wants it.
+   - **Mouse joint** — delivered. `FxMouseJoint` (`include/Fx2D/Joints.h`) is a damped XPBD
+     spring from a world point to a body anchor, tuned by frequency and damping ratio so it
+     scales with mass, with a force cap. `FxScene::enable_mouse_drag()` (YAML `mouse_drag:`)
+     drives it from `input()` and `entity_at_point()`; the renderer draws the band. Covered by
+     `tests/test_mouse_joint.cpp`; the browser playground (`examples/playground`,
+     `scripts/build_web.sh`) is built on it.
    - **Weld joint** — locks relative pose entirely; breakable variants enable destruction.
    - **Wheel joint** — revolute plus a sprung suspension axis; the truck example currently
      fakes this with hand-assembled constraints.

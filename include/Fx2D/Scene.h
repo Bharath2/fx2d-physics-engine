@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Fx2D/Execution.h"
 #include <algorithm>
-#include <execution>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -94,6 +94,10 @@ class FxScene {
     FxNamedRegistry<FxConstraint> m_constraints; // stores all constraints
     FxNamedRegistry<FxEntityGroup> m_groups; // named entity groups
     FxNamedRegistry<FxJoint> m_joints; // stores all joints
+    FxMouseJoint m_mouse_joint; // the one transient click-drag spring
+    bool m_mouse_drag = false; // drive m_mouse_joint from input() each step
+    // Attaches, moves and releases the mouse joint from the left button and cursor.
+    void drive_mouse_joint();
 
   public:
     // scene size [x, y] units
@@ -162,6 +166,15 @@ class FxScene {
     // until user code injects it, which is how it scripts triggers.
     const FxInput& input() const { return m_input; }
     FxInput& input() { return m_input; }
+
+    // The click-drag spring. Drive it yourself through attach()/set_target()/release(), or
+    // enable_mouse_drag() to have the scene do so from input(): left button on a dynamic
+    // body attaches at the cursor, holding drags, releasing lets go. Off by default; the
+    // YAML key `scene: mouse_drag: true` turns it on.
+    FxMouseJoint& mouse_joint() { return m_mouse_joint; }
+    const FxMouseJoint& mouse_joint() const { return m_mouse_joint; }
+    void enable_mouse_drag(bool enable) { m_mouse_drag = enable; }
+    bool mouse_drag_enabled() const { return m_mouse_drag; }
 
     // Contacts from the most recent step, one per touching pair, in a reproducible but
     // unspecified order. Sensor pairs appear with zero impulses. Valid until step() or reset().

@@ -12,6 +12,7 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](./LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Bharath2/fx2d-physics-engine?style=social)](https://github.com/Bharath2/fx2d-physics-engine/stargazers)
 
+[**▶ Try it in your browser**](https://bharath2.github.io/fx2d-physics-engine/playground) ·
 [**Documentation**](https://bharath2.github.io/fx2d-physics-engine/) ·
 [**Get started**](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) ·
 [**Demos**](https://bharath2.github.io/fx2d-physics-engine/demos) ·
@@ -25,6 +26,12 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 </div>
 
 ---
+
+## Try it first
+
+The [**playground**](https://bharath2.github.io/fx2d-physics-engine/playground) is the engine compiled to WebAssembly, running in your browser with nothing to install. Drag any body with the mouse, right-click to spawn shapes, knock the stack over. It is the same [`examples/playground`](./examples/playground/) program the desktop build runs; `./scripts/build_web.sh` produces it.
+
+<a href="https://bharath2.github.io/fx2d-physics-engine/playground"><img src="./examples/playground/play.gif" alt="Fx2D playground: dragging bodies with the mouse joint in the browser" width="720" /></a>
 
 ## Why Fx2D?
 
@@ -44,6 +51,7 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 | **Continuous collision** | Opt-in speculative contacts (`ccd: true`) to curb tunneling for fast bodies |
 | **Solver** | Substepped XPBD with compliance, warm starting, restitution, and Coulomb static/dynamic friction. Default 14 substeps × 4 velocity passes, chosen by measurement |
 | **Joints & motors** | Revolute and prismatic joints with position, velocity and effort control modes and PID tuning |
+| **Mouse joint** | A damped spring from the cursor to a grabbed body, tuned by frequency and damping ratio so it scales with mass; `mouse_drag: true` in a scene gives click-and-drag for free |
 | **Queries** | Ray casts, overlap (circle/box/point/shape) and point picking that share the simulation's own narrow phase |
 | **Contacts & events** | Buffered contacts each step, begin/end contact events, trigger-only sensor entities |
 | **Entity groups** | Named sets you bulk enable/delete/reset, plus one-integer intra-group collision filtering |
@@ -119,46 +127,54 @@ Every example is a plain C++ file plus a `Scene.yml` under [`examples/`](./examp
 <table>
   <tr>
     <td align="center" width="50%">
+      <a href="./examples/playground/"><img src="./examples/playground/play.gif" alt="Playground demo" /></a><br />
+      <b><a href="./examples/playground/">Playground</a></b><br />
+      <sub>Mouse joint drag, spawn shapes, seesaw, chain ramp. Also runs in the browser</sub>
+    </td>
+    <td align="center" width="50%">
       <a href="./examples/angry_boxes/"><img src="./examples/angry_boxes/play.gif" alt="Angry Boxes slingshot demo" /></a><br />
       <b><a href="./examples/angry_boxes/">Angry boxes</a></b><br />
       <sub>Mouse slingshot, trajectory preview, contact impulses, reset</sub>
     </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <a href="./examples/truck/"><img src="./examples/truck/play.gif" alt="Truck suspension demo" /></a><br />
       <b><a href="./examples/truck/">Truck</a></b><br />
       <sub>Wheels, suspension joints, textured bodies</sub>
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <a href="./examples/stacked_boxes/"><img src="./examples/stacked_boxes/play.gif" alt="Stacked boxes demo" /></a><br />
       <b><a href="./examples/stacked_boxes/">Stacked boxes</a></b><br />
       <sub>Resting stability, friction, textured shapes</sub>
     </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <a href="./examples/joint_control_demo/"><img src="./examples/joint_control_demo/play.gif" alt="Joint motor control demo" /></a><br />
       <b><a href="./examples/joint_control_demo/">Joint control</a></b><br />
       <sub>Revolute and prismatic motors: position, velocity, effort modes</sub>
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <a href="./examples/chain_terrain/"><img src="./examples/chain_terrain/play.gif" alt="Chain terrain demo" /></a><br />
       <b><a href="./examples/chain_terrain/">Chain terrain</a></b><br />
       <sub>Polyline terrain, click-to-spawn, one-sided chain contacts</sub>
     </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <a href="./examples/bucket_fill/"><img src="./examples/bucket_fill/play.gif" alt="Bucket fill demo" /></a><br />
       <b><a href="./examples/bucket_fill/">Bucket fill</a></b><br />
       <sub>Hundreds of bodies piling into a container, sleeping, broad phase under load</sub>
     </td>
+    <td width="50%"></td>
   </tr>
 </table>
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFX2D_BUILD_EXAMPLES=ON
 cmake --build build -j
-./build/example_angry_boxes      # also: example_truck, example_stacked_boxes,
+./build/example_playground       # also: example_angry_boxes, example_truck, example_stacked_boxes,
                                  # example_joint_control, example_chain_terrain, example_bucket_fill
 ```
 
@@ -238,9 +254,10 @@ cmake --build build -j
 
 ## Roadmap highlights
 
+Delivered most recently: the mouse joint and the browser playground.
+
 - **SIMD solver**: structure-of-arrays gather/scatter inside `step()`, then a graph-colored 8-wide velocity solve ([plan](./docs/roadmap/simd.md)).
 - **Ropes and bridges**: distance joints and a dynamic chain mode.
-- **Mouse joint** for click-and-drag in every demo.
 - **Time-of-impact CCD** so fast bodies never tunnel through chains and edges.
 - **More joints**: weld, wheel, pulley, gear.
 
