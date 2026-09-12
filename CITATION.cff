@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use Fx2D in your work, please cite it as below."
+title: "Fx2D: A 2D rigid-body physics engine in C++20"
+type: software
+authors:
+  - family-names: Irigireddy
+    given-names: Bharath Chandra
+repository-code: "https://github.com/Bharath2/fx2d-physics-engine"
+url: "https://bharath2.github.io/fx2d-physics-engine/"
+license: BSD-3-Clause
+keywords:
+  - physics engine
+  - rigid body dynamics
+  - XPBD
+  - collision detection
+  - C++20
+  - simulation
+date-released: 2025-06-16
