@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bharath2.github.io/fx2d-physics-engine/sitemap.xml

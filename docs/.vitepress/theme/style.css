@@ -104,3 +104,41 @@
 @media (max-width: 640px) {
   .VPHomeHero .image-container { transform: none; }
 }
+
+.demo-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.demo-tile {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  text-decoration: none !important;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.demo-tile:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-2px);
+}
+
+.demo-tile img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.demo-tile span {
+  display: block;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.demo-card { scroll-margin-top: 80px; }
