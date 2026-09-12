@@ -1,8 +1,8 @@
 #pragma once
 
+#include "Fx2D/Execution.h"
 #include <algorithm>
 #include <cstdint>
-#include <execution>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -143,8 +143,13 @@ class FxNamedRegistry {
             raw_items_vec.push_back(item.get());
         }
 
+#if FX2D_HAS_EXECUTION_POLICIES
         std::for_each(std::forward<ExecPolicy>(policy), raw_items_vec.begin(), raw_items_vec.end(),
                       std::forward<Func>(func));
+#else
+        (void)policy;
+        std::for_each(raw_items_vec.begin(), raw_items_vec.end(), std::forward<Func>(func));
+#endif
     }
 
     template<typename ExecPolicy, typename Func>
@@ -160,8 +165,14 @@ class FxNamedRegistry {
             raw_items_vec.push_back(item.get());
         }
 
+#if FX2D_HAS_EXECUTION_POLICIES
         std::transform(std::forward<ExecPolicy>(policy), raw_items_vec.begin(), raw_items_vec.end(),
                        results.begin(), std::forward<Func>(func));
+#else
+        (void)policy;
+        std::transform(raw_items_vec.begin(), raw_items_vec.end(), results.begin(),
+                       std::forward<Func>(func));
+#endif
     }
 };
 

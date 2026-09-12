@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fx2D playground</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b1520; color: #adc3cc; font: 14px system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: auto; }
+    /* The canvas is the renderer's framebuffer at 1:1, so mouse coordinates need no scaling. */
+    #canvas { width: 960px; height: 540px; display: block; outline: none; border-radius: 6px; flex: none; }
+    #status { padding: 8px 0 0; font-size: 12px; opacity: 0.8; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="960" height="540" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="status">Loading Fx2D…</div>
+  <script>
+    var statusEl = document.getElementById("status");
+    var canvas = document.getElementById("canvas");
+    var Module = {
+      canvas: canvas,
+      setStatus: function (t) { statusEl.textContent = t || ""; },
+      onRuntimeInitialized: function () { statusEl.textContent = ""; canvas.focus(); },
+      postRun: [function () { statusEl.textContent = ""; }],
+      print: function (t) { console.log(t); },
+      printErr: function (t) { console.error(t); },
+    };
+    // Keep the page from scrolling when the wheel or space bar is used over the canvas.
+    canvas.addEventListener("wheel", function (e) { e.preventDefault(); }, { passive: false });
+    window.addEventListener("keydown", function (e) { if (e.code === "Space" && document.activeElement === canvas) e.preventDefault(); });
+  </script>
+  <script async src="playground.js"></script>
+</body>
+</html>

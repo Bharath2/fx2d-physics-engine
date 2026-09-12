@@ -82,6 +82,7 @@ export default defineConfig({
     logo: "/mark.svg",
     siteTitle: "Fx2D",
     nav: [
+      { text: "Playground", link: "/playground" },
       { text: "Guides", link: "/guides/" },
       { text: "Demos", link: "/demos" },
       { text: "API", link: "/api/" },
@@ -109,6 +110,7 @@ export default defineConfig({
             { text: "Renderer", link: "/guides/renderer" },
             { text: "Input", link: "/guides/input" },
             { text: "Joints and motors", link: "/guides/joints" },
+            { text: "Mouse joint", link: "/guides/joints#mouse-joint" },
             { text: "Queries", link: "/guides/queries" },
             { text: "Contacts and sensors", link: "/guides/events" },
             { text: "Entity groups", link: "/guides/entity-groups" },

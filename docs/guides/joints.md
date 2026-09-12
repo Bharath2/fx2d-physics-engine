@@ -235,3 +235,38 @@ same type. Joint names are unique in the registry, so constraint names are uniqu
 construction, and they survive entity renames because the entity pair is not part of the name.
 The YAML `joints:` section is name-keyed, so authored joint names flow straight through.
 Standalone constraints added directly with `add_constraint` keep their `e1_e2_Type` names.
+
+## Mouse joint
+
+`FxMouseJoint` is a damped spring from a world point to a point on one body, for click-dragging. It is not an `FxJoint`: it pairs a body with a point rather than two bodies, so it lives outside the joint registry, and every scene owns exactly one through `scene.mouse_joint()`.
+
+The simplest way to use it is to let the scene drive it from [input](/guides/input): a left-button press on a dynamic body grabs it where the cursor is, holding drags it, releasing lets go. Static, disabled and sensor bodies are never grabbed, and a drag that starts on empty space does not pick up bodies it crosses.
+
+```yaml
+scene:
+    size: [16, 9]
+    mouse_drag: true          # or scene.enable_mouse_drag(true) in code
+```
+
+Drive it yourself when the "cursor" is something else, a touch point, a gamepad stick, or a script:
+
+```cpp
+FxMouseJoint& drag = scene.mouse_joint();
+if (drag.attach(scene.entity_at_point(p), p)) {   // false for static, disabled, sensor, null
+    drag.set_target(p + FxVec2f{2.0f, 1.0f});   // where the grabbed point is pulled toward
+}
+scene.step(dt);
+drag.release();
+```
+
+The spring is tuned like Box2D's mouse joint rather than by raw compliance, so it feels the same on a 0.1 kg ball and a 50 kg crate:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `frequency_hz` | `5` | Undamped natural frequency; higher pulls harder |
+| `damping_ratio` | `0.7` | `0` oscillates freely, `1` is critically damped |
+| `max_force_per_kg` | `1000` | Force cap in newtons per kilogram of the held body, so a body pinned against a wall cannot be driven through it |
+
+On `attach()` these become an XPBD compliance and damping coefficient for that body's mass, `k = m (2πf)²` and `c = 2 m ζ (2πf)`, and the correction uses the damped XPBD update of Macklin et al. (2016), so damping acts on the anchor's velocity along the spring rather than fighting its position. Held bodies never sleep. `reset()` releases the joint, and so does deleting or disabling the held entity.
+
+The renderer draws the spring as a band from the grabbed point to the target whenever the joint is attached. The [playground](/playground) is the mouse joint in action, and `tests/test_mouse_joint.cpp` pins its behaviour: tracking a moving target, holding against gravity with the sag the stiffness predicts, the force cap, and the input-driven grab and release.

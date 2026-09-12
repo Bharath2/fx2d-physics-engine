@@ -1,5 +1,6 @@
 build
 build-headless
+build-web
 build-lint
 # Example textures live under examples/*/assets/ (committed, downscaled).
 # Ignore only a leftover root-level assets/ folder used for local extras.

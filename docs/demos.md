@@ -13,7 +13,9 @@ cmake --build build -j
 ./build/example_angry_boxes
 ```
 
-Targets: `example_angry_boxes`, `example_truck`, `example_stacked_boxes`, `example_joint_control`, `example_chain_terrain`, `example_bucket_fill`.
+Targets: `example_playground`, `example_angry_boxes`, `example_truck`, `example_stacked_boxes`, `example_joint_control`, `example_chain_terrain`, `example_bucket_fill`.
+
+The [playground](/playground) runs in the browser with nothing to build: drag bodies, spawn shapes, reset.
 
 <div class="demo-grid">
   <article class="demo-card" id="angry-boxes">

@@ -155,3 +155,45 @@ class FxPrismaticJoint : public FxJoint {
     // Apply controls method
     void apply_controls(double dt) override;
 };
+
+// A soft spring from a world point to an anchor on one body, for click-dragging. Not an
+// FxJoint: it pairs a body with a point rather than two bodies, so it lives outside the joint
+// registry and is transient. FxScene owns one; reset() and deleting the held entity release it.
+//
+// Tuned like a damped spring rather than by raw compliance, so a drag feels the same on a
+// 0.1 kg ball and a 50 kg crate: stiffness and damping scale with the body's mass on attach.
+class FxMouseJoint {
+  private:
+    std::shared_ptr<FxEntity> m_entity;
+    FxVec2f m_local_anchor{0.0f, 0.0f};
+    FxVec2f m_target{0.0f, 0.0f};
+    double m_compliance = 0.0; // XPBD alpha for the attached body, from frequency and mass
+    double m_beta = 0.0; // XPBD damping coefficient, from damping ratio and mass
+    float m_max_lambda = FxInfinityf; // force cap expressed as a Lagrange-multiplier bound
+
+  public:
+    // Undamped natural frequency of the spring, in Hz. Higher pulls harder.
+    float frequency_hz = 5.0f;
+    // 0 oscillates freely, 1 is critically damped.
+    float damping_ratio = 0.7f;
+    // Force cap as a multiple of the body's weight-equivalent (mass x this, in N per kg), so
+    // a body pinned against a wall cannot be driven through it.
+    float max_force_per_kg = 1000.0f;
+
+    // Grabs `entity` at `world_point`, which becomes the anchor. Static (zero inverse mass),
+    // disabled and sensor bodies are refused. Returns whether the joint is now attached.
+    bool attach(const std::shared_ptr<FxEntity>& entity, const FxVec2f& world_point);
+    // Moves the point the anchor is pulled toward.
+    void set_target(const FxVec2f& world_point) { m_target = world_point; }
+    void release();
+
+    bool attached() const { return m_entity != nullptr; }
+    const std::shared_ptr<FxEntity>& entity() const { return m_entity; }
+    const FxVec2f& target() const { return m_target; }
+    const FxVec2f& local_anchor() const { return m_local_anchor; }
+    // Anchor in world coordinates at the body's current pose; zero when detached.
+    FxVec2f anchor_world() const;
+
+    // One damped XPBD position correction toward the target. Called by FxScene each substep.
+    void resolve(double dt);
+};

@@ -117,6 +117,7 @@ void FxScene::reset() {
     m_begin_contacts.clear();
     m_end_contacts.clear();
     m_input.clear();
+    m_mouse_joint.release();
     m_entities_dirty = false;
 
     // Rebuild rather than patch, so the AABB tree, entity ids and collision-exclusion pairs
@@ -277,6 +278,23 @@ void FxScene::sweep_dead_joints() {
 // every body count from 10 to 3000 while burning up to 32x the CPU, because the work is
 // memory-bound and dispatched once per substep. Do not reintroduce it without an A/B run.
 
+void FxScene::drive_mouse_joint() {
+    const FxVec2f cursor = m_input.mouse_position();
+    if (!m_input.mouse_down(FxMouseButton::Left)) {
+        m_mouse_joint.release();
+        return;
+    }
+    if (m_mouse_joint.attached()) {
+        m_mouse_joint.set_target(cursor);
+        return;
+    }
+    // Only a fresh press grabs, so a drag that started on empty space and passes over a body
+    // does not pick it up. Pressed edges last a whole rendered frame, and attach() refuses
+    // static and sensor bodies, so repeated calls within that frame are harmless.
+    if (m_input.mouse_pressed(FxMouseButton::Left))
+        m_mouse_joint.attach(entity_at_point(cursor), cursor);
+}
+
 // simulation step
 void FxScene::step(double step_dt) {
     // Throw an error if dt is negative
@@ -296,6 +314,13 @@ void FxScene::step(double step_dt) {
         m_contact_cache.clear();
         m_entities_dirty = false;
     }
+
+    // A held body that was deleted or swapped out from under the joint lets go of it.
+    if (m_mouse_joint.attached()) {
+        const auto& held = m_mouse_joint.entity();
+        if (!held->enabled || get_entity(held->get_name()) != held) m_mouse_joint.release();
+    }
+    if (m_mouse_drag && m_input.available()) drive_mouse_joint();
 
     // This step's contacts become the previous step's, which the begin/end diff needs, and
     // keeps entities that stopped touching alive long enough to be named.
@@ -400,6 +425,7 @@ void FxScene::step(double step_dt) {
         // Solve constraints (XPBD-style)
         m_constraints.for_each(std::execution::seq,
                                [&](auto constraint) { constraint->resolve(substep_dt); });
+        m_mouse_joint.resolve(substep_dt);
 
         // Update velocities from positions - skip disabled/sleeping entities
         m_entities.for_each(std::execution::seq, [&](auto entity) {

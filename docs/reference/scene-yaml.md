@@ -64,6 +64,7 @@ joints:
 | `size` | `[width, height]` | **Yes** | World dimensions in physics units |
 | `gravity` | `[gx, gy]` | No | Gravity acceleration vector (default: `[0, 0]`) |
 | `background` | `[R, G, B, A]` or path string | No | Background fill colour (0–255) or image file path |
+| `mouse_drag` | `true` / `false` | No | Let the left mouse button click-drag dynamic bodies through the [mouse joint](../guides/joints#mouse-joint) (default: `false`) |
 
 ```yaml
 scene:

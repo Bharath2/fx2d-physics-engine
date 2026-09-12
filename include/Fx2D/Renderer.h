@@ -57,6 +57,10 @@ class FxRylbRenderer {
     ~FxRylbRenderer();
 
     void run(bool play = true);
+    // One rendered frame: poll input, consume the accumulator, draw. run() loops over it; in
+    // the browser Emscripten calls it from requestAnimationFrame. Call it yourself to embed
+    // the renderer in a loop you own.
+    void frame();
     void set_background(const FxVec4ui8& color);
     void set_background(const std::string& filepath);
     void set_real_time_factor(const double& rt_factor);
