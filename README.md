@@ -13,7 +13,7 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 [**Get started**](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) ·
 [**Demos**](https://bharath2.github.io/fx2d-physics-engine/demos) ·
 [**API reference**](https://bharath2.github.io/fx2d-physics-engine/api/) ·
-[**Try it in your browser**](https://bharath2.github.io/fx2d-physics-engine/playground) ·
+[**Try it in your browser**](https://bharath2.github.io/fx2d-physics-engine/playground) 
 
 <img src="./examples/angry_boxes/play.gif" alt="Angry Boxes demo: a mouse-driven slingshot launches a ball into a tower of boxes simulated by the Fx2D physics engine" width="720" />
 
