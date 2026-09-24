@@ -6,13 +6,10 @@
 SAT collision detection · XPBD constraint solver · joints with motors · YAML scenes · headless mode for simulation, testing and reinforcement learning.
 
 [![Docs](https://img.shields.io/badge/docs-bharath2.github.io%2Ffx2d--physics--engine-16b9c5?logo=readthedocs&logoColor=white)](https://bharath2.github.io/fx2d-physics-engine/)
-[![Lint](https://github.com/Bharath2/fx2d-physics-engine/actions/workflows/lint.yml/badge.svg)](https://github.com/Bharath2/fx2d-physics-engine/actions/workflows/lint.yml)
-[![Deploy docs](https://github.com/Bharath2/fx2d-physics-engine/actions/workflows/docs.yml/badge.svg)](https://github.com/Bharath2/fx2d-physics-engine/actions/workflows/docs.yml)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/20)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](./LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Bharath2/fx2d-physics-engine?style=social)](https://github.com/Bharath2/fx2d-physics-engine/stargazers)
 
-[**Documentation**](https://bharath2.github.io/fx2d-physics-engine/) ·
 [**Get started**](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) ·
 [**Demos**](https://bharath2.github.io/fx2d-physics-engine/demos) ·
 [**API reference**](https://bharath2.github.io/fx2d-physics-engine/api/) ·
