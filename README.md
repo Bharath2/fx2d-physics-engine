@@ -12,12 +12,11 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](./LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Bharath2/fx2d-physics-engine?style=social)](https://github.com/Bharath2/fx2d-physics-engine/stargazers)
 
-[**▶ Try it in your browser**](https://bharath2.github.io/fx2d-physics-engine/playground) ·
 [**Documentation**](https://bharath2.github.io/fx2d-physics-engine/) ·
 [**Get started**](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) ·
 [**Demos**](https://bharath2.github.io/fx2d-physics-engine/demos) ·
 [**API reference**](https://bharath2.github.io/fx2d-physics-engine/api/) ·
-[**Roadmap**](https://bharath2.github.io/fx2d-physics-engine/roadmap)
+[**Try it in your browser**](https://bharath2.github.io/fx2d-physics-engine/playground) ·
 
 <img src="./examples/angry_boxes/play.gif" alt="Angry Boxes demo: a mouse-driven slingshot launches a ball into a tower of boxes simulated by the Fx2D physics engine" width="720" />
 
@@ -26,12 +25,6 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 </div>
 
 ---
-
-## Try it first
-
-The [**playground**](https://bharath2.github.io/fx2d-physics-engine/playground) is the engine compiled to WebAssembly, running in your browser with nothing to install. Drag any body with the mouse, right-click to spawn shapes, knock the stack over. It is the same [`examples/playground`](./examples/playground/) program the desktop build runs; `./scripts/build_web.sh` produces it.
-
-<a href="https://bharath2.github.io/fx2d-physics-engine/playground"><img src="./examples/playground/play.gif" alt="Fx2D playground: dragging bodies with the mouse joint in the browser" width="720" /></a>
 
 ## Why Fx2D?
 
