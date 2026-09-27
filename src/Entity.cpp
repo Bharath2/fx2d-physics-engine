@@ -206,14 +206,14 @@ FxVec3f FxEntity::calc_acceleration(const FxVec2f& gravity) {
 }
 
 // Returns the axis aligned bounding box in world coordinates
-const FxArray<float> FxEntity::bounding_box() const {
+const FxArray<float>& FxEntity::bounding_box() const {
     return m_bounding_box;
 }
 
 // Broad phase check: if two entities axis aligned bounding boxes overlap
 bool FxEntity::aabb_overlap_check(const FxEntity& other) const {
-    auto aabb1 = bounding_box();
-    auto aabb2 = other.bounding_box();
+    const auto& aabb1 = bounding_box();
+    const auto& aabb2 = other.bounding_box();
     // check if they are overlapping
     return !(aabb1(2) < aabb2(0) || aabb2(2) < aabb1(0) || // this.maxX < other.minX or other.maxX <
                                                            // this.minX
@@ -246,6 +246,23 @@ FxVec3f FxEntity::apply_pose_correction(const FxVec3f& delta) {
 }
 
 void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
+    // A body that cannot move and is not moving cannot change pose, but set_world_pose still
+    // rotates every vertex -- and static geometry never sleeps, so it would pay that forever.
+    // Comparing against the pose the shape was built at keeps this exact if `pose` was set.
+    if (_inv_mass == 0.0f && _inv_inertia == 0.0f && velocity.x() == 0.0f && velocity.y() == 0.0f &&
+        velocity.theta() == 0.0f && m_collision != nullptr) {
+        const FxVec3f cached = m_collision->world_pose();
+        if (cached.x() == pose.x() && cached.y() == pose.y() && cached.theta() == pose.theta()) {
+            prev_pose = pose;
+            prev_velocity = velocity;
+            m_eff_force = {0.0f, 0.0f};
+            m_eff_moment = 0.0f;
+            m_eff_impulse = {0.0f, 0.0f};
+            m_eff_impulse_moment = 0.0f;
+            return;
+        }
+    }
+
     // Apply accumulated impulses to velocity
     if (_inv_mass > 0.0f) {
         velocity.xy() += m_eff_impulse * _inv_mass;
@@ -262,7 +279,8 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
 
     // update pose of the collision shape and visual shape
     if (m_collision != nullptr) {
-        m_bounding_box = m_collision->set_world_pose(pose);
+        // In-place: the returning form allocates, and this runs for every entity every substep.
+        m_collision->set_world_pose(pose, m_bounding_box);
     }
     if (m_visual != nullptr) {
         m_visual->set_world_pose(pose);

@@ -93,7 +93,8 @@ class FxJoint {
 class FxRevoluteJoint : public FxJoint {
   private:
     FxVec2f m_anchor_point; // Anchor point in entity1's local coordinates
-    float m_angle_min, m_angle_max; // Angular limits
+    // The angular limits are not held here: the FxAngularLimitConstraint this joint builds owns
+    // them, and a second copy on the joint was written once and never read again.
     float m_target_theta = 0.0f; // Target angle for PID control
     float m_target_omega = 0.0f; // Target angular velocity for PID control
 

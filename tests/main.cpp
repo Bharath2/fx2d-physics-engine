@@ -23,6 +23,8 @@ void run_slingshot_tests();
 void run_adversarial_tests();
 void run_joint_tests();
 void run_mouse_joint_tests();
+void run_solver_regression_tests();
+void run_contact_graph_tests();
 
 namespace {
 
@@ -49,6 +51,8 @@ const Suite kSuites[] = {
     {"adversarial", run_adversarial_tests, true},
     {"joints", run_joint_tests, false},
     {"mouse_joint", run_mouse_joint_tests, false},
+    {"contact_graph", run_contact_graph_tests, false},
+    {"solver_regression", run_solver_regression_tests, false},
 };
 
 bool skip_slow_requested() {

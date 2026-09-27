@@ -27,19 +27,20 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 
 - **Physics you can read.** One explicit pipeline: a dynamic AABB tree proposes pairs, a skin-aware SAT narrow phase produces contacts across *every* shape type, and a substepped XPBD solver resolves contacts, friction and joints. The [solver](https://bharath2.github.io/fx2d-physics-engine/concepts/xpbd) and [collision](https://bharath2.github.io/fx2d-physics-engine/concepts/collisions) docs derive the equations the code implements.
 - **Built for simulation, not just games.** A renderer-free build steps thousands of times per second with no window, no GPU and no raylib. Inject keyboard and mouse state programmatically, read contacts, cast rays, and batch rollouts for RL or data collection.
-- **Deterministic and tested.** Fixed timestep, fixed solver ordering, no threads by default. An adversarial test suite covers tall stacks, pyramids, 10:1 and 100:1 mass ratios, paper-thin slivers, a Newton's cradle, spinning bodies and kinematic platforms, with thresholds that were measured rather than guessed.
+- **Deterministic and tested.** Fixed timestep, fixed solver ordering, no threads by default. An adversarial test suite covers tall stacks, pyramids, 10:1 and 100:1 mass ratios, paper-thin slivers, a Newton's cradle, spinning bodies and kinematic platforms, with thresholds that were measured rather than guessed. A solver regression suite pins golden state, so a speed-only change provably leaves the physics alone.
 - **Declarative scenes.** Describe worlds, textures, joints and physics parameters in YAML, then load them from C++ in one line. Reset a scene to its authored state at any time.
-- **Small and embeddable.** About 7k lines of C++20, a single static library, BSD-3-Clause. Depends only on Eigen and yaml-cpp in headless mode.
+- **Small and embeddable.** About 8k lines of C++20, a single static library, BSD-3-Clause. Depends only on Eigen and yaml-cpp in headless mode.
 
 ## Features
 
 | Area | What you get |
 |---|---|
 | **Shapes** | Circles, capsules, edges, chains (open polylines for terrain), convex polygons, and rounded rectangles/polygons via a skin radius, all in one `vertices[] + skin_radius` representation |
-| **Broad phase** | SAH-guided dynamic AABB tree with fat boxes and dual-tree pair descent |
+| **Broad phase** | SAH-guided dynamic AABB tree with fat boxes and dual-tree pair descent; proxies swept over the whole step, and the tree walked only on substeps where a proxy moved |
 | **Narrow phase** | Separating Axis Theorem with skin-aware contact generation, clipping manifolds, one-sided chain contacts |
 | **Continuous collision** | Opt-in speculative contacts (`ccd: true`) to curb tunneling for fast bodies |
 | **Solver** | Substepped XPBD with compliance, warm starting, restitution, and Coulomb static/dynamic friction. Default 14 substeps × 4 velocity passes, chosen by measurement |
+| **Vectorised contact solve** | Contacts graph-coloured into independent batches and solved several lanes at a time: portable C++ with no intrinsics, vectorising to AVX2 on x86-64 and NEON on ARM |
 | **Joints & motors** | Revolute and prismatic joints with position, velocity and effort control modes and PID tuning |
 | **Mouse joint** | A damped spring from the cursor to a grabbed body, tuned by frequency and damping ratio so it scales with mass; `mouse_drag: true` in a scene gives click-and-drag for free |
 | **Queries** | Ray casts, overlap (circle/box/point/shape) and point picking that share the simulation's own narrow phase |
@@ -49,6 +50,8 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 | **Sleeping** | Resting bodies stop consuming solver time until disturbed |
 | **Scenes** | YAML scene description for entities, textures, joints and solver parameters, with reset callbacks |
 | **Headless** | Build the physics core with no renderer for tests, CI, batch simulation and RL |
+| **Measured performance** | Allocation-free hot path, a per-phase profiler (`FX2D_PROFILE`) and a three-scene benchmark; every optimisation landed with an A/B behind it |
+| **Cross-platform** | x86-64 and ARM64. CI builds and tests with GCC, Clang, Apple Clang and MSVC, plus an aarch64 cross-build run under qemu; `FX2D_ARCH_BASELINE` pins a fixed ISA for shipping builds |
 | **Math** | NumPy-style `FxArray`, vector/matrix helpers and geometry utilities in `Fx2D/Math.h` |
 | **Rendering** | Lightweight cross-platform viewer on raylib with a Dear ImGui inspector and a draw-callback hook for overlays |
 
@@ -196,11 +199,11 @@ Because stepping is deterministic and single-threaded, many independent scenes c
           │
           └─ for each substep (default 14):
                 ├─ joint motor controls, then integrate (gravity, forces, damping)
-                ├─ broad phase ── dynamic AABB tree → candidate pairs
+                ├─ broad phase ── dynamic AABB tree → candidate pairs (walked only if a proxy moved)
                 ├─ narrow phase ── skin-aware SAT → contact manifolds (cached, warm-started)
                 ├─ XPBD position solve ── penetration, joints, compliance
                 ├─ derive velocities from the position change
-                └─ velocity passes (default 4) ── restitution and Coulomb friction
+                └─ velocity passes (default 4) ── restitution and Coulomb friction, colour-batched
 ```
 
 Read the derivations in [XPBD solver](./docs/concepts/xpbd.md) and [collision pipeline](./docs/concepts/collisions.md), and the reasoning behind the defaults in the [roadmap](./docs/roadmap.md), which records every measurement that shaped the engine.
@@ -241,12 +244,12 @@ cmake --build build -j
 | [Guides](./docs/guides/index.md) | Headless simulation, input, queries, contacts, groups, renderer, and joints |
 | [Math utilities](./docs/reference/math.md) | `FxArray`, vector/matrix types, and helper functions |
 | [Roadmap](./docs/roadmap.md) | What is next, with the measurements behind each decision |
+| [Next steps](./docs/next_steps.md) | Session handoff: where the step time goes now, and what to pick up next |
 
 ## Roadmap highlights
 
-Delivered most recently: the mouse joint and the browser playground.
+Delivered most recently: the mouse joint, the browser playground, and a performance rework (a broad phase that skips unchanged trees, allocation-free hot paths, and the colour-batched SIMD contact solve from the [SIMD plan](./docs/roadmap/simd.md)) worth 2.2-8.1x per step.
 
-- **SIMD solver**: structure-of-arrays gather/scatter inside `step()`, then a graph-colored 8-wide velocity solve ([plan](./docs/roadmap/simd.md)).
 - **Ropes and bridges**: distance joints and a dynamic chain mode.
 - **Time-of-impact CCD** so fast bodies never tunnel through chains and edges.
 - **More joints**: weld, wheel, pulley, gear.

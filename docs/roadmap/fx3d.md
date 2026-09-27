@@ -59,10 +59,16 @@ physics, where the competition is Jolt and PhysX.
 
 ## Do these 2D items first
 
-Roadmap items **2** (queries/events), **3** (broad-phase hoist), and **7**
-(parallel narrow phase / island solve) port to 3D essentially for free if they
-are built before the fork — and are pure rework if built after. Land them in
-Fx2D first.
+Roadmap items **2** (queries/events) and **7** (parallel narrow phase / island solve) port to
+3D essentially for free if they are built before the fork — and are pure rework if built after.
+Land them in Fx2D first.
+
+Item **3**'s broad-phase work has since landed, and its shape ports directly: the tree is
+walked only when a proxy actually moved, proxies are swept along velocity for the whole step,
+and the pair list is colour-partitioned so contacts touching disjoint bodies can be solved
+together. None of that is 2D-specific. The batched velocity solve built on top of it
+(`FxContactBatch`) is written as width-agnostic loops rather than intrinsics, so it carries
+over too — a 3D contact simply has more columns.
 
 ## Repo mechanics
 

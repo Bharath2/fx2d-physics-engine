@@ -86,6 +86,12 @@ class FxEntity {
     float m_sleep_timer = 0.0f;
     bool m_sleeping = false;
 
+    // Broad-phase bookkeeping, owned by FxEntityRegistry. Held on the entity rather than in a
+    // side map because the broad phase reads them once per entity per substep, and a hash
+    // lookup there is pure overhead on a value the entity can just carry.
+    int32_t m_broad_phase_node = -1; // leaf index in the registry's AABB tree, -1 = not in tree
+    int32_t m_packed_index = -1; // position in the registry's packed storage, -1 = unregistered
+
     // update pose from velocity
     void __update_pose(const double& step_dt);
 
@@ -135,6 +141,13 @@ class FxEntity {
     uint32_t get_entity_id() const { return m_entity_id; }
     void set_entity_id(uint32_t id) { m_entity_id = id; }
 
+    // Registry-owned broad-phase bookkeeping. These are written by FxEntityRegistry as entities
+    // are added, removed and inserted into the tree; nothing else should set them.
+    int32_t broad_phase_node() const { return m_broad_phase_node; }
+    void set_broad_phase_node(int32_t node) { m_broad_phase_node = node; }
+    int32_t packed_index() const { return m_packed_index; }
+    void set_packed_index(int32_t index) { m_packed_index = index; }
+
     // resets current state to inital state
     void reset();
 
@@ -161,17 +174,23 @@ class FxEntity {
     }
     void set_collision_geometry(FxCollisionShape collision) {
         m_collision = std::make_shared<FxCollisionShape>(std::move(collision));
-        m_collision->set_world_pose(pose);
+        // Filled here, not left to the first integration: an immovable body may never
+        // integrate at all, and a box still at its {-1,-1,-1,-1} default is rejected by the
+        // broad phase and silently collides with nothing.
+        m_collision->set_world_pose(pose, m_bounding_box);
     }
     // getters for visual and collison shapes
-    std::shared_ptr<FxVisualShape> visual_geometry() const { return m_visual; }
-    std::shared_ptr<FxCollisionShape> collision_geometry() const { return m_collision; }
+    // By reference: returning by value cost an atomic pair per call, and the broad and narrow
+    // phases call these several times per pair per substep. Valid until the shape is replaced.
+    const std::shared_ptr<FxVisualShape>& visual_geometry() const { return m_visual; }
+    const std::shared_ptr<FxCollisionShape>& collision_geometry() const { return m_collision; }
     // methods to delete visual and collision shapes
     void del_visual_geometry() { m_visual.reset(); };
     void del_collision_geometry() { m_collision.reset(); };
 
     // collision detection methods
-    const FxArray<float> bounding_box() const;
+    // By reference: returning the FxArray by value made every narrow-phase pair allocate.
+    const FxArray<float>& bounding_box() const;
     bool aabb_overlap_check(const FxEntity& other) const;
     bool aabb_overlap_check(const std::shared_ptr<FxEntity>& other) const;
 

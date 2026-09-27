@@ -77,10 +77,11 @@ void FxJoint::set_control_mode(ControlMode mode) {
 // FxJoint base class implementation
 FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
                  const std::shared_ptr<FxEntity>& e2) {
-    if (!e1 || !e2) {
-        throw std::invalid_argument("Joint entities cannot be null");
+    // e2 may be null: a world-anchored joint holds one body only.
+    if (!e1) {
+        throw std::invalid_argument("Joint entity1 cannot be null");
     }
-    if (e1.get() == e2.get()) {
+    if (e2 && e1.get() == e2.get()) {
         throw std::invalid_argument("Joint cannot connect an entity to itself");
     }
     if (!is_valid_name(name)) {
@@ -95,10 +96,7 @@ FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
 FxRevoluteJoint::FxRevoluteJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
                                  const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor_point,
                                  float angle_min, float angle_max) :
-    FxJoint(name, e1, e2),
-    m_anchor_point(anchor_point),
-    m_angle_min(angle_min),
-    m_angle_max(angle_max) {
+    FxJoint(name, e1, e2), m_anchor_point(anchor_point) {
     m_constraints.reserve(2);
 
     auto anchor_constraint = std::make_shared<FxAnchorConstraint>(e1, e2, anchor_point, true);

@@ -1,6 +1,6 @@
 # Joint Control Reference
 
-Fx2D joints connect two entities and expose a motor API built on a shared PID controller. Both joint types (`FxRevoluteJoint`, `FxPrismaticJoint`) inherit the same base interface and differ only in the physical quantity they control (angle vs. translation).
+Fx2D joints connect two entities and expose a motor API built on a shared PID controller. Both joint types (`FxRevoluteJoint`, `FxPrismaticJoint`) inherit the same base interface and differ only in the physical quantity they control (angle vs. translation). The click-and-drag [mouse joint](#mouse-joint) is separate: it is not an `FxJoint`, and every scene owns one.
 
 Include via:
 
@@ -27,6 +27,8 @@ scene.joint_exists("wheel_hinge");   // bool
 scene.joint_count();                 // size_t
 scene.delete_joint("wheel_hinge");   // bool – removes joint and its constraints
 ```
+
+`add_joint` returns `false` if the name is taken or if any of the joint's constraints fails to register. In the second case it removes the joint and the constraints it had already added, so a joint is never left half-wired.
 
 ---
 
