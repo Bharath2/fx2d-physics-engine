@@ -4,6 +4,10 @@
 #endif
 #include "Fx2D/Math.h"
 
+#ifndef __EMSCRIPTEN__
+#include "WindowIcon.inc"
+#endif
+
 FxRylbRenderer::FxRylbRenderer(FxScene& scene, int fps, unsigned int scale) :
     m_scene(scene), m_scale(scale), m_display_w(0), m_display_h(0) {
     init(fps);
@@ -42,6 +46,16 @@ void FxRylbRenderer::init(int fps) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 #endif
     InitWindow(static_cast<int>(m_display_w), static_cast<int>(m_display_h), "Fx2D");
+#ifndef __EMSCRIPTEN__
+    // A browser tab takes its icon from the page, so only the native window needs one.
+    Image icon = LoadImageFromMemory(".png", kFx2DWindowIconPng,
+                                     static_cast<int>(sizeof(kFx2DWindowIconPng)));
+    if (icon.data != nullptr) {
+        ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8); // what SetWindowIcon expects
+        SetWindowIcon(icon);
+        UnloadImage(icon);
+    }
+#endif
     SetTargetFPS(fps);
     rlImGuiSetup(true);
 

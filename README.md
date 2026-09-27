@@ -1,6 +1,11 @@
 <div align="center">
 
-# Fx2D
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/public/brand/fx2d-logo-dark.svg">
+    <img src="./docs/public/brand/fx2d-logo-light.svg" alt="Fx2D" height="80">
+  </picture>
+</h1>
 
 **A fast, deterministic 2D rigid-body physics engine in C++20.**
 SAT collision detection · XPBD constraint solver · joints with motors · YAML scenes · headless mode for simulation, testing and reinforcement learning.

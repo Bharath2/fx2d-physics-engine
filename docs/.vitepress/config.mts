@@ -32,6 +32,8 @@ export default defineConfig({
     ["meta", { name: "author", content: "Bharath Chandra Irigireddy" }],
     ["meta", { name: "robots", content: "index, follow" }],
     ["link", { rel: "icon", href: "/fx2d-physics-engine/mark.svg", type: "image/svg+xml" }],
+    ["link", { rel: "icon", href: "/fx2d-physics-engine/favicon-32.png", type: "image/png", sizes: "32x32" }],
+    ["link", { rel: "apple-touch-icon", href: "/fx2d-physics-engine/apple-touch-icon.png" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Fx2D Physics Engine" }],
     ["meta", { property: "og:title", content: "Fx2D — 2D rigid-body physics engine in C++20" }],
