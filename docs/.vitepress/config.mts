@@ -12,6 +12,7 @@ export default defineConfig({
   description,
   base: "/fx2d-physics-engine/",
   cleanUrls: true,
+  srcExclude: ["README.md"],
   lastUpdated: true,
   sitemap: { hostname: site },
   ignoreDeadLinks: [

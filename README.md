@@ -185,71 +185,17 @@ scene.reset();  // back to the authored scene, groups included
 
 Because stepping is deterministic and single-threaded, many independent scenes can run in parallel across processes or threads for batched rollouts. See the [headless guide](https://bharath2.github.io/fx2d-physics-engine/guides/headless), [input](https://bharath2.github.io/fx2d-physics-engine/guides/input), [queries](https://bharath2.github.io/fx2d-physics-engine/guides/queries) and [contacts and sensors](https://bharath2.github.io/fx2d-physics-engine/guides/events).
 
-## How it works
-
-```
-        step(dt)
-          │
-          └─ for each substep (default 14):
-                ├─ joint motor controls, then integrate (gravity, forces, damping)
-                ├─ broad phase ── dynamic AABB tree → candidate pairs (walked only if a proxy moved)
-                ├─ narrow phase ── skin-aware SAT → contact manifolds (cached, warm-started)
-                ├─ XPBD position solve ── penetration, joints, compliance
-                ├─ derive velocities from the position change
-                └─ velocity passes (default 4) ── restitution and Coulomb friction, colour-batched
-```
-
-Read the derivations in [XPBD solver](./docs/concepts/xpbd.md) and [collision pipeline](./docs/concepts/collisions.md), and the reasoning behind the defaults in the [roadmap](./docs/roadmap.md), which records every measurement that shaped the engine.
-
 ## Dependencies
 
-| Dependency | Needed for | Version |
-|---|---|---|
-| [CMake](https://cmake.org/) | Build | 3.16+ |
-| [Eigen3](https://eigen.tuxfamily.org/) | Math | 3.3+ |
-| [yaml-cpp](https://github.com/jbeder/yaml-cpp) | Scene files | any recent |
-| [raylib](https://www.raylib.com/) | Renderer only | 4.5+ |
-| [Dear ImGui](https://github.com/ocornut/imgui) + [rlImGui](https://github.com/raylib-extras/rlImGui) | Renderer only | ImGui 1.92 |
-
-The repository keeps `lib/imgui` and `lib/rlImGui` as empty placeholders; clone the upstream sources into them before a visual build. Headless builds need none of the renderer dependencies.
-
-### Build
-
-```bash
-# CMake
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-
-# or the helper
-./fxmake            # Release
-./fxmake debug      # Debug
-./fxmake rebuild    # clean + rebuild
-```
+CMake 3.16+, Eigen 3.3+ and yaml-cpp. The windowed viewer also needs raylib 4.5+, Dear ImGui and rlImGui; the [installation guide](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) covers each platform.
 
 ## Documentation
 
-| Doc | Description |
-|---|---|
-| [Documentation site](https://bharath2.github.io/fx2d-physics-engine/) | Guided introduction, runnable demos, and full API reference |
-| [Scene YAML](./docs/reference/scene-yaml.md) | Scene blocks, entities, geometry types, joints and physics fields |
-| [XPBD solver](./docs/concepts/xpbd.md) | Per-substep pipeline, constraint kernel equations, and constraint types |
-| [Collision pipeline](./docs/concepts/collisions.md) | SAT narrow phase, penetration correction, restitution, and friction |
-| [Guides](./docs/guides/index.md) | Headless simulation, input, queries, contacts, groups, renderer, and joints |
-| [Math utilities](./docs/reference/math.md) | `FxArray`, vector/matrix types, and helper functions |
-| [Roadmap](./docs/roadmap.md) | What is next, with the measurements behind each decision |
-| [Next steps](./docs/next_steps.md) | Session handoff: where the step time goes now, and what to pick up next |
-
-## Roadmap highlights
-
-Delivered most recently: the mouse joint, the browser playground, and a performance rework (a broad phase that skips unchanged trees, allocation-free hot paths, and the colour-batched SIMD contact solve from the [SIMD plan](./docs/roadmap/simd.md)) worth 2.2-8.1x per step.
-
-- **Ropes and bridges**: distance joints and a dynamic chain mode.
-- **Time-of-impact CCD** so fast bodies never tunnel through chains and edges.
-- **More joints**: weld, wheel, pulley, gear.
+The [documentation site](https://bharath2.github.io/fx2d-physics-engine/) has the guides, demos, browser playground and API reference. To browse the same pages on GitHub, including the roadmap, start from the [docs index](./docs/README.md).
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING](./docs/contributing.md) for the workflow, the lint gate (`./scripts/lint.sh`) and how to run the test suite. Open roadmap items each record the motivation, the relevant code paths and a suggested approach, so they make good first issues.
+Contributions are welcome. See [CONTRIBUTING](./docs/contributing.md) for the workflow, the lint gate (`./scripts/lint.sh`) and how to run the test suite.
 
 If Fx2D is useful to you, a ⭐ on the repository helps others find it.
 
