@@ -22,8 +22,6 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 
 <img src="./examples/angry_boxes/play.gif" alt="Angry Boxes demo: a mouse-driven slingshot launches a ball into a tower of boxes simulated by the Fx2D physics engine" width="720" />
 
-<sub>`examples/angry_boxes` — drag the ball, release, topple the tower. Mouse input, contact impulses and a draw overlay in ~150 lines.</sub>
-
 </div>
 
 ---
