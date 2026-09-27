@@ -30,35 +30,23 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 
 ## Why Fx2D?
 
-- **Physics you can read.** One explicit pipeline: a dynamic AABB tree proposes pairs, a skin-aware SAT narrow phase produces contacts across *every* shape type, and a substepped XPBD solver resolves contacts, friction and joints. The [solver](https://bharath2.github.io/fx2d-physics-engine/concepts/xpbd) and [collision](https://bharath2.github.io/fx2d-physics-engine/concepts/collisions) docs derive the equations the code implements.
-- **Built for simulation, not just games.** A renderer-free build steps thousands of times per second with no window, no GPU and no raylib. Inject keyboard and mouse state programmatically, read contacts, cast rays, and batch rollouts for RL or data collection.
-- **Deterministic and tested.** Fixed timestep, fixed solver ordering, no threads by default. An adversarial test suite covers tall stacks, pyramids, 10:1 and 100:1 mass ratios, paper-thin slivers, a Newton's cradle, spinning bodies and kinematic platforms, with thresholds that were measured rather than guessed. A solver regression suite pins golden state, so a speed-only change provably leaves the physics alone.
-- **Declarative scenes.** Describe worlds, textures, joints and physics parameters in YAML, then load them from C++ in one line. Reset a scene to its authored state at any time.
-- **Small and embeddable.** About 8k lines of C++20, a single static library, BSD-3-Clause. Depends only on Eigen and yaml-cpp in headless mode.
+- **Physics you can read.** One explicit pipeline, from broad phase to SAT contacts to a substepped XPBD solver, with [solver](https://bharath2.github.io/fx2d-physics-engine/concepts/xpbd) and [collision](https://bharath2.github.io/fx2d-physics-engine/concepts/collisions) docs that derive the equations the code implements.
+- **Built for simulation, not just games.** The headless build steps thousands of times per second with no window or GPU, for tests, batch rollouts and reinforcement learning.
+- **Deterministic and tested.** Fixed timestep and solver order, adversarial stress scenes, and golden regression tests that keep speedups from changing the physics.
+- **Small and embeddable.** About 8k lines of C++20 in one static library under BSD-3-Clause. Headless builds need only Eigen and yaml-cpp.
 
 ## Features
 
 | Area | What you get |
 |---|---|
-| **Shapes** | Circles, capsules, edges, chains (open polylines for terrain), convex polygons, and rounded rectangles/polygons via a skin radius, all in one `vertices[] + skin_radius` representation |
-| **Broad phase** | SAH-guided dynamic AABB tree with fat boxes and dual-tree pair descent; proxies swept over the whole step, and the tree walked only on substeps where a proxy moved |
-| **Narrow phase** | Separating Axis Theorem with skin-aware contact generation, clipping manifolds, one-sided chain contacts |
-| **Continuous collision** | Opt-in speculative contacts (`ccd: true`) to curb tunneling for fast bodies |
-| **Solver** | Substepped XPBD with compliance, warm starting, restitution, and Coulomb static/dynamic friction. Default 14 substeps × 4 velocity passes, chosen by measurement |
-| **Vectorised contact solve** | Contacts graph-coloured into independent batches and solved several lanes at a time: portable C++ with no intrinsics, vectorising to AVX2 on x86-64 and NEON on ARM |
-| **Joints & motors** | Revolute and prismatic joints with position, velocity and effort control modes and PID tuning |
-| **Mouse joint** | A damped spring from the cursor to a grabbed body, tuned by frequency and damping ratio so it scales with mass; `mouse_drag: true` in a scene gives click-and-drag for free |
-| **Queries** | Ray casts, overlap (circle/box/point/shape) and point picking that share the simulation's own narrow phase |
-| **Contacts & events** | Buffered contacts each step, begin/end contact events, trigger-only sensor entities |
-| **Entity groups** | Named sets you bulk enable/delete/reset, plus one-integer intra-group collision filtering |
-| **Input** | Renderer-agnostic keyboard and mouse with world-space cursor; identical API when injected headlessly |
-| **Sleeping** | Resting bodies stop consuming solver time until disturbed |
-| **Scenes** | YAML scene description for entities, textures, joints and solver parameters, with reset callbacks |
-| **Headless** | Build the physics core with no renderer for tests, CI, batch simulation and RL |
-| **Measured performance** | Allocation-free hot path, a per-phase profiler (`FX2D_PROFILE`) and a three-scene benchmark; every optimisation landed with an A/B behind it |
-| **Cross-platform** | x86-64 and ARM64. CI builds and tests with GCC, Clang, Apple Clang and MSVC, plus an aarch64 cross-build run under qemu; `FX2D_ARCH_BASELINE` pins a fixed ISA for shipping builds |
-| **Math** | NumPy-style `FxArray`, vector/matrix helpers and geometry utilities in `Fx2D/Math.h` |
-| **Rendering** | Lightweight cross-platform viewer on raylib with a Dear ImGui inspector and a draw-callback hook for overlays |
+| **Shapes** | Circles, capsules, edges, chains for terrain, and convex or rounded polygons |
+| **Collision** | Dynamic AABB tree, SAT contacts with clipped manifolds, opt-in speculative CCD |
+| **Solver** | Substepped XPBD with friction, restitution, warm starting, sleeping and a vectorised contact solve |
+| **Joints** | Revolute and prismatic joints with PID motors, plus a mouse joint for click-and-drag |
+| **Queries & events** | Ray casts, overlap and point queries, begin/end contact events and sensors |
+| **Scenes** | YAML scenes with textures and joints, entity groups, collision filtering and one-call reset |
+| **Viewer & input** | raylib viewer with an ImGui inspector; keyboard and mouse input that also works headless |
+| **Platforms** | x86-64 and ARM64, tested with GCC, Clang, Apple Clang and MSVC |
 
 ## Quick start
 
