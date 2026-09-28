@@ -157,14 +157,18 @@
 
 .playground-frame {
   position: relative;
-  width: 100%;
+  width: 75%;
   aspect-ratio: 16 / 9;
-  margin: 24px 0 32px;
+  margin: 24px auto 32px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 14px;
   overflow: hidden;
   background: #0b1520;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+@media (max-width: 767px) {
+  .playground-frame { width: 100%; }
 }
 
 .playground-frame iframe {

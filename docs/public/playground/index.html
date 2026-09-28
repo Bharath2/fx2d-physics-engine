@@ -9,6 +9,7 @@
   <style>
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0b1520; color: #adc3cc; font: 14px system-ui, sans-serif; }
     body { display: grid; place-items: center; }
+    #preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
     /* Keep the framebuffer fixed; GLFW maps CSS-scaled pointer coordinates back into it. */
     #canvas {
       display: block;
@@ -19,29 +20,69 @@
       outline: none;
       touch-action: none;
     }
-    #status { position: fixed; left: 12px; bottom: 12px; max-width: calc(100% - 150px); padding: 8px; border-radius: 6px; background: #0b1520e6; font-size: 12px; }
+    #status { position: fixed; left: 12px; bottom: 12px; max-width: calc(100% - 150px); padding: 8px; border-radius: 6px; background: #0b1520f5; font-size: 12px; }
     #status:empty { display: none; }
     #fullscreen { position: fixed; right: 12px; bottom: 12px; padding: 8px 12px; border: 1px solid #adc3cc; border-radius: 6px; background: #0b1520e6; color: #fff; font: inherit; cursor: pointer; }
     #fullscreen:hover { background: #234051; }
     #fullscreen:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    #retry { color: #fff; background: #234051; border: 1px solid #adc3cc; border-radius: 4px; padding: 4px 8px; margin-top: 6px; cursor: pointer; }
+    #retry:not([hidden]) { display: block; }
   </style>
 </head>
 <body>
   <canvas id="canvas" width="960" height="540" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
-  <div id="status" role="status">Loading Fx2D…</div>
+  <img id="preview" src="preview.png" alt="Preview of the Fx2D playground with shapes, a ramp and a seesaw" />
+  <div id="status" role="status"><span id="status-message">Loading interactive playground…</span><button id="retry" type="button" hidden>Retry</button></div>
   <button id="fullscreen" type="button" aria-label="Enter fullscreen">Fullscreen</button>
   <script>
     var statusEl = document.getElementById("status");
+    var statusMessage = document.getElementById("status-message");
+    var preview = document.getElementById("preview");
+    var retryButton = document.getElementById("retry");
     var canvas = document.getElementById("canvas");
     var fullscreenButton = document.getElementById("fullscreen");
+    var ready = false;
+    var failed = false;
+    var startupTimer = setTimeout(function () {
+      if (!ready) showFailure("The interactive preview is taking too long to load. Check your connection and retry.");
+    }, 20000);
+    function showFailure(message) {
+      failed = true;
+      clearTimeout(startupTimer);
+      preview.hidden = false;
+      statusEl.hidden = false;
+      statusMessage.textContent = message;
+      retryButton.hidden = false;
+    }
+    retryButton.addEventListener("click", function () { location.reload(); });
     var Module = {
       canvas: canvas,
-      setStatus: function (t) { statusEl.textContent = t || ""; },
-      onRuntimeInitialized: function () { statusEl.textContent = ""; },
-      postRun: [function () { statusEl.textContent = ""; }],
+      locateFile: function (path, prefix) { return prefix + path + "?v=20260928-2"; },
+      setStatus: function (t) { if (!ready && !failed && t) statusMessage.textContent = t; },
+      onAbort: function () { showFailure("The interactive playground could not start. Retry, or check that graphics acceleration is enabled in Chrome."); },
+      postRun: [function () {
+        // Wait for the renderer's first animation frame before removing the static preview.
+        requestAnimationFrame(function () { requestAnimationFrame(function () {
+          if (failed) return;
+          if (!Module.ctx || Module.ctx.isContextLost()) {
+            showFailure("WebGL is unavailable. Enable graphics acceleration in Chrome and retry.");
+            return;
+          }
+          ready = true;
+          clearTimeout(startupTimer);
+          preview.hidden = true;
+          statusEl.hidden = true;
+        }); });
+      }],
       print: function (t) { console.log(t); },
       printErr: function (t) { console.error(t); },
     };
+    window.addEventListener("error", function () { showFailure("The interactive playground could not load. Check your connection and retry."); });
+    window.addEventListener("unhandledrejection", function () { showFailure("The interactive playground could not start. Check your connection and browser graphics settings, then retry."); });
+    canvas.addEventListener("webglcontextlost", function (event) {
+      event.preventDefault();
+      showFailure("The browser lost its graphics context. Retry to restart the playground.");
+    });
     canvas.addEventListener("pointerdown", function () { canvas.focus({ preventScroll: true }); });
     fullscreenButton.hidden = !document.fullscreenEnabled;
     fullscreenButton.addEventListener("click", async function () {
@@ -50,7 +91,8 @@
         else await document.documentElement.requestFullscreen();
         canvas.focus({ preventScroll: true });
       } catch (error) {
-        statusEl.textContent = "Fullscreen is unavailable. You can still play in this view.";
+        statusEl.hidden = false;
+        statusMessage.textContent = "Fullscreen is unavailable. You can still play in this view.";
       }
     });
     document.addEventListener("fullscreenchange", function () {
@@ -62,6 +104,6 @@
     canvas.addEventListener("wheel", function (e) { e.preventDefault(); }, { passive: false });
     window.addEventListener("keydown", function (e) { if (e.code === "Space" && document.activeElement === canvas) e.preventDefault(); });
   </script>
-  <script async src="playground.js"></script>
+  <script async src="playground.js?v=20260928-2" onerror="showFailure('The playground download failed. Check your connection and retry.')"></script>
 </body>
 </html>
