@@ -92,7 +92,6 @@ class FxJoint {
 // Revolute joint with anchor and angular limit constraints
 class FxRevoluteJoint : public FxJoint {
   private:
-    FxVec2f m_anchor_point; // Anchor point in entity1's local coordinates
     // The angular limits are not held here: the FxAngularLimitConstraint this joint builds owns
     // them, and a second copy on the joint was written once and never read again.
     float m_target_theta = 0.0f; // Target angle for PID control
