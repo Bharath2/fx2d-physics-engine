@@ -68,8 +68,14 @@ else()
   endif()
 endif()
 
-# --- Eigen3 (header-only) ---
-find_package(Eigen3 3.3 REQUIRED)
+# Eigen 5 still exports Eigen3::Eigen. Check the minimum ourselves: its package
+# version policy treats a single requested version as a compatibility range.
+# This also keeps support for CMake 3.16, before find_package version ranges.
+find_package(Eigen3 REQUIRED CONFIG)
+if (Eigen3_VERSION VERSION_LESS "3.3")
+  message(FATAL_ERROR "Fx2D requires Eigen 3.3 or newer; found ${Eigen3_VERSION}")
+endif()
+message(STATUS "Fx2D Eigen version: ${Eigen3_VERSION}")
 
 # ============================================================
 # ImGui + rlImGui

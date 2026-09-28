@@ -400,7 +400,10 @@ void init_velocity_pass(FxContact& contact, FxContactSolverData& data,
 
         const FxVec2f vA = bodies.velocity_at(contact.body1, data.rA[i]);
         const FxVec2f vB = bodies.velocity_at(contact.body2, data.rB[i]);
-        data.vn_pre[i] = (vB - vA).dot(n);
+        // Eigen 5 dot() explicitly uses FMA, bypassing -ffp-contract=off. Keep this
+        // restitution input's rounding stable across Eigen versions and CPU targets.
+        const FxVec2f relative_velocity = vB - vA;
+        data.vn_pre[i] = relative_velocity.x() * n.x() + relative_velocity.y() * n.y();
     }
 }
 

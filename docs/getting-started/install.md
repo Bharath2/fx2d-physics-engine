@@ -15,6 +15,10 @@ cd fx2d-physics-engine
 
 Install CMake 3.16+, Eigen3 3.3+, yaml-cpp, and raylib 4.5+. For visual builds, populate the placeholder `lib/imgui` and `lib/rlImGui` folders with their upstream sources before configuring CMake.
 
+Eigen 3 and Eigen 5 are supported; both use the CMake package name `Eigen3` and
+target `Eigen3::Eigen`. Configuration prints the selected version. To select a
+specific installation, pass `-DEigen3_DIR=/path/to/share/eigen3/cmake`.
+
 ## Build the viewer
 
 ```bash

@@ -28,7 +28,7 @@ jobs:
           echo "OK: no assert() usage in tests/"
 
   build-and-test:
-    name: linux ${{ matrix.build_type }} (native=${{ matrix.native }})
+    name: linux ${{ matrix.build_type }} (native=${{ matrix.native }}, Eigen=${{ matrix.eigen }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -37,12 +37,18 @@ jobs:
           # The portable configuration, and the one the sanitizers run in.
           - build_type: Release
             native: "OFF"
+            eigen: system
           - build_type: Debug
             native: "OFF"
+            eigen: system
           # Vectorised. CI used to build with FX2D_NATIVE=OFF in every job, which meant the
           # code paths users actually get in a default build were never compiled here.
           - build_type: Release
             native: "ON"
+            eigen: system
+          - build_type: Release
+            native: "ON"
+            eigen: "5.0.1"
     steps:
       - uses: actions/checkout@v4
 
@@ -54,9 +60,21 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake g++ make libeigen3-dev libyaml-cpp-dev libtbb-dev
 
+      - name: Install Eigen 5
+        if: matrix.eigen == '5.0.1'
+        run: |
+          git clone --depth 1 --branch 5.0.1 https://gitlab.com/libeigen/eigen.git "$RUNNER_TEMP/eigen-src"
+          cmake -S "$RUNNER_TEMP/eigen-src" -B "$RUNNER_TEMP/eigen-build" \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/eigen" \
+            -DCMAKE_EXPORT_PACKAGE_REGISTRY=OFF \
+            -DBUILD_TESTING=OFF -DEIGEN_BUILD_TESTING=OFF -DEIGEN_BUILD_DOC=OFF \
+            -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF -DEIGEN_BUILD_DEMOS=OFF
+          cmake --install "$RUNNER_TEMP/eigen-build"
+
       - name: Configure
         run: |
           cmake -S . -B build-ci \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/eigen" \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DFX2D_HEADLESS=ON \
             -DFX2D_BUILD_TESTS=ON \
