@@ -1,4 +1,5 @@
 :root {
+  --vp-nav-logo-height: 32px;
   --vp-c-brand-1: #16b9c5;
   --vp-c-brand-2: #33d6ce;
   --vp-c-brand-3: #0b8fa7;
@@ -24,6 +25,11 @@
   border-bottom-color: rgba(93, 203, 216, 0.12) !important;
   background: color-mix(in srgb, var(--vp-c-bg) 88%, transparent) !important;
   backdrop-filter: blur(14px);
+}
+
+.VPNavBarTitle .logo {
+  width: auto;
+  margin-right: 0;
 }
 
 .VPHomeHero .image-container {

@@ -32,9 +32,9 @@ export default defineConfig({
     ],
     ["meta", { name: "author", content: "Bharath Chandra Irigireddy" }],
     ["meta", { name: "robots", content: "index, follow" }],
-    ["link", { rel: "icon", href: "/fx2d-physics-engine/mark.svg", type: "image/svg+xml" }],
-    ["link", { rel: "icon", href: "/fx2d-physics-engine/favicon-32.png", type: "image/png", sizes: "32x32" }],
-    ["link", { rel: "apple-touch-icon", href: "/fx2d-physics-engine/apple-touch-icon.png" }],
+    ["link", { rel: "icon", href: "/fx2d-physics-engine/favicon-32.png?v=brand-2", type: "image/png", sizes: "32x32" }],
+    ["link", { rel: "icon", href: "/fx2d-physics-engine/brand/fx2d-icon.svg?v=brand-2", type: "image/svg+xml", sizes: "any" }],
+    ["link", { rel: "apple-touch-icon", href: "/fx2d-physics-engine/apple-touch-icon.png?v=brand-2" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Fx2D Physics Engine" }],
     ["meta", { property: "og:title", content: "Fx2D — 2D rigid-body physics engine in C++20" }],
@@ -82,8 +82,12 @@ export default defineConfig({
     }
   },
   themeConfig: {
-    logo: "/mark.svg",
-    siteTitle: "Fx2D",
+    logo: {
+      light: "/brand/fx2d-logo-light.svg",
+      dark: "/brand/fx2d-logo-dark.svg",
+      alt: "Fx2D",
+    },
+    siteTitle: false,
     nav: [
       { text: "Playground", link: "/playground" },
       { text: "Guides", link: "/guides/" },
