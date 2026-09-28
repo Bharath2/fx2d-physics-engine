@@ -1,17 +1,27 @@
 :root {
   --vp-nav-logo-height: 32px;
-  --vp-c-brand-1: #16b9c5;
-  --vp-c-brand-2: #33d6ce;
-  --vp-c-brand-3: #0b8fa7;
+  --vp-c-brand-1: #087580;
+  --vp-c-brand-2: #086976;
+  --vp-c-brand-3: #087580;
   --vp-c-brand-soft: rgba(22, 185, 197, 0.16);
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #6ee7e7 12%, #34b9ee 55%, #b1f1d7 95%);
+  --vp-home-hero-name-color: var(--vp-c-text-1);
+  --vp-home-hero-name-background: none;
   --vp-home-hero-image-background-image: radial-gradient(circle at 50% 42%, rgba(29, 196, 210, 0.24), transparent 67%);
   --vp-home-hero-image-filter: blur(44px);
-  --vp-code-block-bg: #071826;
+  --vp-code-block-bg: #ffffff;
+  --vp-code-tab-bg: #f4f6f8;
 }
 
 .dark {
+  --vp-c-brand-1: #4ddfdb;
+  --vp-c-brand-2: #33d6ce;
+  --vp-c-brand-3: #0b8fa7;
+  --vp-button-brand-text: #07111e;
+  --vp-button-brand-bg: #4ddfdb;
+  --vp-button-brand-hover-text: #07111e;
+  --vp-button-brand-active-text: #07111e;
+  --vp-code-block-bg: #071826;
+  --vp-code-tab-bg: var(--vp-code-block-bg);
   --vp-c-bg: #07111e;
   --vp-c-bg-alt: #0b1928;
   --vp-c-bg-soft: #0e2132;
@@ -27,6 +37,10 @@
   backdrop-filter: blur(14px);
 }
 
+:root:not(.dark) .vp-doc div[class*="language-"] {
+  box-shadow: inset 0 0 0 1px var(--vp-c-divider);
+}
+
 .VPNavBarTitle .logo {
   width: auto;
   margin-right: 0;
@@ -34,6 +48,22 @@
 
 .VPHomeHero .image-container {
   transform: perspective(900px) rotateY(-5deg) rotateX(2deg);
+}
+
+.home-wordmark {
+  display: block;
+  width: clamp(170px, 20vw, 230px);
+  height: auto;
+  margin: 0 auto 16px;
+  color: #0e293a;
+}
+
+.home-wordmark-accent { stroke: #16b9c5; }
+.dark .home-wordmark { color: #e8f5f8; }
+.dark .home-wordmark-accent { stroke: #4ddfdb; }
+
+@media (min-width: 960px) {
+  .home-wordmark { margin-left: 0; }
 }
 
 .VPHomeHero .image-src {
@@ -44,6 +74,10 @@
 
 .VPFeature {
   border: 1px solid var(--vp-c-divider) !important;
+  background: var(--vp-c-bg-soft) !important;
+}
+
+.dark .VPFeature {
   background: linear-gradient(145deg, rgba(20, 51, 66, 0.66), rgba(8, 23, 35, 0.74)) !important;
 }
 
