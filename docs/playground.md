@@ -5,13 +5,15 @@ description: Try the Fx2D physics engine in your browser. Drag bodies with the m
 
 # Playground
 
-The engine, compiled to WebAssembly, running in your browser. **Drag anything** with the left mouse button. **Right-click** or press **Space** to spawn a shape at the cursor, **C** clears what you spawned, **R** resets the scene.
+The engine, compiled to WebAssembly, running in your browser. **Drag anything** with the left mouse button: swing the wrecking ball into the crates, or pull the rope bridge out of shape. **Right-click** or press **Space** to spawn a shape at the cursor, **C** clears what you spawned, **R** resets the scene.
 
 <div class="playground-frame">
   <iframe src="/fx2d-physics-engine/playground/index.html" title="Fx2D playground" allow="fullscreen" loading="eager"></iframe>
 </div>
 
-What you are dragging is the [mouse joint](/guides/joints#mouse-joint): a damped spring from the cursor to the point you grabbed, solved by the same XPBD kernel as every other constraint. The seesaw is a revolute joint, the hillside is a chain collider, and the rounded hexagon is a polygon with a skin radius.
+What you are dragging is the [mouse joint](/guides/joints#mouse-joint): a damped spring from the cursor to the point you grabbed, solved by the same XPBD kernel as every other constraint.
+
+Everything else in the scene is one engine feature or another. The wrecking ball hangs on a thirteen-link rope and the bridge deck is ten planks slung between two towers, both chains of [distance joints](/guides/joints#distance-joint) — the deck's links are compliant, which is why it dips when something lands on it and springs back when it comes off. The seesaw is a revolute joint, the hillside is a chain collider, and the rounded hexagon is a polygon with a skin radius.
 
 ## The same program on the desktop
 

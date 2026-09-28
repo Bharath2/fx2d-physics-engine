@@ -430,6 +430,7 @@ if (FX2D_BUILD_TESTS)
     tests/test_mouse_joint.cpp
     tests/test_contact_graph.cpp
     tests/test_solver_regression.cpp
+    tests/test_distance_joint.cpp
   )
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)

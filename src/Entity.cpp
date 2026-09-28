@@ -275,6 +275,12 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
     prev_pose = pose;
     prev_velocity = velocity;
     velocity += calc_acceleration(gravity) * step_dt;
+    // Drag-like damping on both the linear and angular parts. Implicit rather than
+    // `v *= 1 - d*dt`, so it stays stable and never reverses the velocity however large the
+    // coefficient or the timestep. A coefficient of zero, the default, is exactly no damping.
+    if (vel_damping > 0.0f) {
+        velocity *= 1.0f / (1.0f + vel_damping * static_cast<float>(step_dt));
+    }
     __update_pose(step_dt); // pose += velocity * step_dt;
 
     // update pose of the collision shape and visual shape

@@ -80,6 +80,7 @@ class FxJoint {
     // Type checking methods
     virtual bool is_revolute() const { return false; }
     virtual bool is_prismatic() const { return false; }
+    virtual bool is_distance() const { return false; }
 
     // Virtual apply_controls method for applying joint controls
     virtual void apply_controls(double dt) = 0;
@@ -118,6 +119,53 @@ class FxRevoluteJoint : public FxJoint {
     float get_omega() const;
     void set_max_torque(float max_torque) { set_max_effort(max_torque); }
     float get_max_torque() const { return get_max_effort(); }
+
+    // Apply controls method
+    void apply_controls(double dt) override;
+};
+
+// Holds anchor separation within a range while leaving rotation free. Equal limits give a
+// rigid link; a zero minimum gives a slack rope. Compliance softens it and PID drives length.
+// See docs/guides/joints.md for ropes, winches and collision groups.
+class FxDistanceJoint : public FxJoint {
+  private:
+    std::shared_ptr<FxDistanceConstraint> m_link;
+    float m_target_length = 0.0f; // Target separation for PID control
+    float m_target_rate = 0.0f; // Target rate of change of separation for PID control
+
+    void apply_force_effort(float force);
+
+  public:
+    // A negative limit means "whatever the anchors are apart right now", so a link authored in
+    // place needs no measuring. min > max is rejected.
+    FxDistanceJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
+                    const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor1 = {0.0f, 0.0f},
+                    const FxVec2f& anchor2 = {0.0f, 0.0f}, float min_length = -1.0f,
+                    float max_length = -1.0f);
+
+    // Type checking override
+    bool is_distance() const override { return true; }
+
+    // Limits. Reeling a rigid link in or out means moving both limits, which is what a winch
+    // does; the motor below is the alternative when the link has slack to work in.
+    void set_limits(float min_length, float max_length);
+    float get_min_length() const { return m_link->min_length; }
+    float get_max_length() const { return m_link->max_length; }
+
+    // Link softness. Compliance is metres per newton; stiffness is its reciprocal.
+    void set_compliance(double compliance) { m_link->setCompliance(compliance); }
+    void set_link_stiffness(double stiffness) { m_link->set_stiffness(stiffness); }
+
+    // Control methods - set targets for PID control
+    void set_length(float length, bool instant = true); // Target separation along the link
+    void set_rate(float rate, bool instant = true); // Target separation rate
+    void set_force(float force); // Positive pushes the anchors apart
+
+    // Query methods
+    float get_length() const; // Current anchor separation
+    float get_rate() const; // Rate the separation is changing at
+    void set_max_force(float max_force) { set_max_effort(max_force); }
+    float get_max_force() const { return get_max_effort(); }
 
     // Apply controls method
     void apply_controls(double dt) override;

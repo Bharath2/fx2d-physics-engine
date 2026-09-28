@@ -40,7 +40,7 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 | **Shapes** | Circles, capsules, edges, chains for terrain, and convex or rounded polygons |
 | **Collision** | Dynamic AABB tree, SAT contacts with clipped manifolds, opt-in speculative CCD |
 | **Solver** | Substepped XPBD with friction, restitution, warm starting, sleeping and a vectorised contact solve |
-| **Joints** | Revolute and prismatic joints with PID motors, plus a mouse joint for click-and-drag |
+| **Joints** | Revolute, prismatic, distance and rope joints with PID motors, plus a mouse joint for click-and-drag |
 | **Queries & events** | Ray casts, overlap and point queries, begin/end contact events and sensors |
 | **Scenes** | YAML scenes with textures and joints, entity groups, collision filtering and one-call reset |
 | **Viewer & input** | raylib viewer with an ImGui inspector; keyboard and mouse input that also works headless |
@@ -113,7 +113,7 @@ Every example is a plain C++ file plus a `Scene.yml` under [`examples/`](./examp
     <td align="center" width="50%">
       <a href="./examples/playground/"><img src="./examples/playground/play.gif" alt="Playground demo" /></a><br />
       <b><a href="./examples/playground/">Playground</a></b><br />
-      <sub>Mouse joint drag, spawn shapes, seesaw, chain ramp. Also runs in the browser</sub>
+      <sub>Wrecking ball, rope bridge, mouse drag, seesaw, chain ramp. Also runs in the browser</sub>
     </td>
     <td align="center" width="50%">
       <a href="./examples/angry_boxes/"><img src="./examples/angry_boxes/play.gif" alt="Angry Boxes slingshot demo" /></a><br />

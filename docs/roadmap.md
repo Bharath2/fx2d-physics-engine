@@ -219,13 +219,13 @@ The SIMD plan has now been worked end to end; what remains is ordinary engine wo
 re-ranked performance list. Physics features come first because the engine is fast enough that
 the next users are more likely to be blocked by a missing joint than by a slow step.
 
-1. **The rope thread** (item 10): distance joint → FxChain dynamic mode → bridge demo →
-   chains-under-tension tests. One connected piece of work; each stage is useful alone, and
-   the end closes the last untested adversarial class from item 8.
+1. **The rest of the rope thread** (item 10): distance and rope joints and the playground
+   bridge demo are implemented. Remaining: FxChain dynamic mode and chains-under-tension
+   adversarial tests, closing the last untested class from item 8.
 2. **The floor escape** (detail in item 8): the only unexplained defect. 1–2 balls per 200
    through the 0.8-thick catch floor, substep-independent, pinned at <=3 by the bucket test.
-3. **The rest of item 9** now that the mouse joint has landed: weld and wheel (distance comes
-   with the rope thread). World-anchored constraint support is already in the base classes, so
+3. **The rest of item 9** now that mouse and distance joints are implemented: weld and wheel.
+   World-anchored constraint support is already in the base classes, so
    a weld-to-world is cheap; the truck example still hand-assembles what a wheel joint should
    give it.
 4. **Performance, per the SIMD plan's re-ranked list** ([the order from here](./roadmap/simd#the-order-from-here)).
@@ -262,6 +262,10 @@ the next users are more likely to be blocked by a missing joint than by a slow s
 Housekeeping, whenever convenient: the Debug/ASan CI job creeps as suites grow — marking the
 slingshot suite slow is the lever; and the bucket spawn constants exist in both the example
 and the adversarial test, which cannot share code, so change them in step.
+
+Found while building the distance joint, and worth a look: the crate stack in
+`examples/playground` creeps sideways about 1 cm/s while resting, which nothing in the resting
+stability suite currently catches because those tests measure sink rather than lateral drift.
 
 ## Priority Targets
 
@@ -520,8 +524,18 @@ and the adversarial test, which cannot share code, so change them in step.
    constraints from the existing kernel, motors and PID come from the base class, and the
    constraint-naming scheme keeps many joints on one rig safe — so each new type is one or
    two constraint formulations plus tests. In rough order of value:
-   - **Distance / rope joint** — fixed or maximum separation between two anchors; also the
-     building block the FxChain dynamic mode wants.
+   - **Distance / rope joint** — delivered. `FxDistanceJoint` (`include/Fx2D/Joints.h`) holds
+     two local anchors within `[min_length, max_length]` through `FxDistanceConstraint`: equal
+     limits give a rigid link, a zero minimum gives a rope that hangs slack, and `compliance`
+     buys stretch of exactly `m g c` under a load. Rotation stays free, so a chain of them is a
+     rope rather than a jointed arm. The motor drives separation in all three control modes.
+     YAML `type: distance` and `type: rope`; covered by `tests/test_distance_joint.cpp`, and
+     `examples/playground` builds a wrecking ball and a plank bridge out of it.
+
+     Two things that surface in use, both recorded in the tests: a large one-shot
+     `set_limits()` change is solved inside a single substep and can carry the load past the
+     anchor, so reel gradually; and a rigid deck laid along an arc can only deepen that arc by
+     the slack it was drawn with, so a bridge that should dip under load needs compliance.
    - **Mouse joint** — delivered. `FxMouseJoint` (`include/Fx2D/Joints.h`) is a damped XPBD
      spring from a world point to a body anchor, tuned by frequency and damping ratio so it
      scales with mass, with a force cap. `FxScene::enable_mouse_drag()` (YAML `mouse_drag:`)
@@ -544,9 +558,11 @@ and the adversarial test, which cannot share code, so change them in step.
    section maps onto the same spec. Naming follows the group scheme: `<name>_<i>` links,
    `<name>_j<i>` joints, constraints `<joint>_<Type>`.
 
-   Prerequisites all landed: groups give membership, bulk delete and intra-group collision
-   filtering; the constraint-naming fix makes many joints on one rig safe; a distance joint
-   (item 9) is the natural first link type before capsules-plus-revolutes.
+   Prerequisites all landed, and the distance joint (item 9) is now the link type. What
+   `examples/playground` does by hand is exactly what the builder should emit: a group for the
+   links, a distance joint per pair taking its rest length from the authored geometry, and
+   per-end anchoring to a static body. Lifting those two loops into `FxChain` plus a `chains:`
+   YAML section is the remaining work.
 
    Expectations to hold the tests to: joints are maximal-coordinate, so a loaded rope will
    stretch — compliance is the dial, and the tests should pin measured stretch at a chosen

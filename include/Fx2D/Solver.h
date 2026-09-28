@@ -219,6 +219,30 @@ class FxSeparationConstraint : public FxConstraint {
                   bool& active) const override;
 };
 
+// Keeps anchor separation within [min_length, max_length], solving only violated bounds.
+// Equal limits give a rigid link; a zero minimum gives a rope that allows slack.
+class FxDistanceConstraint : public FxConstraint {
+  private:
+    FxVec2f m_anchor1; // Local anchor point on entity1
+    FxVec2f m_anchor2; // Local anchor point on entity2
+
+  public:
+    float min_length = 0.0f; // Anchors are pushed apart below this
+    float max_length = 1.0f; // Anchors are pulled together above this
+    float slop = 0.0f; // Tolerance zone outside both limits
+    bool enabled = true; // Whether this constraint is active
+
+    FxDistanceConstraint(const std::shared_ptr<FxEntity>& e1, const std::shared_ptr<FxEntity>& e2,
+                         const FxVec2f& anchor1, const FxVec2f& anchor2);
+    // Current anchor separation in world units, whatever the limits are.
+    float length() const;
+    // World position of each anchor at the bodies' current poses.
+    FxVec2f anchor1_world() const;
+    FxVec2f anchor2_world() const;
+    void evaluate(float& C, FxVec2f& g1, FxVec2f& g2, float& gth1, float& gth2,
+                  bool& active) const override;
+};
+
 // Constraint that forces motion along a specified axis
 class FxMotionAlongAxisConstraint : public FxConstraint {
   private:

@@ -34,7 +34,7 @@ ball->dynamic_friction = 0.5f;
 ball->vel_damping = 0.02f;
 ```
 
-`elasticity` controls bounce. Static friction resists the start of sliding; dynamic friction applies while sliding. `vel_damping` is a per-body drag-like damping value, not contact friction.
+`elasticity` controls bounce. Static friction resists the start of sliding; dynamic friction applies while sliding. `vel_damping` is a per-body drag-like damping value, not contact friction: it decays both linear and angular velocity every step, so a swinging or rolling body loses energy wherever it is rather than only where it touches something.
 
 ## Observe contacts and make triggers
 

@@ -338,6 +338,148 @@ void FxPrismaticJoint::apply_controls(double dt) {
     apply_force_effort(effort);
 }
 
+// FxDistanceJoint implementation
+FxDistanceJoint::FxDistanceJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
+                                 const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor1,
+                                 const FxVec2f& anchor2, float min_length, float max_length) :
+    FxJoint(name, e1, e2) {
+    m_link = std::make_shared<FxDistanceConstraint>(e1, e2, anchor1, anchor2);
+
+    // Unset limits take the separation the scene was authored with, so a link placed in a scene
+    // holds what it was drawn holding.
+    const float rest = m_link->length();
+    const float lo = (min_length < 0.0f) ? rest : min_length;
+    const float hi = (max_length < 0.0f) ? rest : max_length;
+    if (lo > hi) {
+        throw std::invalid_argument("FxDistanceJoint: min_length must not exceed max_length");
+    }
+    m_link->min_length = lo;
+    m_link->max_length = hi;
+
+    // A joint with no target given should do nothing, and POSITION is the default mode: start
+    // the target at the rest length so the motor error is zero until someone sets one.
+    m_target_length = rest;
+
+    m_constraints.reserve(1);
+    m_constraints.push_back(m_link);
+
+    namespace_constraints();
+}
+
+void FxDistanceJoint::set_limits(float min_length, float max_length) {
+    if (min_length < 0.0f) min_length = 0.0f;
+    if (max_length < min_length) max_length = min_length;
+    m_link->min_length = min_length;
+    m_link->max_length = max_length;
+    wake_entities();
+}
+
+void FxDistanceJoint::apply_force_effort(float force) {
+    const FxVec2f a1 = m_link->anchor1_world();
+    const FxVec2f a2 = m_link->anchor2_world();
+    const FxVec2f d = a2 - a1;
+    // No line to push along while the anchors coincide.
+    if (d.squaredNorm() < 1e-12f) return;
+
+    // Positive effort pushes the anchors apart, matching the prismatic joint's sign. Applied at
+    // the anchors rather than the centres, so an offset anchor also twists the body.
+    const FxVec2f force_vector = d.normalized() * clamp_effort(force);
+    entity1->apply_force(-force_vector, a1);
+    entity2->apply_force(force_vector, a2);
+}
+
+void FxDistanceJoint::set_length(float length, bool instant) {
+    m_target_length = std::max(length, 0.0f);
+    reset_pid_state();
+    wake_entities();
+    instant = instant && m_instant;
+
+    if (instant) {
+        const FxVec2f a1 = m_link->anchor1_world();
+        const FxVec2f a2 = m_link->anchor2_world();
+        const FxVec2f d = a2 - a1;
+        const float current = d.norm();
+        if (current < 1e-6f) return;
+
+        // Move the bodies along the link until the anchors are the target distance apart,
+        // splitting the correction by inverse mass so the heavier body moves less.
+        const FxVec2f correction = d.normalized() * (m_target_length - current);
+        const float m1 = entity1->inv_mass();
+        const float m2 = entity2->inv_mass();
+        const float total_inv_mass = m1 + m2;
+
+        if (total_inv_mass > 1e-12f) {
+            const FxVec2f pos_correction1 = -correction * (m1 / total_inv_mass);
+            const FxVec2f pos_correction2 = correction * (m2 / total_inv_mass);
+
+            entity1->pose.xy() += pos_correction1;
+            entity2->pose.xy() += pos_correction2;
+
+            // Shift the previous pose too, so the move registers no velocity.
+            entity1->prev_pose.xy() += pos_correction1;
+            entity2->prev_pose.xy() += pos_correction2;
+        }
+    }
+}
+
+void FxDistanceJoint::set_rate(float rate, bool instant) {
+    m_target_rate = rate;
+    reset_pid_state();
+    wake_entities();
+    instant = instant && m_instant;
+
+    if (instant) {
+        const FxVec2f d = m_link->anchor2_world() - m_link->anchor1_world();
+        if (d.squaredNorm() < 1e-12f) return;
+        const FxVec2f axis = d.normalized();
+
+        const float rate_error = rate - get_rate();
+        const float m1 = entity1->inv_mass();
+        const float m2 = entity2->inv_mass();
+        const float total_inv_mass = m1 + m2;
+
+        if (total_inv_mass > 1e-12f) {
+            const FxVec2f correction = axis * rate_error;
+            entity1->velocity.xy() += -correction * (m1 / total_inv_mass);
+            entity2->velocity.xy() += correction * (m2 / total_inv_mass);
+        }
+    }
+}
+
+void FxDistanceJoint::set_force(float force) {
+    set_effort(force);
+}
+
+float FxDistanceJoint::get_length() const {
+    return m_link->length();
+}
+
+float FxDistanceJoint::get_rate() const {
+    const FxVec2f a1 = m_link->anchor1_world();
+    const FxVec2f a2 = m_link->anchor2_world();
+    const FxVec2f d = a2 - a1;
+    if (d.squaredNorm() < 1e-12f) return 0.0f;
+    // Anchor velocities, not centre velocities: a spinning body moves its anchor.
+    const FxVec2f relative_velocity =
+        entity2->velocity_at_world_point(a2) - entity1->velocity_at_world_point(a1);
+    return d.normalized().dot(relative_velocity);
+}
+
+void FxDistanceJoint::apply_controls(double dt) {
+    if (!enabled) return;
+
+    // Effort mode uses the stored target directly; other modes synthesize effort through PID.
+    float effort = get_effort();
+    if (get_control_mode() == ControlMode::VELOCITY) {
+        effort = eval_pid(m_target_rate - get_rate(), dt);
+    } else if (get_control_mode() == ControlMode::POSITION) {
+        // Too short is a positive error, and positive effort pushes apart.
+        effort = eval_pid(m_target_length - get_length(), dt);
+    }
+
+    apply_force_effort(effort);
+}
+
 // ---------------------------------------------------------------- FxMouseJoint
 
 bool FxMouseJoint::attach(const std::shared_ptr<FxEntity>& entity, const FxVec2f& world_point) {

@@ -55,6 +55,40 @@ entities:
             geometry:
                 chain: [[0.3, 4.2], [1.6, 3.6], [3.0, 2.4], [4.4, 1.4], [5.6, 0.9], [6.4, 0.6]]
 
+    # Bridge towers. The deck between them is built in main.cpp out of distance joints.
+    tower_left:
+        pose: [9.0, 6.3, 0]
+        physics: *static_physics
+        visual: &tower_visual
+            geometry:
+                rectangle: [0.3, 1.6]
+            texture: [96, 104, 124, 255]
+            border_color: [40, 46, 60, 255]
+            border_thickness: 2.0
+        collision:
+            geometry:
+                rectangle: [0.3, 1.6]
+
+    tower_right:
+        pose: [15.4, 6.3, 0]
+        physics: *static_physics
+        visual: *tower_visual
+        collision:
+            geometry:
+                rectangle: [0.3, 1.6]
+
+    # What the wrecking ball hangs from; the rope itself is built in main.cpp.
+    gantry:
+        pose: [6.3, 8.4, 0]
+        physics: *static_physics
+        visual:
+            geometry:
+                rectangle: [1.2, 0.25]
+            texture: [96, 104, 124, 255]
+        collision:
+            geometry:
+                rectangle: [1.2, 0.25]
+
     # A seesaw: a static pivot with a plank hinged on it.
     pivot:
         pose: [12.0, 1.4, 0]
