@@ -143,10 +143,22 @@
 
 .demo-card { scroll-margin-top: 80px; }
 
+.playground-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 32px clamp(16px, 3vw, 48px) 64px;
+}
+
+.playground-page div[class*="language-"] {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .playground-frame {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9.6;
+  aspect-ratio: 16 / 9;
   margin: 24px 0 32px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 14px;

@@ -7,27 +7,57 @@
   <link rel="icon" href="../mark.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
   <style>
-    html, body { margin: 0; height: 100%; background: #0b1520; color: #adc3cc; font: 14px system-ui, sans-serif; }
-    body { display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: auto; }
-    /* The canvas is the renderer's framebuffer at 1:1, so mouse coordinates need no scaling. */
-    #canvas { width: 960px; height: 540px; display: block; outline: none; border-radius: 6px; flex: none; }
-    #status { padding: 8px 0 0; font-size: 12px; opacity: 0.8; min-height: 1.2em; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0b1520; color: #adc3cc; font: 14px system-ui, sans-serif; }
+    body { display: grid; place-items: center; }
+    /* Keep the framebuffer fixed; GLFW maps CSS-scaled pointer coordinates back into it. */
+    #canvas {
+      display: block;
+      width: min(100vw, calc(100vh * 16 / 9)) !important;
+      width: min(100vw, calc(100dvh * 16 / 9)) !important;
+      height: auto !important;
+      aspect-ratio: 16 / 9;
+      outline: none;
+      touch-action: none;
+    }
+    #status { position: fixed; left: 12px; bottom: 12px; max-width: calc(100% - 150px); padding: 8px; border-radius: 6px; background: #0b1520e6; font-size: 12px; }
+    #status:empty { display: none; }
+    #fullscreen { position: fixed; right: 12px; bottom: 12px; padding: 8px 12px; border: 1px solid #adc3cc; border-radius: 6px; background: #0b1520e6; color: #fff; font: inherit; cursor: pointer; }
+    #fullscreen:hover { background: #234051; }
+    #fullscreen:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
   </style>
 </head>
 <body>
   <canvas id="canvas" width="960" height="540" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
-  <div id="status">Loading Fx2D…</div>
+  <div id="status" role="status">Loading Fx2D…</div>
+  <button id="fullscreen" type="button" aria-label="Enter fullscreen">Fullscreen</button>
   <script>
     var statusEl = document.getElementById("status");
     var canvas = document.getElementById("canvas");
+    var fullscreenButton = document.getElementById("fullscreen");
     var Module = {
       canvas: canvas,
       setStatus: function (t) { statusEl.textContent = t || ""; },
-      onRuntimeInitialized: function () { statusEl.textContent = ""; canvas.focus(); },
+      onRuntimeInitialized: function () { statusEl.textContent = ""; },
       postRun: [function () { statusEl.textContent = ""; }],
       print: function (t) { console.log(t); },
       printErr: function (t) { console.error(t); },
     };
+    canvas.addEventListener("pointerdown", function () { canvas.focus({ preventScroll: true }); });
+    fullscreenButton.hidden = !document.fullscreenEnabled;
+    fullscreenButton.addEventListener("click", async function () {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+        canvas.focus({ preventScroll: true });
+      } catch (error) {
+        statusEl.textContent = "Fullscreen is unavailable. You can still play in this view.";
+      }
+    });
+    document.addEventListener("fullscreenchange", function () {
+      var active = !!document.fullscreenElement;
+      fullscreenButton.textContent = active ? "Exit fullscreen" : "Fullscreen";
+      fullscreenButton.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
+    });
     // Keep the page from scrolling when the wheel or space bar is used over the canvas.
     canvas.addEventListener("wheel", function (e) { e.preventDefault(); }, { passive: false });
     window.addEventListener("keydown", function (e) { if (e.code === "Space" && document.activeElement === canvas) e.preventDefault(); });
