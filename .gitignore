@@ -1,4 +1,5 @@
 build
+/cmake/
 build-headless
 build-web
 build-lint

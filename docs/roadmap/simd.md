@@ -336,5 +336,5 @@ bodies that cannot move (done), or not re-rotating a shape whose angle has not c
   `Fx2Dlib`. Without it, whether `a*b+c` fuses is the compiler's choice and varies by target,
   so an A/B between two builds compares two different sets of arithmetic. Measured: with
   contraction left at the default, the goldens fail on aarch64.
-- `cmake/toolchains/aarch64-linux-gnu.cmake` plus qemu-user runs the whole suite on ARM without
+- Explicit CMake cross-compilation options plus qemu-user run the whole suite on ARM without
   ARM hardware, so a portability claim is checkable locally rather than only in CI.

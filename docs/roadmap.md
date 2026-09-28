@@ -54,7 +54,7 @@ current profile and the traps waiting for whoever continues, is [next steps](./n
 - **Cross-platform and ARM — delivered.** Architecture-aware tuning flags, every one of them
   probed rather than assumed (`-march=native` is an error on Apple Clang arm64, `/arch:` does
   not exist for MSVC ARM64); `FX2D_ARCH_BASELINE` for shipping builds; a CI matrix across two
-  ISAs and three compiler families; and `cmake/toolchains/aarch64-linux-gnu.cmake` so ARM is
+  ISAs and three compiler families; and explicit CMake cross-compilation options so ARM is
   testable locally under qemu. The suite passes on GCC x86-64, Clang x86-64, GCC aarch64 and
   MinGW GCC. Two real defects fell out of building with Clang for the first time: 53
   signed-index subscripts in the AABB tree, and a pair of write-only fields on the revolute
