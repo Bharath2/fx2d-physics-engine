@@ -8,7 +8,7 @@ const description =
 export default defineConfig({
   lang: "en-US",
   title: "Fx2D",
-  titleTemplate: ":title · Fx2D 2D Physics Engine",
+  titleTemplate: false,
   description,
   base: "/fx2d-physics-engine/",
   cleanUrls: true,
@@ -68,6 +68,8 @@ export default defineConfig({
     ],
   ],
   transformPageData(pageData) {
+    pageData.title = "Fx2D";
+    pageData.titleTemplate = false;
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")
       .replace(/\.md$/, "");

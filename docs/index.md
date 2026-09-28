@@ -1,6 +1,6 @@
 ---
 layout: home
-title: Fx2D — 2D rigid-body physics engine in C++20
+title: Fx2D
 titleTemplate: false
 description: Fx2D is an open-source 2D rigid-body physics engine in C++20 with SAT collision detection, an XPBD constraint solver, motorized joints, YAML scenes, and a headless mode for simulation, testing and reinforcement learning.
 
