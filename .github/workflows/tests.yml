@@ -41,8 +41,8 @@ jobs:
           - build_type: Debug
             native: "OFF"
             yaml: "ON"
-          # Vectorised. CI used to build with FX2D_NATIVE=OFF in every job, which meant the
-          # code paths users actually get in a default build were never compiled here.
+          # Vectorised for the build machine (FX2D_NATIVE is off by default). The goldens are
+          # bitwise, so this job also proves native tuning does not move results.
           - build_type: Release
             native: "ON"
             yaml: "ON"
@@ -60,7 +60,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake g++ make libyaml-cpp-dev
+            cmake g++ make libyaml-cpp-dev libtbb-dev
 
       - name: Configure
         run: |
@@ -98,7 +98,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake clang make libyaml-cpp-dev
+            cmake clang make libyaml-cpp-dev libtbb-dev
 
       - name: Configure
         env:

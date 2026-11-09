@@ -363,7 +363,8 @@ struct FxShape {
         if (n == 0) return;
 
         const float theta = world_pose.theta() + m_offset_pose.theta();
-        const float cos_t = std::cos(theta), sin_t = std::sin(theta);
+        float sin_t, cos_t;
+        FxSinCos(theta, sin_t, cos_t);
         const float cx = m_centroid.x(), cy = m_centroid.y();
 
         float min_x = FxInfinityf, min_y = FxInfinityf;

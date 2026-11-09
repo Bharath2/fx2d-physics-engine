@@ -219,9 +219,18 @@ step, so this matters only for deep stacks a long way from the origin.
 
 ## Determinism
 
-The enforced rule today is bitwise repeatability within one build. In practice results are
-better than that: the golden scenes, and a harder scene of a dozen boxes tumbling at 4-14 rad/s
-for 400 steps, come out byte-identical on GCC x86-64, Clang x86-64 and GCC aarch64. Nothing in
-CI asserts that yet. Making it a guarantee across GCC, Clang and MSVC on x86-64 and ARM64 is on
-the [roadmap](./roadmap.md). The conditions it depends on are under *Determinism across targets*
-in the [contributing guide](./contributing.md#determinism-across-targets).
+Results are bit-identical across GCC, Clang and MSVC on x86-64 and ARM64, enforced by bitwise
+goldens in every CI job. The conditions it depends on are under *Determinism across targets* in
+the [contributing guide](./contributing.md#determinism-across-targets).
+
+Two changes made it a guarantee rather than an observation. The C library's `sin` and `cos` gave
+way to `FxSinCos`, which matches the correctly rounded value on every float angle tested (4
+million, up to 7300 rad) and moved no golden past its old tolerance. Ray-cast hits at equal
+distances now break ties by entity id. `FX2D_NATIVE` went off by default, though the native CI
+jobs show it never moved a result.
+
+On MinGW, whose `sinf` and `cosf` round the same way, the switch moved no result at all: the
+state dump stayed bit-identical. The cost depends on the C library it replaced. Per call,
+`FxSinCos` takes 0.44x the time of MinGW's `sinf` plus `cosf` but 1.9x glibc's, which comes to
+about 2.5% more instructions on the box scenes on Linux. Evaluating fewer polynomial terms for
+float results would recover some of that.

@@ -43,6 +43,68 @@ static inline float FxCarryAdd(float& dst, double inc, double& carry) {
     return d;
 }
 
+// sin and cos of one angle from + - * / alone, so every platform computes the same bits; C
+// libraries' sin and cos differ in the last bit. Taylor series about the nearest multiple of
+// pi/2, accurate to the last bit of a double.
+static inline void FxSinCos(double angle, double& s, double& c) {
+    if (!std::isfinite(angle)) {
+        s = c = std::numeric_limits<double>::quiet_NaN();
+        return;
+    }
+    if (std::fabs(angle) > 1e9) angle = std::fmod(angle, 2.0 * FxPid);
+    // pi/2 in two parts: k * kPio2Hi is exact for any wrapped angle, so reduction loses nothing.
+    constexpr double kTwoOverPi = 0.63661977236758134308;
+    constexpr double kPio2Hi = 1.57079632673412561417;
+    constexpr double kPio2Lo = 6.07710050650619224932e-11;
+    // Taylor coefficients (-1)^k / n!: odd n for sin from r^3, even n for cos from r^2.
+    // clang-format off
+    constexpr double kSin[] = {-1.0 / 6, 1.0 / 120, -1.0 / 5040, 1.0 / 362880, -1.0 / 39916800,
+                               1.0 / 6227020800, -1.0 / 1307674368000, 1.0 / 355687428096000};
+    constexpr double kCos[] = {-1.0 / 2, 1.0 / 24, -1.0 / 720, 1.0 / 40320, -1.0 / 3628800,
+                               1.0 / 479001600, -1.0 / 87178291200, 1.0 / 20922789888000,
+                               -1.0 / 6402373705728000};
+    // clang-format on
+    const double t = angle * kTwoOverPi;
+    const long long n = static_cast<long long>(t >= 0.0 ? t + 0.5 : t - 0.5);
+    const double k = static_cast<double>(n);
+    const double r = (angle - k * kPio2Hi) - k * kPio2Lo;
+    const double r2 = r * r;
+    double ps = kSin[7];
+    for (int i = 6; i >= 0; --i)
+        ps = kSin[i] + r2 * ps;
+    double pc = kCos[8];
+    for (int i = 7; i >= 0; --i)
+        pc = kCos[i] + r2 * pc;
+    const double sin_r = r2 == 0.0 ? r : r + r * r2 * ps; // keeps sin(-0) = -0
+    const double cos_r = 1.0 + r2 * pc;
+    switch (n & 3) {
+    case 0:
+        s = sin_r;
+        c = cos_r;
+        break;
+    case 1:
+        s = cos_r;
+        c = -sin_r;
+        break;
+    case 2:
+        s = -sin_r;
+        c = -cos_r;
+        break;
+    default:
+        s = -cos_r;
+        c = sin_r;
+        break;
+    }
+}
+
+// The float version rounds the double result, so it is right to the last bit of a float.
+static inline void FxSinCos(float angle, float& s, float& c) {
+    double sd, cd;
+    FxSinCos(static_cast<double>(angle), sd, cd);
+    s = static_cast<float>(sd);
+    c = static_cast<float>(cd);
+}
+
 // concept to capture float, double, long double, int etc..
 template<typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
@@ -226,7 +288,8 @@ class alignas((sizeof(T) * N) % 16 == 0 ? 16 : alignof(T)) FxVec {
     FxVec& rotate_inplace_rad(T theta) & noexcept
         requires(N == 2 && std::floating_point<T>)
     {
-        const T c = std::cos(theta), s = std::sin(theta);
+        T s, c;
+        FxSinCos(theta, s, c);
         T xi = x(), yi = y();
         set_x(xi * c - yi * s);
         set_y(xi * s + yi * c);
@@ -925,8 +988,8 @@ class FxArray {
     FxArray& rotate_inplace_rad(float theta_rad) noexcept
         requires std::same_as<T, FxVec2f>
     {
-        const float c = std::cos(theta_rad);
-        const float s = std::sin(theta_rad);
+        float s, c;
+        FxSinCos(theta_rad, s, c);
         T* __restrict p = aligned_data();
         for (std::size_t i = 0; i < m_size; ++i) {
             float xi = p[i].x(), yi = p[i].y();

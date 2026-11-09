@@ -85,9 +85,10 @@ in two parts:
 - **Repeatability.** The same scene built and stepped twice in one process must produce
   bit-identical state. Exact equality on purpose: what it catches is iteration order leaking
   into results, which every tolerance-based test in the suite would pass.
-- **Golden state.** Four scenes stepped a fixed number of times, compared against
-  `tests/goldens_solver_regression.inc` with tight but not bitwise tolerances, so a different
-  compiler or ISA does not fail the suite on its last bits.
+- **Golden state.** Five scenes stepped a fixed number of times, compared against
+  `tests/goldens_solver_regression.inc` bit for bit: a hash of every captured float must match
+  on every compiler and CPU (see [Determinism across targets](#determinism-across-targets)).
+  Per-value tolerances alongside it say how far a value moved when one does.
 
 If a change is supposed to be speed-only and this suite fails, the change altered physics.
 Regenerate the table only when the change to physics was deliberate:
@@ -311,42 +312,38 @@ Two knobs:
 
 | option | default | meaning |
 |---|---|---|
-| `FX2D_NATIVE` | `ON` | Tune for the machine doing the build. Right for development, wrong for anything you ship. |
+| `FX2D_NATIVE` | `OFF` | Tune for the machine doing the build. Faster for development, wrong for anything you ship. Results are the same bits either way. |
 | `FX2D_ARCH_BASELINE` | `""` | A fixed ISA the binary may assume everywhere: `sse2`, `avx2`, `avx512`, `armv8-a`, `armv8.2-a`. Takes precedence over `FX2D_NATIVE`. |
 
 ### Determinism across targets
 
-Results are reproducible **within** a build configuration, not across every possible one. Two
-things make that hold as well as it does:
+The same scene and inputs give the same bits on every supported compiler and CPU: GCC, Clang
+and MSVC, x86-64 and ARM64, with or without `FX2D_NATIVE`. `tests/test_solver_regression.cpp`
+enforces it: each golden scene's state is hashed bit for bit, and every CI job must reproduce the
+same hashes. One of the scenes is a dozen boxes tumbling at 4-14 rad/s for 400 steps, which drives
+every shape's rotation through `sin` and `cos` at real angles. Four things make it hold:
 
-- **`FX2D_PIN_FP_CONTRACT`** (default on) passes `-ffp-contract=off` / `/fp:precise`. This is
-  not theoretical: building for aarch64 with contraction left at the compiler default makes
-  `tests/test_solver_regression.cpp` fail, because the fused multiply-add rounds differently
-  than the separate multiply and add the goldens were captured from.
-- **Tolerances, not bit patterns.** The golden tables are compared with absolute tolerances for
-  exactly this reason. They currently pass on GCC x86-64, Clang x86-64, GCC aarch64 under qemu,
-  and MinGW GCC with LTO — but do not tighten them to bitwise equality, because that would hold
-  only on the machine that captured them.
+- **No contraction.** `FX2D_PIN_FP_CONTRACT` (default on) passes `-ffp-contract=off` /
+  `/fp:precise`, and it is PUBLIC on `Fx2Dlib` because much of the maths lives in headers. A fused
+  multiply-add rounds once where a multiply and an add round twice: building for aarch64 with
+  contraction left at the compiler default fails the goldens.
+- **Only correctly rounded operations.** Add, subtract, multiply, divide and square root, which
+  IEEE 754 requires to round the same way everywhere, and no fast-math. Sums are taken in a fixed
+  order (`fx_detail::dot` in `Math.h`), and no reduction is reassociated.
+- **No C library trigonometry.** `sin` and `cos` differ in the last bit between C libraries, and
+  glibc even picks a different implementation on CPUs with FMA. `FxSinCos` computes both from the
+  operations above; `tests/test_angle_precision.cpp` pins its output bits.
+- **No order from hash tables.** Iteration order of `unordered_map` and `unordered_set` differs
+  between standard libraries, so nothing the solver computes depends on it. Where an order is
+  visible (contact events, ray-cast hits), results are sorted, with ties broken by entity id.
 
-**What is actually achieved, measured.** The rule the project *enforces* is bitwise
-repeatability within one process — the regression suite's first half, exact equality, no
-tolerance. Across builds it only promises tolerances.
+Before CI, the goldens were checked on MinGW GCC 15 (SSE2 and AVX-512 native), GCC 16 and Clang
+20, MSVC 14.44 with `/arch:AVX2`, Linux GCC 13 (SSE2, AVX-512 native, and Debug with ASan and
+UBSan), Clang 18 with libc++, and GCC 13 for aarch64 under qemu. Not yet checked: WebAssembly, and 32-bit x86, which must use SSE2
+arithmetic (`-mfpmath=sse`) because x87's extended precision rounds differently.
 
-In practice it currently does better than that. Printing solver state at `setprecision(9)`,
-which round-trips a float exactly, the four golden scenes come out **byte-identical** on GCC
-x86-64, Clang x86-64, and GCC aarch64 run under qemu. So does a deliberately harder scene: a
-dozen boxes tumbling at 4-14 rad/s for 400 steps, which drives `set_world_pose` through
-`std::sin`/`std::cos` at real angles and therefore through aarch64 glibc's own libm.
-
-Treat that as an observed property, not a guarantee. It holds because FP contraction is pinned
-off, nothing uses fast-math, and the arithmetic is plain add/sub/mul/div/sqrt, which IEEE-754
-requires to be correctly rounded everywhere. It could legitimately break on a libm version whose
-`sin` differs in the last bit, on real ARM hardware rather than qemu, or on MSVC — none of which
-has been checked. Nothing in CI asserts it, and promising it would be a strong claim to defend.
-
-If you are building on cross-machine reproducibility — lockstep networking, RL rollouts compared
-across hosts — this is the thing to verify yourself on your own targets first, and to add a CI
-check for if you depend on it.
+When a change is meant to move physics, regenerate the goldens on any one target; every other
+target must then agree with them, and CI will say which does not.
 
 ### Testing ARM without ARM hardware
 

@@ -30,7 +30,7 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 
 - **Physics you can read.** One explicit pipeline, from broad phase to SAT contacts to a substepped XPBD solver, with [solver](https://bharath2.github.io/fx2d-physics-engine/concepts/xpbd) and [collision](https://bharath2.github.io/fx2d-physics-engine/concepts/collisions) docs that derive the equations the code implements.
 - **Built for simulation, not just games.** The headless build steps thousands of times per second with no window or GPU, for tests, batch rollouts and reinforcement learning.
-- **Deterministic and tested.** Fixed timestep and solver order, adversarial stress scenes, and golden regression tests that keep speedups from changing the physics.
+- **Deterministic everywhere, and tested.** The same scene and inputs give the same bits on GCC, Clang and MSVC, x86-64 and ARM64, checked by bitwise golden tests on every push, alongside adversarial stress scenes.
 - **Small and embeddable.** About 8k lines of C++20 in one static library under BSD-3-Clause. The physics needs only the C++ standard library; YAML loading adds yaml-cpp, which CMake downloads if it is not installed.
 
 ## Features

@@ -2,8 +2,11 @@
 
 #include "test_harness.h"
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 
@@ -132,9 +135,60 @@ void test_motor_authority_does_not_decay_with_distance() {
                 std::to_string(near_origin) + " near vs " + std::to_string(far_away) + " far");
 }
 
+std::uint32_t ulp_distance(float a, float b) {
+    auto ordered = [](float f) {
+        const auto u = std::bit_cast<std::int32_t>(f);
+        return u < 0 ? std::numeric_limits<std::int32_t>::min() - u : u;
+    };
+    const std::int64_t d = static_cast<std::int64_t>(ordered(a)) - ordered(b);
+    return static_cast<std::uint32_t>(d < 0 ? -d : d);
+}
+
+// FxSinCos stands in for the C library's sin and cos, whose last bit differs between platforms.
+void test_sincos_matches_the_c_library() {
+    for (int i = -20000; i <= 20000; ++i) {
+        const float a = static_cast<float>(i) * 1e-3f;
+        float s, c;
+        FxSinCos(a, s, c);
+        const auto ref_s = static_cast<float>(std::sin(static_cast<double>(a)));
+        const auto ref_c = static_cast<float>(std::cos(static_cast<double>(a)));
+        require(ulp_distance(s, ref_s) <= 1 && ulp_distance(c, ref_c) <= 1,
+                "FxSinCos(" + std::to_string(a) + ") must be within 1 ulp of sin and cos");
+    }
+}
+
+// The output bits themselves are pinned, so a platform that rounds differently fails here first.
+void test_sincos_bits_are_pinned() {
+    struct Pin {
+        float angle;
+        std::uint32_t sin_bits, cos_bits;
+    };
+    const Pin pins[] = {
+        {1e-7f, 0x33d6bf95u, 0x3f800000u},     {0.1f, 0x3dcc7577u, 0x3f7eb898u},
+        {0.785398f, 0x3f3504f1u, 0x3f3504f5u}, {1.0f, 0x3f576aa4u, 0x3f0a5140u},
+        {-2.5f, 0xbf193578u, 0xbf4d17bfu},     {3.14159f, 0x362a2217u, 0xbf800000u},
+        {-3.14159f, 0xb62a2217u, 0xbf800000u}, {6.0f, 0xbe8f0f8cu, 0x3f75cdb8u},
+        {100.0f, 0xbf01a12eu, 0x3f5cc0eeu},    {-1234.5f, 0xbe14e299u, 0xbf7d4796u},
+    };
+    for (const Pin& pin : pins) {
+        float s, c;
+        FxSinCos(pin.angle, s, c);
+        require(std::bit_cast<std::uint32_t>(s) == pin.sin_bits &&
+                    std::bit_cast<std::uint32_t>(c) == pin.cos_bits,
+                "FxSinCos(" + std::to_string(pin.angle) + ") must give the pinned bits");
+    }
+    float s, c;
+    FxSinCos(-0.0f, s, c);
+    require(s == 0.0f && std::signbit(s) && c == 1.0f, "FxSinCos(-0) must give (-0, 1)");
+    FxSinCos(std::numeric_limits<float>::quiet_NaN(), s, c);
+    require(std::isnan(s) && std::isnan(c), "FxSinCos(NaN) must give NaN");
+}
+
 } // namespace
 
 void run_angle_precision_tests() {
+    test_sincos_matches_the_c_library();
+    test_sincos_bits_are_pinned();
     test_offset_motor_keeps_authority_at_small_timesteps();
     test_motor_authority_does_not_decay_with_distance();
     test_angle_wrap_preserves_tiny_angles();

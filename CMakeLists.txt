@@ -65,6 +65,15 @@ function(fx2d_require_fetch what)
   message(STATUS "Fx2D: ${what} not found; downloading it")
 endfunction()
 
+# A downloaded dependency's headers are third-party code: include them as system headers, so the
+# project's warning flags, and -Werror, stop at its own code.
+function(fx2d_system_includes tgt)
+  get_target_property(dirs ${tgt} INTERFACE_INCLUDE_DIRECTORIES)
+  if (dirs)
+    set_target_properties(${tgt} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${dirs}")
+  endif()
+endfunction()
+
 # --- yaml-cpp ---
 if (FX2D_YAML)
   find_package(yaml-cpp CONFIG QUIET)
@@ -81,6 +90,7 @@ if (FX2D_YAML)
     set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(fx2d_yamlcpp URL ${FX2D_YAMLCPP_URL} URL_HASH SHA256=${FX2D_YAMLCPP_SHA256})
     FetchContent_MakeAvailable(fx2d_yamlcpp)
+    fx2d_system_includes(yaml-cpp)
     set(YAMLCPP_TARGET yaml-cpp::yaml-cpp)
   endif()
 endif()
@@ -110,6 +120,7 @@ if (NOT FX2D_HEADLESS)
       set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
       FetchContent_Declare(fx2d_raylib URL ${FX2D_RAYLIB_URL} URL_HASH SHA256=${FX2D_RAYLIB_SHA256})
       FetchContent_MakeAvailable(fx2d_raylib)
+      fx2d_system_includes(raylib)
       set(RAYLIB_TARGET raylib)
     endif()
   endif()
@@ -149,7 +160,7 @@ add_library(rlimgui_library STATIC
   "${FX2D_RLIMGUI_SOURCE_DIR}/rlImGui.cpp"
 )
 
-target_include_directories(rlimgui_library PUBLIC
+target_include_directories(rlimgui_library SYSTEM PUBLIC
   "${FX2D_IMGUI_SOURCE_DIR}"
   "${FX2D_RLIMGUI_SOURCE_DIR}"
 )
@@ -187,9 +198,7 @@ target_include_directories(Fx2Dlib PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
-# The physics depends on nothing outside the C++ standard library. The engine runs sequentially,
-# so it does not link TBB either: code that passes std::execution::par to for_each_entity()
-# links whatever its standard library needs for that.
+# The physics depends on nothing outside the C++ standard library.
 if (FX2D_YAML)
   target_link_libraries(Fx2Dlib PUBLIC ${YAMLCPP_TARGET})
   target_compile_definitions(Fx2Dlib PUBLIC YAML_CPP_STATIC_DEFINE)
@@ -199,6 +208,14 @@ endif()
 
 if (NOT FX2D_HEADLESS)
   target_link_libraries(Fx2Dlib PUBLIC rlimgui_library ${RAYLIB_TARGET})
+endif()
+
+# When TBB's headers are installed, libstdc++ builds std::execution on TBB, and unoptimised builds
+# reference it even for the sequential policy the engine uses. Link it whenever it is found; it is
+# also what std::execution::par passed to for_each_entity()/transform_entities() runs on.
+find_package(TBB QUIET)
+if (TARGET TBB::tbb)
+  target_link_libraries(Fx2Dlib PUBLIC TBB::tbb)
 endif()
 
 # Compile definitions for the library
@@ -227,7 +244,7 @@ endif()
 # ============================================================
 option(FX2D_WARNINGS   "Enable high warning levels" ON)
 option(FX2D_WERROR     "Treat warnings as errors"    OFF)
-option(FX2D_NATIVE     "Enable native CPU tuning (SIMD etc.)" ON)
+option(FX2D_NATIVE     "Enable native CPU tuning (SIMD etc.)" OFF)
 option(FX2D_IPO        "Enable interprocedural optimization (LTO/IPO) in Release" ON)
 
 # Floating-point contraction (a*b+c fused into one FMA) is a compiler's choice by default:
@@ -243,8 +260,8 @@ option(FX2D_PIN_FP_CONTRACT "Pin off FP contraction (FMA) so results are build-i
 option(FX2D_PROFILE "Build with the per-phase step profiler (FxProfile)" OFF)
 
 # FX2D_NATIVE tunes for the machine doing the build, which is right for development and wrong
-# for anything you ship. Set FX2D_ARCH_BASELINE instead to pin a fixed instruction set that the
-# binary can assume everywhere it runs; it takes precedence over FX2D_NATIVE when non-empty.
+# for anything you ship, so it is off by default; results are the same bits either way. Set
+# FX2D_ARCH_BASELINE to pin a fixed instruction set instead; it takes precedence when non-empty.
 # Accepted: sse2, avx2, avx512 (x86) and armv8-a, armv8.2-a (arm64). Empty means "follow
 # FX2D_NATIVE".
 set(FX2D_ARCH_BASELINE "" CACHE STRING "Fixed ISA baseline for distributable builds")

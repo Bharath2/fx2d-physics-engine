@@ -48,7 +48,7 @@ features:
     details: Run the physics library without a window or raylib. Step scenes from C++ and read body state, contacts, and query results.
   - icon: ⧉
     title: Regression tests
-    details: Tests cover joints, collisions, contact events, resting stability, and adversarial scenes. Golden-state tests check solver changes; cross-platform bitwise identity is not guaranteed.
+    details: Tests cover joints, collisions, contact events, resting stability, and adversarial scenes. Golden-state tests check that results are bit-identical on every compiler and CPU in CI.
   - icon: ≡
     title: YAML scenes
     details: Define bodies, geometry, joints, textures, and solver settings in YAML. Load a scene from C++ and reset it to its authored state.

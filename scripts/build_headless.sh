@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Headless g++ build (no raylib/ImGui). Needs: yaml-cpp.
+# Headless g++ build (no raylib/ImGui). Needs: yaml-cpp, and TBB if its headers are installed.
 # Usage: ./scripts/build_headless.sh && ./build-headless/truck_headless
 set -euo pipefail
 
@@ -11,6 +11,8 @@ CXX=${CXX:-g++}
 # examples/ is on the path because a test drives the slingshot the demo ships.
 FLAGS=(-std=c++20 -O2 -Wall -I include -I examples)
 LIBS=(-lyaml-cpp)
+# libstdc++ builds <execution> on TBB whenever TBB's headers are installed, so link it then.
+if echo '#include <tbb/tbb.h>' | "$CXX" -x c++ -E - >/dev/null 2>&1; then LIBS+=(-ltbb); fi
 
 mapfile -t CORE < <(./scripts/list_sources.sh --core)
 

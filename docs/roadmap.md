@@ -7,12 +7,6 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## In progress
 
-- **Cross-platform determinism.** The same scene and inputs will give bit-identical results on
-  every supported compiler and CPU: GCC, Clang and MSVC, on x86-64 and ARM64. That takes
-  Fx2D's own `sin` and `cos` (C libraries disagree in the last bit), no host-specific CPU flags
-  in library builds, and a CI job that compares golden results across all targets. Today the
-  guarantee holds within one build. Results already match across GCC, Clang and ARM in
-  practice, but nothing enforces it yet.
 - **A benchmark against Box2D v3.** Matching scenes and published numbers, including where
   Fx2D is slower, followed by work on the gaps the numbers show.
 - **A Python package.** `pip install fx2d` with prebuilt wheels for Linux, macOS and Windows, a
@@ -56,10 +50,14 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## Recently delivered
 
+- **Cross-platform determinism.** The same scene and inputs give bit-identical results on GCC,
+  Clang and MSVC, x86-64 and ARM64, with or without native CPU tuning. Fx2D computes its own
+  `sin` and `cos`, since C libraries disagree in the last bit, and every CI job checks the
+  golden scenes bit for bit.
 - **No required dependencies.** The physics library builds with nothing but a C++20 compiler.
-  Fx2D's own vector and matrix types replaced Eigen with bit-identical results, and TBB is no
-  longer linked. YAML loading and the viewer are optional, and CMake downloads their
-  dependencies when they are not installed, so a fresh clone builds without installing anything.
+  Fx2D's own vector and matrix types replaced Eigen with bit-identical results. YAML loading and
+  the viewer are optional, and CMake downloads their dependencies when they are not installed,
+  so a fresh clone builds without installing anything.
 - **Browser playground** and a **mouse joint** for dragging bodies.
 - **A 2.2-8.1x faster step** on the benchmark scenes: a broad phase that only re-walks its tree
   when a body moved, an allocation-free narrow phase, and a vectorised velocity solve that
