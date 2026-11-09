@@ -36,7 +36,7 @@ reads its suppressions from `scripts/cppcheck-suppressions.txt`.
 Install the tools on Debian/Ubuntu:
 
 ```bash
-sudo apt install clang-format clang-tidy cppcheck libeigen3-dev
+sudo apt install clang-format clang-tidy cppcheck
 ```
 
 On MSYS2 MinGW64: `pacman -S mingw-w64-x86_64-clang-tools-extra` (and cppcheck
@@ -357,23 +357,13 @@ reaches CI; no checked-in toolchain file is needed:
 ```bash
 sudo apt install g++-aarch64-linux-gnu qemu-user
 
-# yaml-cpp has to exist for the target; Eigen is header-only so the host copy serves both.
-git clone --depth 1 --branch 0.8.0 https://github.com/jbeder/yaml-cpp.git yaml-cpp-src
-cmake -S yaml-cpp-src -B yaml-cpp-arm64 \
-  -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-  -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-  -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=BEFORE -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-  -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-  -DCMAKE_INSTALL_PREFIX=$HOME/arm64-sysroot \
-  -DYAML_BUILD_SHARED_LIBS=OFF -DYAML_CPP_BUILD_TESTS=OFF -DYAML_CPP_BUILD_TOOLS=OFF
-cmake --build yaml-cpp-arm64 -j && cmake --install yaml-cpp-arm64
-
+# No yaml-cpp exists for the target, so CMake downloads and cross-builds it.
 cmake -S . -B build-arm64 -DCMAKE_BUILD_TYPE=Release -DFX2D_HEADLESS=ON \
   -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
   -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
   -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=BEFORE -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
   -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-  -DCMAKE_PREFIX_PATH=$HOME/arm64-sysroot -DFX2D_WERROR=ON
+  -DFX2D_WERROR=ON
 cmake --build build-arm64 -j --target Fx2DTests
 qemu-aarch64 -L /usr/aarch64-linux-gnu ./build-arm64/Fx2DTests
 ```
@@ -389,7 +379,7 @@ about 26% slower -- **with no test failing**, because the results are identical 
 If you are changing that kernel, check the loops still vectorise:
 
 ```bash
-g++ -std=c++20 -O3 -march=native -I include -I /usr/include/eigen3 \
+g++ -std=c++20 -O3 -march=native -I include \
     -c src/Constraints.cpp -o /dev/null -fopt-info-vec | grep vectorized
 ```
 

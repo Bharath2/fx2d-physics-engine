@@ -122,7 +122,7 @@ void test_ball_settles_in_a_chain_valley() {
                 std::to_string(ball->pose.y()));
     require(ball->pose.x() > 9.0f && ball->pose.x() < 21.0f,
             "and settle inside the valley, x=" + std::to_string(ball->pose.x()));
-    require(ball->velocity.head<2>().norm() < 0.5f, "and come to rest");
+    require(ball->velocity.xy().norm() < 0.5f, "and come to rest");
 }
 
 // A body sliding along the chain must cross the joints between segments without catching.

@@ -1,6 +1,6 @@
 # Math Utilities — `Fx2D/Math.h`
 
-All math types and utilities are defined in `include/Fx2D/Math.h`, built on top of [Eigen](https://eigen.tuxfamily.org/). Include via:
+All math types and utilities are defined in `include/Fx2D/Math.h`, which depends only on the C++ standard library. Include via:
 
 ```cpp
 #include "Fx2D/Math.h"
@@ -25,7 +25,7 @@ float FxAngleWrap(float angle);  // wraps angle to [-π, π]
 
 ## Vector Types
 
-All vector types extend their corresponding Eigen base, so all Eigen operations (`.norm()`, `.dot()`, `.normalized()`, etc.) are available.
+Every vector type is an `FxVec<T, N>`. They all support component-wise `+`, `-`, `*=` and `/=`, scalar arithmetic, `==`, `[]` indexing, and `.dot()`, `.squaredNorm()`, `.norm()`, `.normalized()`. Default construction leaves the components uninitialised, like a plain `float`.
 
 ### `FxVec2f` / `FxVec2d`
 
@@ -63,9 +63,9 @@ FxVec3f p(1.0f, 2.0f, 0.5f);
 p.x(); p.y(); p.z();
 p.theta();               // alias for z(), used for orientation
 
-p.xy();                  // returns FxVec2f view of the first two components
-p.get_xy();              // returns FxVec2f copy
-p.set_xy(FxVec2f(1,2));  // sets x and y
+p.xy();                  // returns the first two components as an FxVec2f copy
+p.get_xy();              // same as xy()
+p.set_xy(FxVec2f(1,2));  // sets x and y; assigning to p.xy() does not compile
 ```
 
 ### `FxVec4f`
@@ -109,6 +109,7 @@ R.a(); R.b();   // row 0: (0,0), (0,1)
 R.c(); R.d();   // row 1: (1,0), (1,1)
 
 FxMat2f Rinv = R.inv_rotation();  // transpose (inverse of rotation matrix)
+FxVec2f rotated = R * v;          // matrix-vector product; R * R2 multiplies matrices
 ```
 
 ### `FxMat3f` — 3×3 float matrix

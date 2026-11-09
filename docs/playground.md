@@ -28,7 +28,7 @@ cmake --build build -j --target example_playground
 
 ## Building it for the browser
 
-With an activated [emsdk](https://emscripten.org/docs/getting_started/downloads.html) on the path, one script fetches raylib, yaml-cpp, Eigen, Dear ImGui and rlImGui, compiles them for the web, builds the playground, and copies the result into `docs/public/playground/`:
+With an activated [emsdk](https://emscripten.org/docs/getting_started/downloads.html) on the path, one script fetches raylib, yaml-cpp, Dear ImGui and rlImGui, compiles them for the web, builds the playground, and copies the result into `docs/public/playground/`:
 
 ```bash
 ./scripts/build_web.sh

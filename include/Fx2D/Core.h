@@ -5,4 +5,6 @@
 
 #include "Fx2D/Renderer.h"
 #include "Fx2D/Scene.h"
+#ifndef FX2D_NO_YAML
 #include "Fx2D/YamlUtils.h"
+#endif

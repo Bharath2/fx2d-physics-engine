@@ -74,7 +74,7 @@ void test_holds_against_gravity() {
     // k = m (2 pi f)^2 with f = 5 Hz, m = 1 kg -> ~987 N/m; weight 10 N -> ~1 cm of sag.
     require_near(anchor.x(), target.x(), 0.02f, "held box must sit under the target in x");
     require_near(anchor.y(), target.y() - 0.0101f, 0.02f, "held box must sag by weight / k");
-    require(rig.box->velocity.head<2>().norm() < 0.05f, "held box must come to rest");
+    require(rig.box->velocity.xy().norm() < 0.05f, "held box must come to rest");
     require(!rig.box->is_sleeping(), "a held body must stay awake");
 }
 
@@ -116,7 +116,7 @@ void test_force_cap_bounds_speed() {
     float peak_speed = 0.0f;
     for (int i = 0; i < 30; ++i) {
         rig.scene.step(kFrame);
-        peak_speed = std::max(peak_speed, rig.box->velocity.head<2>().norm());
+        peak_speed = std::max(peak_speed, rig.box->velocity.xy().norm());
     }
     // 50 N for 0.5 s on 1 kg is 25 m/s at most, before friction and gravity take their share.
     require(peak_speed < 25.0f,

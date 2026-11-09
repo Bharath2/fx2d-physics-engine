@@ -1,11 +1,14 @@
 #pragma once
-#include <Eigen/Core>
 #include <algorithm>
+#include <cmath>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <new>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -43,509 +46,371 @@ static inline float FxCarryAdd(float& dst, double inc, double& carry) {
 template<typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
 
-// Custom 2D float vector with .x() getter and .set_x() setter.
-class FxVec2f : public Eigen::Vector2f {
+// ────────────────────────────────────────────────────────────────────────────
+//  FxVec / FxMat: fixed-size vectors and matrices
+// ────────────────────────────────────────────────────────────────────────────
+
+// Every operation is written out element by element, so the arithmetic and the order sums are
+// taken in are fixed here, the same on every compiler and CPU.
+namespace fx_detail {
+
+// Sum of a[i] * b[i]: p0 + p1, p0 + (p1 + p2), (p0 + p2) + (p1 + p3). These are the orders
+// Eigen 3.4 produced on x86-64, so dropping Eigen moved no result.
+template<typename T, int N>
+constexpr T dot(const T* a, const T* b) noexcept {
+    if constexpr (N == 2) {
+        return a[0] * b[0] + a[1] * b[1];
+    } else if constexpr (N == 3) {
+        return a[0] * b[0] + (a[1] * b[1] + a[2] * b[2]);
+    } else {
+        static_assert(N == 4, "dot is defined for 2, 3 and 4 elements");
+        return (a[0] * b[0] + a[2] * b[2]) + (a[1] * b[1] + a[3] * b[3]);
+    }
+}
+
+} // namespace fx_detail
+
+// N-element vector; default construction leaves it uninitialised, like a plain float. Sizes that
+// are a multiple of 16 bytes keep the 16-byte alignment Eigen gave them, so layouts are unchanged.
+template<typename T, int N>
+class alignas((sizeof(T) * N) % 16 == 0 ? 16 : alignof(T)) FxVec {
   public:
-    // Inherit constructors
-    using Eigen::Vector2f::Vector2f;
+    FxVec() = default;
+    FxVec(const FxVec&) = default;
+    // Assigning to a temporary (pose.xy() = v) would be a lost write, so it does not compile.
+    FxVec& operator=(const FxVec&) & = default;
 
-    // Constructor from single float (fills both components)
-    explicit FxVec2f(float a) : Eigen::Vector2f(a, a) {}
+    // Constructor from a single value (fills every component)
+    constexpr explicit FxVec(T a) noexcept {
+        for (T& e : m_v)
+            e = a;
+    }
 
-    // Getter for x and y.
-    float& x() { return (*this)(0); }
-    float& y() { return (*this)(1); }
+    // Constructor from one value per component
+    template<Numeric... A>
+        requires(sizeof...(A) == N)
+    constexpr FxVec(A... values) noexcept : m_v{static_cast<T>(values)...} {}
+
+    // Component access
+    constexpr T& operator[](std::size_t i) noexcept { return m_v[i]; }
+    constexpr const T& operator[](std::size_t i) const noexcept { return m_v[i]; }
+    constexpr T* data() noexcept { return m_v; }
+    constexpr const T* data() const noexcept { return m_v; }
+
+    // Getters.
+    constexpr T& x() noexcept { return m_v[0]; }
+    constexpr T& y() noexcept { return m_v[1]; }
+    constexpr T& z() noexcept
+        requires(N >= 3)
+    {
+        return m_v[2];
+    }
+    // to use the third value as orientation
+    constexpr T& theta() noexcept
+        requires(N == 3)
+    {
+        return m_v[2];
+    }
+    constexpr T& a() noexcept
+        requires(N == 4)
+    {
+        return m_v[3];
+    }
 
     // Const getters.
-    float x() const { return (*this)(0); }
-    float y() const { return (*this)(1); }
+    constexpr T x() const noexcept { return m_v[0]; }
+    constexpr T y() const noexcept { return m_v[1]; }
+    constexpr T z() const noexcept
+        requires(N >= 3)
+    {
+        return m_v[2];
+    }
+    constexpr T theta() const noexcept
+        requires(N == 3)
+    {
+        return m_v[2];
+    }
+    constexpr T a() const noexcept
+        requires(N == 4)
+    {
+        return m_v[3];
+    }
 
-    // Setter for x and y.
-    void set_x(float val) { (*this)(0) = val; }
-    void set_y(float val) { (*this)(1) = val; }
+    // Setters.
+    constexpr void set_x(T val) noexcept { m_v[0] = val; }
+    constexpr void set_y(T val) noexcept { m_v[1] = val; }
+    constexpr void set_z(T val) noexcept
+        requires(N >= 3)
+    {
+        m_v[2] = val;
+    }
+    // when used as orientation
+    constexpr void set_theta(T val) noexcept
+        requires(N == 3)
+    {
+        m_v[2] = val;
+    }
+    constexpr void set_a(T val) noexcept
+        requires(N == 4)
+    {
+        m_v[3] = val;
+    }
+
+    // The position part of a pose, as a copy; write it back with set_xy().
+    constexpr FxVec<T, 2> xy() const noexcept
+        requires(N == 3)
+    {
+        return FxVec<T, 2>(m_v[0], m_v[1]);
+    }
+    constexpr FxVec<T, 2> get_xy() const noexcept
+        requires(N == 3)
+    {
+        return xy();
+    }
+    constexpr void set_xy(const FxVec<T, 2>& v2) noexcept
+        requires(N == 3)
+    {
+        m_v[0] = v2.x();
+        m_v[1] = v2.y();
+    }
+
+    // Dot product, squared length and length
+    constexpr T dot(const FxVec& other) const noexcept {
+        return fx_detail::dot<T, N>(m_v, other.m_v);
+    }
+    constexpr T squaredNorm() const noexcept { return dot(*this); }
+    T norm() const noexcept
+        requires std::floating_point<T>
+    {
+        return std::sqrt(squaredNorm());
+    }
+
+    // Unit vector in the same direction; a zero vector comes back unchanged
+    FxVec normalized() const noexcept
+        requires std::floating_point<T>
+    {
+        const T sq = squaredNorm();
+        if (sq > T(0)) return *this / std::sqrt(sq);
+        return *this;
+    }
+
+    // Cross product with another 2D vector (returns scalar)
+    constexpr T cross(const FxVec& other) const noexcept
+        requires(N == 2)
+    {
+        return x() * other.y() - y() * other.x();
+    }
+
+    // Perpendicular vectors
+    constexpr FxVec perp() const noexcept
+        requires(N == 2)
+    {
+        return FxVec(-y(), x()); // CCW perpendicular
+    }
+    constexpr FxVec perpCW() const noexcept
+        requires(N == 2)
+    {
+        return FxVec(y(), -x()); // CW perpendicular
+    }
 
     // Radian‐based rotate (suffix "_rad")
-    FxVec2f& rotate_inplace_rad(float theta) noexcept {
-        const float c = std::cos(theta), s = std::sin(theta);
-        float xi = x(), yi = y();
+    FxVec& rotate_inplace_rad(T theta) & noexcept
+        requires(N == 2 && std::floating_point<T>)
+    {
+        const T c = std::cos(theta), s = std::sin(theta);
+        T xi = x(), yi = y();
         set_x(xi * c - yi * s);
         set_y(xi * s + yi * c);
         return *this;
     }
 
     // Degree‐based rotate (default "rotate_inplace" uses degrees)
-    FxVec2f& rotate_inplace(float degrees) noexcept {
-        constexpr float FX_DEG2RAD = FxPif / 180.0f;
+    FxVec& rotate_inplace(T degrees) & noexcept
+        requires(N == 2 && std::floating_point<T>)
+    {
+        constexpr T FX_DEG2RAD = std::numbers::pi_v<T> / T(180);
         return rotate_inplace_rad(degrees * FX_DEG2RAD);
     }
 
     // — non-mutating rotation: returns a rotated copy
-    FxVec2f rotate(float theta) const noexcept { return FxVec2f(*this).rotate_inplace(theta); }
-    FxVec2f rotate_rad(float theta) const noexcept {
-        return FxVec2f(*this).rotate_inplace_rad(theta);
+    FxVec rotate(T degrees) const noexcept
+        requires(N == 2 && std::floating_point<T>)
+    {
+        FxVec r = *this;
+        r.rotate_inplace(degrees);
+        return r;
+    }
+    FxVec rotate_rad(T theta) const noexcept
+        requires(N == 2 && std::floating_point<T>)
+    {
+        FxVec r = *this;
+        r.rotate_inplace_rad(theta);
+        return r;
     }
 
-    // Cross product with another 2D vector (returns scalar)
-    float cross(const FxVec2f& other) const { return x() * other.y() - y() * other.x(); }
-
-    // Perpendicular vectors
-    FxVec2f perp() const {
-        return FxVec2f(-y(), x()); // CCW perpendicular
+    // In-place operations with another vector (component-wise)
+    constexpr FxVec& operator+=(const FxVec& rhs) & noexcept {
+        for (int i = 0; i < N; ++i)
+            m_v[i] += rhs.m_v[i];
+        return *this;
     }
-
-    FxVec2f perpCW() const {
-        return FxVec2f(y(), -x()); // CW perpendicular
+    constexpr FxVec& operator-=(const FxVec& rhs) & noexcept {
+        for (int i = 0; i < N; ++i)
+            m_v[i] -= rhs.m_v[i];
+        return *this;
     }
-};
-
-// Custom 2D double vector with .x() getter and .set_x() setter.
-class FxVec2d : public Eigen::Vector2d {
-  public:
-    // Inherit constructors
-    using Eigen::Vector2d::Vector2d;
-
-    // Constructor from single double (fills both components)
-    explicit FxVec2d(double a) : Eigen::Vector2d(a, a) {}
-
-    // Getter for x and y.
-    double& x() { return (*this)(0); }
-    double& y() { return (*this)(1); }
-
-    // Const getters.
-    double x() const { return (*this)(0); }
-    double y() const { return (*this)(1); }
-
-    // Setter for x and y.
-    void set_x(double val) { (*this)(0) = val; }
-    void set_y(double val) { (*this)(1) = val; }
-
-    // Radian‐based rotate (suffix "_rad")
-    FxVec2d& rotate_inplace_rad(double theta) noexcept {
-        const double c = std::cos(theta), s = std::sin(theta);
-        double xi = x(), yi = y();
-        set_x(xi * c - yi * s);
-        set_y(xi * s + yi * c);
+    constexpr FxVec& operator*=(const FxVec& rhs) & noexcept {
+        for (int i = 0; i < N; ++i)
+            m_v[i] *= rhs.m_v[i];
+        return *this;
+    }
+    constexpr FxVec& operator/=(const FxVec& rhs) & noexcept {
+        for (int i = 0; i < N; ++i)
+            m_v[i] /= rhs.m_v[i];
         return *this;
     }
 
-    // Degree‐based rotate (default "rotate_inplace" uses degrees)
-    FxVec2d& rotate_inplace(double degrees) noexcept {
-        constexpr double FX_DEG2RAD = FxPid / 180.0;
-        return rotate_inplace_rad(degrees * FX_DEG2RAD);
+    // In-place scalar operations with generic Numeric s
+    template<Numeric S>
+    constexpr FxVec& operator+=(S s) & noexcept {
+        for (T& e : m_v)
+            e += static_cast<T>(s);
+        return *this;
+    }
+    template<Numeric S>
+    constexpr FxVec& operator-=(S s) & noexcept {
+        for (T& e : m_v)
+            e -= static_cast<T>(s);
+        return *this;
+    }
+    template<Numeric S>
+    constexpr FxVec& operator*=(S s) & noexcept {
+        for (T& e : m_v)
+            e *= static_cast<T>(s);
+        return *this;
+    }
+    template<Numeric S>
+    constexpr FxVec& operator/=(S s) & noexcept {
+        for (T& e : m_v)
+            e /= static_cast<T>(s);
+        return *this;
     }
 
-    // — non-mutating rotation: returns a rotated copy
-    FxVec2d rotate(double theta) const noexcept { return FxVec2d(*this).rotate_inplace(theta); }
-    FxVec2d rotate_rad(double theta) const noexcept {
-        return FxVec2d(*this).rotate_inplace_rad(theta);
+    // Vector operations. There is no vector * vector: use dot(), cross() or *=.
+    friend constexpr FxVec operator+(FxVec lhs, const FxVec& rhs) noexcept { return lhs += rhs; }
+    friend constexpr FxVec operator-(FxVec lhs, const FxVec& rhs) noexcept { return lhs -= rhs; }
+    friend constexpr FxVec operator-(FxVec v) noexcept {
+        for (T& e : v.m_v)
+            e = -e;
+        return v;
+    }
+    friend constexpr bool operator==(const FxVec& lhs, const FxVec& rhs) noexcept {
+        for (int i = 0; i < N; ++i)
+            if (!(lhs.m_v[i] == rhs.m_v[i])) return false;
+        return true;
     }
 
-    // Cross product with another 2D vector (returns scalar)
-    double cross(const FxVec2d& other) const { return x() * other.y() - y() * other.x(); }
-
-    // Perpendicular vectors
-    FxVec2d perp() const {
-        return FxVec2d(-y(), x()); // CCW perpendicular
+    // Scalar operations with generic Numeric s
+    template<Numeric S>
+    friend constexpr FxVec operator*(FxVec v, S s) noexcept {
+        return v *= s;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator*(S s, FxVec v) noexcept {
+        return v *= s;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator/(FxVec v, S s) noexcept {
+        return v /= s;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator+(FxVec v, S s) noexcept {
+        return v += s;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator+(S s, FxVec v) noexcept {
+        return v += s;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator-(FxVec v, S s) noexcept {
+        return v -= s;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator-(S s, FxVec v) noexcept {
+        for (T& e : v.m_v)
+            e = static_cast<T>(s) - e;
+        return v;
+    }
+    template<Numeric S>
+    friend constexpr FxVec operator/(S s, FxVec v) noexcept {
+        for (T& e : v.m_v)
+            e = static_cast<T>(s) / e;
+        return v;
     }
 
-    FxVec2d perpCW() const {
-        return FxVec2d(y(), -x()); // CW perpendicular
+  private:
+    T m_v[N];
+};
+
+using FxVec2f = FxVec<float, 2>;
+using FxVec2d = FxVec<double, 2>;
+using FxVec3f = FxVec<float, 3>;
+using FxVec3d = FxVec<double, 3>;
+using FxVec4f = FxVec<float, 4>;
+using FxVec2ui = FxVec<unsigned int, 2>;
+using FxVec4ui8 = FxVec<uint8_t, 4>;
+
+static_assert(std::is_trivially_copyable_v<FxVec2f> &&
+              std::is_trivially_default_constructible_v<FxVec2f>);
+static_assert(sizeof(FxVec3f) == 12 && alignof(FxVec4f) == 16);
+
+// N x N matrix, stored column by column; default construction leaves it uninitialised.
+template<typename T, int N>
+class alignas((sizeof(T) * N * N) % 16 == 0 ? 16 : alignof(T)) FxMat {
+  public:
+    FxMat() = default;
+    FxMat(const FxMat&) = default;
+    FxMat& operator=(const FxMat&) & = default;
+
+    constexpr T& operator()(int row, int col) noexcept { return m_a[col * N + row]; }
+    constexpr const T& operator()(int row, int col) const noexcept { return m_a[col * N + row]; }
+    constexpr T* data() noexcept { return m_a; }
+    constexpr const T* data() const noexcept { return m_a; }
+
+    // Products: each element is a fixed-order dot of a row and a column (see fx_detail::dot)
+    friend constexpr FxVec<T, N> operator*(const FxMat& m, const FxVec<T, N>& v) noexcept {
+        FxVec<T, N> out;
+        for (int row = 0; row < N; ++row)
+            out.data()[row] = fx_detail::dot<T, N>(m.row(row).data(), v.data());
+        return out;
     }
+    friend constexpr FxMat operator*(const FxMat& lhs, const FxMat& rhs) noexcept {
+        FxMat out;
+        for (int row = 0; row < N; ++row) {
+            const FxVec<T, N> r = lhs.row(row);
+            for (int col = 0; col < N; ++col)
+                out(row, col) = fx_detail::dot<T, N>(r.data(), &rhs.m_a[col * N]);
+        }
+        return out;
+    }
+
+  protected:
+    constexpr FxVec<T, N> row(int r) const noexcept {
+        FxVec<T, N> out;
+        for (int col = 0; col < N; ++col)
+            out.data()[col] = (*this)(r, col);
+        return out;
+    }
+
+  private:
+    T m_a[N * N];
 };
 
-using FxVec2fMap = Eigen::Map<Eigen::Vector2f>;
-
-// Custom 3D float vector with .x(), .y(), .z() getters and corresponding setters.
-class FxVec3f : public Eigen::Vector3f {
+class FxMat2f : public FxMat<float, 2> {
   public:
-    using Eigen::Vector3f::Vector3f;
-
-    // Constructor from single float (fills all components)
-    explicit FxVec3f(float a) : Eigen::Vector3f(a, a, a) {}
-
-    // Getters.
-    float& x() { return (*this)(0); }
-    float& y() { return (*this)(1); }
-    float& z() { return (*this)(2); }
-    // to use the third value as orientation
-    float& theta() { return (*this)(2); }
-
-    // Const getters.
-    float x() const { return (*this)(0); }
-    float y() const { return (*this)(1); }
-    float z() const { return (*this)(2); }
-    float theta() const { return (*this)(2); }
-
-    // Setters.
-    void set_x(float val) { (*this)(0) = val; }
-    void set_y(float val) { (*this)(1) = val; }
-    void set_z(float val) { (*this)(2) = val; }
-    // when used as orientation
-    void set_theta(float val) { (*this)(2) = val; }
-
-    FxVec2fMap xy() { return FxVec2fMap(this->data()); }
-    FxVec2f get_xy() const { return FxVec2f(this->data()); }
-    FxVec2f xy() const { return this->head<2>(); }
-    void set_xy(const FxVec2f& v2) { this->head<2>() = v2; }
-};
-
-using FxVec2dMap = Eigen::Map<Eigen::Vector2d>;
-
-// Custom 3D double vector with .x(), .y(), .z() getters and corresponding setters.
-class FxVec3d : public Eigen::Vector3d {
-  public:
-    using Eigen::Vector3d::Vector3d;
-
-    // Constructor from single double (fills all components)
-    explicit FxVec3d(double a) : Eigen::Vector3d(a, a, a) {}
-
-    // Getters.
-    double& x() { return (*this)(0); }
-    double& y() { return (*this)(1); }
-    double& z() { return (*this)(2); }
-    // to use the third value as orientation
-    double& theta() { return (*this)(2); }
-
-    // Const getters.
-    double x() const { return (*this)(0); }
-    double y() const { return (*this)(1); }
-    double z() const { return (*this)(2); }
-    double theta() const { return (*this)(2); }
-
-    // Setters.
-    void set_x(double val) { (*this)(0) = val; }
-    void set_y(double val) { (*this)(1) = val; }
-    void set_z(double val) { (*this)(2) = val; }
-    // when used as orientation
-    void set_theta(double val) { (*this)(2) = val; }
-
-    FxVec2dMap xy() { return FxVec2dMap(this->data()); }
-    FxVec2d get_xy() const { return FxVec2d(this->data()); }
-    FxVec2d xy() const { return this->head<2>(); }
-    void set_xy(const FxVec2d& v2) { this->head<2>() = v2; }
-};
-
-// Custom 4D float vector with .x(), .y(), .z(), .a() getters and corresponding setters.
-class FxVec4f : public Eigen::Vector4f {
-  public:
-    using Eigen::Vector4f::Vector4f;
-
-    // Constructor from single float (fills all components)
-    explicit FxVec4f(float a) : Eigen::Vector4f(a, a, a, a) {}
-
-    // Getters.
-    float& x() { return (*this)(0); }
-    float& y() { return (*this)(1); }
-    float& z() { return (*this)(2); }
-    float& a() { return (*this)(3); }
-
-    // Const getters.
-    float x() const { return (*this)(0); }
-    float y() const { return (*this)(1); }
-    float z() const { return (*this)(2); }
-    float a() const { return (*this)(3); }
-
-    // Setters.
-    void set_x(float val) { (*this)(0) = val; }
-    void set_y(float val) { (*this)(1) = val; }
-    void set_z(float val) { (*this)(2) = val; }
-    void set_a(float val) { (*this)(3) = val; }
-};
-
-// FxVec2f scalar operations with generic Numeric s
-template<Numeric S>
-inline FxVec2f operator*(FxVec2f const& v, S s) {
-    return FxVec2f(v.array() * static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec2f operator*(S s, FxVec2f const& v) {
-    return v * s;
-}
-template<Numeric S>
-inline FxVec2f operator/(FxVec2f const& v, S s) {
-    return FxVec2f(v.array() / static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec2f operator+(FxVec2f const& v, S s) {
-    return FxVec2f(v.array() + static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec2f operator+(S s, FxVec2f const& v) {
-    return v + s;
-}
-template<Numeric S>
-inline FxVec2f operator-(FxVec2f const& v, S s) {
-    return FxVec2f(v.array() - static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec2f operator-(S s, FxVec2f const& v) {
-    return FxVec2f((FxVec2f::Scalar(static_cast<float>(s)) * FxVec2f::Ones()).array() - v.array());
-}
-
-// FxVec3f scalar operations with generic Numeric s
-template<Numeric S>
-inline FxVec3f operator*(FxVec3f const& v, S s) {
-    return FxVec3f(v.array() * static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec3f operator*(S s, FxVec3f const& v) {
-    return v * s;
-}
-template<Numeric S>
-inline FxVec3f operator/(FxVec3f const& v, S s) {
-    return FxVec3f(v.array() / static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec3f operator+(FxVec3f const& v, S s) {
-    return FxVec3f(v.array() + static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec3f operator+(S s, FxVec3f const& v) {
-    return v + s;
-}
-template<Numeric S>
-inline FxVec3f operator-(FxVec3f const& v, S s) {
-    return FxVec3f(v.array() - static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec3f operator-(S s, FxVec3f const& v) {
-    return FxVec3f((FxVec3f::Scalar(static_cast<float>(s)) * FxVec3f::Ones()).array() - v.array());
-}
-
-// FxVec2d scalar operations with generic Numeric s
-template<Numeric S>
-inline FxVec2d operator*(FxVec2d const& v, S s) {
-    return FxVec2d(v.array() * static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec2d operator*(S s, FxVec2d const& v) {
-    return v * s;
-}
-template<Numeric S>
-inline FxVec2d operator/(FxVec2d const& v, S s) {
-    return FxVec2d(v.array() / static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec2d operator+(FxVec2d const& v, S s) {
-    return FxVec2d(v.array() + static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec2d operator+(S s, FxVec2d const& v) {
-    return v + s;
-}
-template<Numeric S>
-inline FxVec2d operator-(FxVec2d const& v, S s) {
-    return FxVec2d(v.array() - static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec2d operator-(S s, FxVec2d const& v) {
-    return FxVec2d((FxVec2d::Scalar(static_cast<double>(s)) * FxVec2d::Ones()).array() - v.array());
-}
-
-// FxVec3d scalar operations with generic Numeric s
-template<Numeric S>
-inline FxVec3d operator*(FxVec3d const& v, S s) {
-    return FxVec3d(v.array() * static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec3d operator*(S s, FxVec3d const& v) {
-    return v * s;
-}
-template<Numeric S>
-inline FxVec3d operator/(FxVec3d const& v, S s) {
-    return FxVec3d(v.array() / static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec3d operator+(FxVec3d const& v, S s) {
-    return FxVec3d(v.array() + static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec3d operator+(S s, FxVec3d const& v) {
-    return v + s;
-}
-template<Numeric S>
-inline FxVec3d operator-(FxVec3d const& v, S s) {
-    return FxVec3d(v.array() - static_cast<double>(s));
-}
-template<Numeric S>
-inline FxVec3d operator-(S s, FxVec3d const& v) {
-    return FxVec3d((FxVec3d::Scalar(static_cast<double>(s)) * FxVec3d::Ones()).array() - v.array());
-}
-
-// FxVec4f scalar operations with generic Numeric s
-template<Numeric S>
-inline FxVec4f operator*(FxVec4f const& v, S s) {
-    return FxVec4f(v.array() * static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec4f operator*(S s, FxVec4f const& v) {
-    return v * s;
-}
-template<Numeric S>
-inline FxVec4f operator/(FxVec4f const& v, S s) {
-    return FxVec4f(v.array() / static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec4f operator+(FxVec4f const& v, S s) {
-    return FxVec4f(v.array() + static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec4f operator+(S s, FxVec4f const& v) {
-    return v + s;
-}
-template<Numeric S>
-inline FxVec4f operator-(FxVec4f const& v, S s) {
-    return FxVec4f(v.array() - static_cast<float>(s));
-}
-template<Numeric S>
-inline FxVec4f operator-(S s, FxVec4f const& v) {
-    return FxVec4f((FxVec4f::Scalar(static_cast<float>(s)) * FxVec4f::Ones()).array() - v.array());
-}
-
-// FxVec2f in-place scalar operations
-template<Numeric S>
-inline FxVec2f& operator+=(FxVec2f& v, S s) {
-    v.array() += static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec2f& operator-=(FxVec2f& v, S s) {
-    v.array() -= static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec2f& operator*=(FxVec2f& v, S s) {
-    v.array() *= static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec2f& operator/=(FxVec2f& v, S s) {
-    v.array() /= static_cast<float>(s);
-    return v;
-}
-
-// FxVec3f in-place scalar operations
-template<Numeric S>
-inline FxVec3f& operator+=(FxVec3f& v, S s) {
-    v.array() += static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec3f& operator-=(FxVec3f& v, S s) {
-    v.array() -= static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec3f& operator*=(FxVec3f& v, S s) {
-    v.array() *= static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec3f& operator/=(FxVec3f& v, S s) {
-    v.array() /= static_cast<float>(s);
-    return v;
-}
-
-// FxVec4f in-place scalar operations
-template<Numeric S>
-inline FxVec4f& operator+=(FxVec4f& v, S s) {
-    v.array() += static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec4f& operator-=(FxVec4f& v, S s) {
-    v.array() -= static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec4f& operator*=(FxVec4f& v, S s) {
-    v.array() *= static_cast<float>(s);
-    return v;
-}
-template<Numeric S>
-inline FxVec4f& operator/=(FxVec4f& v, S s) {
-    v.array() /= static_cast<float>(s);
-    return v;
-}
-
-// free non-member operators
-inline FxVec2f& operator*=(FxVec2f& lhs, const FxVec2f& rhs) {
-    lhs.array() *= rhs.array();
-    return lhs;
-}
-inline FxVec2f& operator/=(FxVec2f& lhs, const FxVec2f& rhs) {
-    lhs.array() /= rhs.array();
-    return lhs;
-}
-inline FxVec2f& operator+=(FxVec2f& lhs, const FxVec2f& rhs) {
-    lhs.array() += rhs.array();
-    return lhs;
-}
-inline FxVec2f& operator-=(FxVec2f& lhs, const FxVec2f& rhs) {
-    lhs.array() -= rhs.array();
-    return lhs;
-}
-// FxVec2f scalar/vector division: s / v
-template<Numeric S>
-inline FxVec2f operator/(S s, FxVec2f const& v) {
-    return FxVec2f((FxVec2f::Scalar(static_cast<float>(s)) * FxVec2f::Ones()).array() / v.array());
-}
-
-// FxVec3f scalar/vector division: s / v
-template<Numeric S>
-inline FxVec3f operator/(S s, FxVec3f const& v) {
-    return FxVec3f((FxVec3f::Scalar(static_cast<float>(s)) * FxVec3f::Ones()).array() / v.array());
-}
-
-// FxVec4f scalar/vector division: s / v
-template<Numeric S>
-inline FxVec4f operator/(S s, FxVec4f const& v) {
-    return FxVec4f((FxVec4f::Scalar(static_cast<float>(s)) * FxVec4f::Ones()).array() / v.array());
-}
-
-// Custom 2D unsigned int vector with .x() getter and .set_x() setter.
-class FxVec2ui : public Eigen::Matrix<unsigned int, 2, 1> {
-  public:
-    using Base = Eigen::Matrix<unsigned int, 2, 1>;
-    using Base::Base;
-
-    unsigned int& x() { return (*this)(0); }
-    unsigned int& y() { return (*this)(1); }
-
-    // Const getters.
-    unsigned int x() const { return (*this)(0); }
-    unsigned int y() const { return (*this)(1); }
-
-    void set_x(unsigned int val) { (*this)(0) = val; }
-    void set_y(unsigned int val) { (*this)(1) = val; }
-};
-
-// And a 4D 8-bit unsigned integer vector.
-class FxVec4ui8 : public Eigen::Matrix<uint8_t, 4, 1> {
-  public:
-    using Base = Eigen::Matrix<uint8_t, 4, 1>;
-    using Base::Base;
-
-    uint8_t& x() { return (*this)(0); }
-    uint8_t& y() { return (*this)(1); }
-    uint8_t& z() { return (*this)(2); }
-    uint8_t& a() { return (*this)(3); }
-
-    // Const getters.
-    uint8_t x() const { return (*this)(0); }
-    uint8_t y() const { return (*this)(1); }
-    uint8_t z() const { return (*this)(2); }
-    uint8_t a() const { return (*this)(3); }
-
-    void set_x(uint8_t val) { (*this)(0) = val; }
-    void set_y(uint8_t val) { (*this)(1) = val; }
-    void set_z(uint8_t val) { (*this)(2) = val; }
-    void set_a(uint8_t val) { (*this)(3) = val; }
-};
-
-class FxMat2f : public Eigen::Matrix2f {
-  public:
-    using Eigen::Matrix2f::Matrix2f;
+    using FxMat<float, 2>::FxMat;
+    FxMat2f() = default;
+    FxMat2f(const FxMat<float, 2>& m) : FxMat<float, 2>(m) {}
 
     float& a() { return (*this)(0, 0); }
     float& b() { return (*this)(0, 1); }
@@ -564,12 +429,21 @@ class FxMat2f : public Eigen::Matrix2f {
     void set_d(float val) { (*this)(1, 1) = val; }
 
     // The inverse (transpose) of the rotation matrix.
-    FxMat2f inv_rotation() const { return this->transpose(); }
+    FxMat2f inv_rotation() const {
+        FxMat2f t;
+        t.set_a(a());
+        t.set_b(c());
+        t.set_c(b());
+        t.set_d(d());
+        return t;
+    }
 };
 
-class FxMat3f : public Eigen::Matrix3f {
+class FxMat3f : public FxMat<float, 3> {
   public:
-    using Eigen::Matrix3f::Matrix3f;
+    using FxMat<float, 3>::FxMat;
+    FxMat3f() = default;
+    FxMat3f(const FxMat<float, 3>& m) : FxMat<float, 3>(m) {}
 
     // Accessors for each element of the 3x3 matrix
     // Row 0
@@ -611,7 +485,14 @@ class FxMat3f : public Eigen::Matrix3f {
     void set_i(float val) { (*this)(2, 2) = val; }
 
     // Upper-left 2x2 rotation of a homogeneous transform [R t; 0 1].
-    FxMat2f Rot() const { return this->block<2, 2>(0, 0).eval(); }
+    FxMat2f Rot() const {
+        FxMat2f R;
+        R.set_a(a());
+        R.set_b(b());
+        R.set_c(d());
+        R.set_d(e());
+        return R;
+    }
     // Extract the translation vector (first two elements of the third column) as an FxVec2f
     FxVec2f t() const { return FxVec2f((*this)(0, 2), (*this)(1, 2)); }
 
@@ -625,8 +506,8 @@ class FxMat3f : public Eigen::Matrix3f {
 
     // set the translation part from an FxVec2f
     void set_t(const FxVec2f& trans) {
-        (*this)(0, 2) = trans.x(); // Assuming FxVec2f has x() method.
-        (*this)(1, 2) = trans.y(); // And a y() method.
+        (*this)(0, 2) = trans.x();
+        (*this)(1, 2) = trans.y();
     }
 
     // Compute and return the inverse transformation.
@@ -653,6 +534,8 @@ class FxMat3f : public Eigen::Matrix3f {
         return inv;
     }
 };
+
+static_assert(alignof(FxMat2f) == 16 && sizeof(FxMat3f) == 36);
 
 // ────────────────────────────────────────────────────────────────────────────
 //  FxArray: numpy style array

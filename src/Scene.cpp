@@ -599,7 +599,7 @@ void FxScene::step(double step_dt) {
                         if (!sleeper || !other || !sleeper->is_sleeping()) return;
                         if (other->is_sleeping()) return;
                         const bool moving =
-                            other->velocity.head<2>().norm() > sleeper->sleep_threshold_linear ||
+                            other->velocity.xy().norm() > sleeper->sleep_threshold_linear ||
                             std::fabs(other->velocity.theta()) > sleeper->sleep_threshold_angular;
                         if (moving) sleeper->wake();
                     };
@@ -616,7 +616,7 @@ void FxScene::step(double step_dt) {
                         c.jn_warm[contact_idx] = cached.jn[contact_idx];
                         c.jt_warm[contact_idx] = normal_stable ? cached.jt[contact_idx] : 0.0f;
                     }
-                    contacts.emplace_back(std::move(c));
+                    contacts.emplace_back(c);
                     m_contact_colors.push_back(m_contact_graph.color_of_pair(pair_index));
                 }
             }

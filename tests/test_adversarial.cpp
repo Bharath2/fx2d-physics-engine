@@ -258,9 +258,9 @@ void test_thin_slivers_rest_stably() {
                     std::to_string(sliver->pose.y()) + " expected " + std::to_string(expected_y));
         require(std::fabs(sliver->pose.theta()) < 0.05f,
                 "a resting sliver must not tilt, tilted " + std::to_string(sliver->pose.theta()));
-        require(sliver->velocity.head<2>().norm() < 0.01f,
+        require(sliver->velocity.xy().norm() < 0.01f,
                 "a resting sliver must not jitter, |v|=" +
-                    std::to_string(sliver->velocity.head<2>().norm()));
+                    std::to_string(sliver->velocity.xy().norm()));
     }
 }
 
@@ -319,8 +319,8 @@ void test_restitution_chain_transfers_momentum() {
 void test_spinning_box_never_gains_energy() {
     auto mechanical_energy = [](const std::shared_ptr<FxEntity>& e, float reference_height) {
         const float w = e->velocity.theta();
-        return 0.5f * e->mass() * e->velocity.head<2>().squaredNorm() +
-               0.5f * e->inertia() * w * w + e->mass() * 10.0f * (e->pose.y() - reference_height);
+        return 0.5f * e->mass() * e->velocity.xy().squaredNorm() + 0.5f * e->inertia() * w * w +
+               e->mass() * 10.0f * (e->pose.y() - reference_height);
     };
 
     for (float omega : {5.0f, 25.0f, 100.0f}) {

@@ -142,7 +142,7 @@ void FxEntity::tick_sleep(float dt) {
         m_sleep_timer = 0.0f;
         return;
     } // static bodies never sleep
-    float speed_lin = velocity.head<2>().norm();
+    float speed_lin = velocity.xy().norm();
     float speed_ang = std::abs(velocity.theta());
     if (speed_lin < sleep_threshold_linear && speed_ang < sleep_threshold_angular) {
         m_sleep_timer += dt;
@@ -196,8 +196,8 @@ FxVec3f FxEntity::calc_acceleration() {
 FxVec3f FxEntity::calc_acceleration(const FxVec2f& gravity) {
     FxVec3f acc{0.0, 0.0, 0.0};
     if (_mass > 0.0f) {
-        acc.xy() += m_eff_force * _inv_mass; // Linear acceleration
-        acc.xy() += gravity_scale * gravity; // Gravity effect
+        acc.set_xy(acc.xy() + m_eff_force * _inv_mass); // Linear acceleration
+        acc.set_xy(acc.xy() + gravity_scale * gravity); // Gravity effect
     }
     if (_inertia > 0.0f) {
         acc.theta() += m_eff_moment * _inv_inertia; // Angular acceleration
@@ -265,7 +265,7 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
 
     // Apply accumulated impulses to velocity
     if (_inv_mass > 0.0f) {
-        velocity.xy() += m_eff_impulse * _inv_mass;
+        velocity.set_xy(velocity.xy() + m_eff_impulse * _inv_mass);
     }
     if (_inv_inertia > 0.0f) {
         velocity.theta() += m_eff_impulse_moment * _inv_inertia;

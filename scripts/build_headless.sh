@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Headless g++ build (no raylib/ImGui). Needs: eigen3, yaml-cpp, tbb.
+# Headless g++ build (no raylib/ImGui). Needs: yaml-cpp.
 # Usage: ./scripts/build_headless.sh && ./build-headless/truck_headless
 set -euo pipefail
 
@@ -8,10 +8,9 @@ OUT=build-headless
 mkdir -p "$OUT"
 
 CXX=${CXX:-g++}
-EIGEN_INC=${EIGEN_INC:-/usr/include/eigen3}
 # examples/ is on the path because a test drives the slingshot the demo ships.
-FLAGS=(-std=c++20 -O2 -Wall -I include -I examples -I "$EIGEN_INC")
-LIBS=(-lyaml-cpp -ltbb)
+FLAGS=(-std=c++20 -O2 -Wall -I include -I examples)
+LIBS=(-lyaml-cpp)
 
 mapfile -t CORE < <(./scripts/list_sources.sh --core)
 

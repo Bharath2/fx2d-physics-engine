@@ -18,22 +18,6 @@ to_mixed() {
   fi
 }
 
-# Prefer known Eigen install prefixes.
-EIGEN_INC=${EIGEN_INC:-}
-if [[ -z "$EIGEN_INC" ]]; then
-  for cand in /usr/include/eigen3 /usr/local/include/eigen3 \
-              /mingw64/include/eigen3 /ucrt64/include/eigen3 \
-              "C:/msys64/mingw64/include/eigen3" \
-              "C:/msys64/ucrt64/include/eigen3"; do
-    if [[ -d "$cand" ]]; then EIGEN_INC=$cand; break; fi
-  done
-fi
-if [[ -z "$EIGEN_INC" ]]; then
-  echo "error: Eigen3 headers not found; set EIGEN_INC" >&2
-  exit 1
-fi
-EIGEN_INC=$(to_mixed "$EIGEN_INC")
-
 # yaml-cpp is only required by YamlUtils.cpp; optional for the rest.
 YAML_INC=${YAML_INC:-}
 if [[ -z "$YAML_INC" ]]; then
@@ -59,7 +43,7 @@ mapfile -t FILES < <(./scripts/list_sources.sh --core)
   first=1
   for f in "${FILES[@]}"; do
     [[ -f "$f" ]] || continue
-    cmd="$CXX -std=$STD -I$ROOT/include -I$EIGEN_INC ${YAML_FLAG} -c $ROOT/$f"
+    cmd="$CXX -std=$STD -I$ROOT/include ${YAML_FLAG} -c $ROOT/$f"
     if [[ $first -eq 0 ]]; then echo ','; fi
     first=0
     printf '  {\n'
@@ -72,4 +56,4 @@ mapfile -t FILES < <(./scripts/list_sources.sh --core)
   echo ']'
 } > "$OUT_DIR/compile_commands.json"
 
-echo "Wrote $OUT_DIR/compile_commands.json (${#FILES[@]} translation units, Eigen=$EIGEN_INC)"
+echo "Wrote $OUT_DIR/compile_commands.json (${#FILES[@]} translation units)"

@@ -81,7 +81,7 @@ float grab_drag_release(World& w, FxSlingshot& sling, const FxVec2f& pull_to) {
 
     // Release.
     frame(w.scene, sling, w.ball, pull_to, false);
-    return w.ball->velocity.head<2>().norm();
+    return w.ball->velocity.xy().norm();
 }
 
 // Parked before launch, the ball must not fall or drift.
@@ -134,9 +134,8 @@ void test_drag_follows_cursor_and_clamps() {
             "a wild pull should sit at the clamp, got " + std::to_string(distance));
 
     // Held still, the ball must not accumulate velocity from being moved.
-    require(w.ball->velocity.head<2>().norm() < 1e-3f,
-            "a dragged ball must carry no velocity, has " +
-                std::to_string(w.ball->velocity.head<2>().norm()));
+    require(w.ball->velocity.xy().norm() < 1e-3f, "a dragged ball must carry no velocity, has " +
+                                                      std::to_string(w.ball->velocity.xy().norm()));
 }
 
 // Releasing launches the ball away from the anchor, at a speed set by the pull.
@@ -245,7 +244,7 @@ void test_reset_rearms_the_slingshot() {
     require(!sling.launched, "reset must re-arm the slingshot");
     require_near(w.ball->pose.x(), sling.anchor.x(), 1e-3f, "reset must park the ball in x");
     require_near(w.ball->pose.y(), sling.anchor.y(), 1e-3f, "reset must park the ball in y");
-    require(w.ball->velocity.head<2>().norm() < 1e-3f, "a reset ball must be at rest");
+    require(w.ball->velocity.xy().norm() < 1e-3f, "a reset ball must be at rest");
 }
 
 // R must re-arm from any state, including mid-drag.
@@ -266,7 +265,7 @@ void test_reset_key_works_while_dragging() {
     require(!sling.dragging, "R must cancel an in-progress drag");
     require(!sling.launched, "R must leave the slingshot armed");
     require_near(w.ball->pose.x(), sling.anchor.x(), 1e-3f, "R must park the ball back at rest");
-    require(w.ball->velocity.head<2>().norm() < 1e-3f,
+    require(w.ball->velocity.xy().norm() < 1e-3f,
             "a cancelled drag must not leave the ball moving");
 }
 

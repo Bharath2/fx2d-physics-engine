@@ -7,10 +7,6 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## In progress
 
-- **No required dependencies.** The physics core will build with nothing but a C++20 compiler:
-  Fx2D's own vector and matrix types replace Eigen, and the TBB link goes away. YAML scene
-  loading and the raylib viewer become optional modules that CMake fetches when you turn them
-  on, so a fresh clone builds without installing anything first.
 - **Cross-platform determinism.** The same scene and inputs will give bit-identical results on
   every supported compiler and CPU: GCC, Clang and MSVC, on x86-64 and ARM64. That takes
   Fx2D's own `sin` and `cos` (C libraries disagree in the last bit), no host-specific CPU flags
@@ -60,6 +56,10 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## Recently delivered
 
+- **No required dependencies.** The physics library builds with nothing but a C++20 compiler.
+  Fx2D's own vector and matrix types replaced Eigen with bit-identical results, and TBB is no
+  longer linked. YAML loading and the viewer are optional, and CMake downloads their
+  dependencies when they are not installed, so a fresh clone builds without installing anything.
 - **Browser playground** and a **mouse joint** for dragging bodies.
 - **A 2.2-8.1x faster step** on the benchmark scenes: a broad phase that only re-walks its tree
   when a body moved, an allocation-free narrow phase, and a vectorised velocity solve that

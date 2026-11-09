@@ -261,12 +261,12 @@ void FxPrismaticJoint::set_position(float position, bool instant) {
             FxVec2f pos_correction1 = -correction * (m1 / total_inv_mass);
             FxVec2f pos_correction2 = correction * (m2 / total_inv_mass);
 
-            entity1->pose.xy() += pos_correction1;
-            entity2->pose.xy() += pos_correction2;
+            entity1->pose.set_xy(entity1->pose.xy() + pos_correction1);
+            entity2->pose.set_xy(entity2->pose.xy() + pos_correction2);
 
             // Also update previous pose to maintain consistency
-            entity1->prev_pose.xy() += pos_correction1;
-            entity2->prev_pose.xy() += pos_correction2;
+            entity1->prev_pose.set_xy(entity1->prev_pose.xy() + pos_correction1);
+            entity2->prev_pose.set_xy(entity2->prev_pose.xy() + pos_correction2);
         }
     }
 }
@@ -296,8 +296,8 @@ void FxPrismaticJoint::set_velocity(float velocity, bool instant) {
             FxVec2f vel_correction1 = -correction * (m1 / total_inv_mass);
             FxVec2f vel_correction2 = correction * (m2 / total_inv_mass);
 
-            entity1->velocity.xy() += vel_correction1;
-            entity2->velocity.xy() += vel_correction2;
+            entity1->velocity.set_xy(entity1->velocity.xy() + vel_correction1);
+            entity2->velocity.set_xy(entity2->velocity.xy() + vel_correction2);
         }
     }
 }

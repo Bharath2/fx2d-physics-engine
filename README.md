@@ -31,7 +31,7 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 - **Physics you can read.** One explicit pipeline, from broad phase to SAT contacts to a substepped XPBD solver, with [solver](https://bharath2.github.io/fx2d-physics-engine/concepts/xpbd) and [collision](https://bharath2.github.io/fx2d-physics-engine/concepts/collisions) docs that derive the equations the code implements.
 - **Built for simulation, not just games.** The headless build steps thousands of times per second with no window or GPU, for tests, batch rollouts and reinforcement learning.
 - **Deterministic and tested.** Fixed timestep and solver order, adversarial stress scenes, and golden regression tests that keep speedups from changing the physics.
-- **Small and embeddable.** About 8k lines of C++20 in one static library under BSD-3-Clause. Headless builds need only Eigen and yaml-cpp.
+- **Small and embeddable.** About 8k lines of C++20 in one static library under BSD-3-Clause. The physics needs only the C++ standard library; YAML loading adds yaml-cpp, which CMake downloads if it is not installed.
 
 ## Features
 
@@ -51,8 +51,9 @@ SAT collision detection · XPBD constraint solver · joints with motors · YAML 
 ```bash
 git clone https://github.com/Bharath2/fx2d-physics-engine.git
 cd fx2d-physics-engine
-./scripts/build_headless.sh          # needs only Eigen3, yaml-cpp and TBB
-./build-headless/fx2d_tests          # run the test suite
+cmake -S . -B build-headless -DCMAKE_BUILD_TYPE=Release -DFX2D_HEADLESS=ON -DFX2D_BUILD_EXAMPLES=ON
+cmake --build build-headless -j      # downloads yaml-cpp if it is not installed
+./build-headless/Fx2DTests           # run the test suite
 ./build-headless/truck_headless      # step a scene with no window
 ```
 
@@ -185,7 +186,7 @@ Because stepping is deterministic and single-threaded, many independent scenes c
 
 ## Dependencies
 
-CMake 3.16+, Eigen 3.3+ and yaml-cpp. The windowed viewer also needs raylib 4.5+, Dear ImGui and rlImGui; the [installation guide](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) covers each platform.
+CMake 3.16+ and a C++20 compiler. The YAML scene loader uses yaml-cpp, and the windowed viewer uses raylib 4.5+, Dear ImGui and rlImGui; CMake downloads any of them that are not installed. The [installation guide](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) lists the system packages raylib needs on Linux.
 
 ## Documentation
 

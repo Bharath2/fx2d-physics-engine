@@ -334,10 +334,10 @@ void resolve_penetration(const FxContact& contact, double dt) {
                                      static_cast<float>(contact.count);
             float lambdaP = correction_depth / K_n;
             FxVec2f dP = n * lambdaP;
-            A.pose.xy() -= wA * dP;
-            B.pose.xy() += wB * dP;
-            A.prev_pose.xy() -= wA * dP;
-            B.prev_pose.xy() += wB * dP;
+            A.pose.set_xy(A.pose.xy() - wA * dP);
+            B.pose.set_xy(B.pose.xy() + wB * dP);
+            A.prev_pose.set_xy(A.prev_pose.xy() - wA * dP);
+            B.prev_pose.set_xy(B.prev_pose.xy() + wB * dP);
 
             // Apply angular corrections
             A.pose.theta() = FxAngleWrap(A.pose.theta() - IA * lambdaP * ra_n);

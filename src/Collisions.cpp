@@ -631,7 +631,7 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
     // Bare segments carry no skin, so the distance-minus-radii gap math degenerates for them.
     // Edges are static level geometry, where discrete contacts are sufficient.
     if (A->is_edge() || B->is_edge() || A->is_chain() || B->is_chain()) return FxContact(false);
-    FxVec2f rel_vel = entity2->velocity.head<2>() - entity1->velocity.head<2>();
+    FxVec2f rel_vel = entity2->velocity.xy() - entity1->velocity.xy();
 
     FxVec2f normal;
     float gap;
