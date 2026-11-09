@@ -7,8 +7,9 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## In progress
 
-- **A benchmark against Box2D v3.** Matching scenes and published numbers, including where
-  Fx2D is slower, followed by work on the gaps the numbers show.
+- **Closing the speed gap to Box2D v3.** On matching scenes, single-threaded at default settings,
+  Fx2D takes 25-45x as long per step as Box2D 3.2 ([benchmarks/box2d](../benchmarks/box2d/)).
+  Most of the gap is work Fx2D repeats in each of its 14 substeps.
 - **A Python package.** `pip install fx2d` with prebuilt wheels for Linux, macOS and Windows, a
   call that steps many scenes at once for batched rollouts, and Gymnasium environments.
 - **A control demo.** A small robot driven through the joint motors by a controller, runnable
