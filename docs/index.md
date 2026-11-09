@@ -122,6 +122,6 @@ Each simulation step finds potentially colliding pairs, generates contacts, and 
 
 ## Development and contributions
 
-Fx2D is developed in the open. The [roadmap](/roadmap) records pending work, known limitations, and measurements from previous changes. The [contributing guide](/contributing) covers code style, tests, and benchmarks.
+Fx2D is developed in the open. The [roadmap](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap.md) lists planned work and known limitations, and the [engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md) record the measurements behind previous changes. The [contributing guide](/contributing) covers code style, tests, and benchmarks.
 
 Bug reports, reproducible scenes, documentation corrections, and code contributions are welcome on [GitHub](https://github.com/Bharath2/fx2d-physics-engine).

@@ -8,9 +8,10 @@ Contributions are welcome! Please follow the existing code style and conventions
   changes, and open a pull request referencing the issue.
 - Run `./scripts/format.sh` before opening a PR; `./scripts/lint.sh` should
   pass. Both are gated in CI on every push and pull request.
-- **Looking for something to work on?** The roadmap of open targets lives in
-  [roadmap](./roadmap) — each item records the motivation, the
-  relevant code paths, and the suggested approach.
+- **Looking for something to work on?** Planned work is listed in the
+  [roadmap](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap.md), and the
+  [engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md) record what has been
+  measured and tried so far.
 
 ## Linting
 
@@ -165,8 +166,8 @@ wall and CPU **both**: a change that halves wall time while spending eight times
 usually the wrong trade for a library that may be one subsystem among many, and a bad trade for
 RL rollouts where many independent sims already saturate the machine. A `cpu/wall` ratio near
 1.0 means serial; well above 1.0 is only a win if wall time actually fell. Any threading change
-needs a before/after from this target — see item 7 under Priority Targets in the
-[roadmap](./roadmap).
+needs a before/after from this target — see the parallel-loop measurements in the
+[engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md#tried-and-turned-down).
 
 ### Reading the phase split
 
@@ -182,7 +183,7 @@ cmake --build build-prof -j --target Fx2DBench
 ```
 
 Use it to decide *what* to optimise before optimising it. The rankings in the
-[SIMD plan](./roadmap/simd) have been overturned twice by re-running this.
+[SIMD plan](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap/simd.md) have been overturned twice by re-running this.
 
 ### Look for allocator traffic first
 
@@ -221,7 +222,7 @@ call before touching the arithmetic.
 
 ### Measure in cycles, not wall time
 
-On a laptop that moves on and off turbo, wall time is not a measurement. During one session the
+On a laptop that moves on and off turbo, wall time is not a measurement. In one series of runs the
 *same unchanged binary* reported `settling_boxes/200` at 8.50, 11.89 and 3.47 ms/step in three
 different windows -- a 3.4x spread on identical code. Two separate changes were nearly reported
 as large wins on the strength of readings like that, and one of them was actually a regression.

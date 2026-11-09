@@ -60,7 +60,7 @@ The candidate pairs come from a SAH-guided dynamic AABB tree (`include/Fx2D/AABB
 
 - **`sync_broad_phase(dt, sweep_all_movers)`** runs every substep. Bodies have just moved, so each proxy is brought up to date from `FxEntity::bounding_box()` — which `FxEntity::step()` refreshed during integration. The tree stores every box **fattened by 20% of its extent**, so a proxy only has to be reinserted when its body leaves that fat box. The function returns whether any leaf was inserted, removed or reinserted.
 
-  On the first substep the box is also **swept along the body's velocity for the whole step**, so a body moving at constant velocity stays inside the box the tree already holds and needs no reinsertion for the rest of the step. That inflates the pair list slightly, which the tight-AABB filter below rejects cheaply. This was tried once before and reverted for costing more than it saved; it only became worth it after the narrow phase got roughly three times cheaper. See the [roadmap](../roadmap#recently-delivered).
+  On the first substep the box is also **swept along the body's velocity for the whole step**, so a body moving at constant velocity stays inside the box the tree already holds and needs no reinsertion for the rest of the step. That inflates the pair list slightly, which the tight-AABB filter below rejects cheaply. This was tried once before and reverted for costing more than it saved; it only became worth it after the narrow phase got roughly three times cheaper. See the [engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md#tried-and-turned-down).
 - **`collect_broad_phase_pairs(pairs)`** walks the tree for overlapping proxies and translates them into packed entity indices, applying the registry-level filters (collision-exclusion pairs, negative collision groups, missing geometry).
 
 `FxScene::step()` runs the walk only when the sync reports the tree changed. If no leaf moved, the tree is the same tree, so the walk would rebuild the identical list in the identical order — skipping it changes nothing and saves a tree descent. In a settling or piling scene about 90% of substeps skip it.
@@ -184,7 +184,7 @@ A negative depth is what makes this work: the position solver treats it as "do n
 
 Edges are excluded (`A->is_edge() || B->is_edge()` returns early). A bare segment has no skin, so the distance-minus-radii math degenerates, and edges are static level geometry where discrete contacts suffice.
 
-Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see item 3 in the [roadmap](../roadmap)).
+Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see the [roadmap](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap.md)).
 
 ---
 
@@ -248,7 +248,7 @@ Called **after** velocity derivation. `init_velocity_pass` runs once per contact
 
 These three take an `FxSolverBodies` (`include/Fx2D/Solver.h`) rather than reading velocity off the entities. It is a structure of arrays — `vx`, `vy`, `w`, `inv_m`, `inv_i` — indexed by the packed registry index each contact carries in `body1` / `body2`. `FxScene::step()` gathers it once per substep after velocity derivation and scatters it back after the sweeps.
 
-The reason is cost, not style: the sweeps are the hottest phase of the step, and reaching velocity through a `shared_ptr<FxEntity>` is a pointer chase per body per contact per sweep. A sleeping or immovable body gathers a zero inverse mass, which is what makes it immovable in the sweeps. The layout is also what the colored batch solve in the [SIMD plan](../roadmap/simd) is built on.
+The reason is cost, not style: the sweeps are the hottest phase of the step, and reaching velocity through a `shared_ptr<FxEntity>` is a pointer chase per body per contact per sweep. A sleeping or immovable body gathers a zero inverse mass, which is what makes it immovable in the sweeps. The layout is also what the colored batch solve in the [SIMD plan](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap/simd.md) is built on.
 
 ### Normal Impulse (Restitution)
 

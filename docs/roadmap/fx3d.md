@@ -54,7 +54,7 @@ physics, where the competition is Jolt and PhysX.
 4. **3D AABB tree + registry** — near-mechanical given the reuse map.
 5. **raylib 3D viewer** — `Camera3D`, mesh drawing, the existing ImGui panel.
 6. **Port the stability test suite** — plus the adversarial scenes from
-   roadmap item 8 (tall stacks, mass ratios, loaded chains), in 3D from day
+   the 2D suite (tall stacks, mass ratios, loaded chains), in 3D from day
    one. Robustness is bought with scenes, not architecture.
 
 ## Do these 2D items first

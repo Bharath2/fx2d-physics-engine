@@ -12,7 +12,7 @@ export default defineConfig({
   description,
   base: "/fx2d-physics-engine/",
   cleanUrls: true,
-  srcExclude: ["README.md"],
+  srcExclude: ["README.md", "roadmap.md", "roadmap/**", "engineering-notes.md"],
   lastUpdated: true,
   sitemap: { hostname: site },
   ignoreDeadLinks: [
@@ -162,17 +162,6 @@ export default defineConfig({
             { text: "All public symbols ↗", link: "/cpp-api/index.html" },
             { text: "FxScene ↗", link: "/cpp-api/classFxScene.html" },
             { text: "FxEntity ↗", link: "/cpp-api/classFxEntity.html" },
-          ],
-        },
-      ],
-      "/roadmap": [
-        {
-          text: "Project",
-          items: [
-            { text: "Roadmap", link: "/roadmap" },
-            { text: "SIMD plan", link: "/roadmap/simd" },
-            { text: "Fx3D plan", link: "/roadmap/fx3d" },
-            { text: "Contributing", link: "/contributing" },
           ],
         },
       ],
