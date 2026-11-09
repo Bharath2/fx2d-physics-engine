@@ -61,6 +61,21 @@ Three details of the batched velocity solve were each needed for the speedup:
 3. GCC's `vect-max-version-for-alias-checks` is raised from its default of 10 to 200.
    Otherwise GCC silently refuses to vectorise both hot loops.
 
+### Replacing Eigen
+
+`FxVec` and `FxMat` replaced the Eigen-based types with bit-identical results: a dump of every
+body's pose and velocity after each of 300 steps, over 11 scenes, matched the Eigen build
+exactly. Instruction counts against the Eigen build, from valgrind with GCC 13:
+
+| build | settling_boxes (400) | pile (300) | stacks (200) |
+|---|---|---|---|
+| SSE2 | +0.4% | +0.4% | +1.4% |
+| AVX2 (`-march=x86-64-v3`) | +0.2% | -0.4% | +1.1% |
+
+Most of what remains is GCC now vectorising the per-point loop in `init_velocity_pass`, which it
+did not attempt through Eigen's types. Instructions are not cycles; a cycle count on hardware
+with counters is still owed.
+
 ## Where step time goes now
 
 | | stacks | pile | settling_boxes |
@@ -187,9 +202,15 @@ step, so this matters only for deep stacks a long way from the origin.
   both hot loops of the batched solve fall back to scalar and `stacks` is ~26% slower, with no
   test failing because results are identical. If you change that kernel, check it with
   `-fopt-info-vec`.
+- **The same budget versions tiny loops.** Under it GCC wraps even a two-element loop in runtime
+  alias checks. When `FxVec` first replaced Eigen with plain loops over its elements,
+  `init_velocity_pass` doubled in size; the element-wise operations are now unrolled at compile
+  time (`fx_detail::unrolled`).
 - **Wall time on a laptop is not a measurement.** The same unchanged binary measured 8.50, 11.89
   and 3.47 ms/step as the CPU moved on and off turbo. Count cycles, interleave the two
-  binaries, and take minimums.
+  binaries, and take minimums. Where hardware counters are unavailable (WSL, most VMs),
+  valgrind's `cachegrind` counts instructions exactly: a different measure from cycles, but
+  repeatable to the instruction.
 - **Rebuild what you measure.** `cmake --build ... --target Fx2DTests` does not rebuild
   `Fx2DBench`.
 - **Two fixes are defensive.** The overflow colour in the batched solve is solved one contact at

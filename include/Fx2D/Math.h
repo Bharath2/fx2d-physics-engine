@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 // Constant representing positive infinity
@@ -68,6 +69,15 @@ constexpr T dot(const T* a, const T* b) noexcept {
     }
 }
 
+// Calls f(0) ... f(N-1) as straight-line code. Element-wise operations use this, not a loop:
+// under the raised vectoriser budget GCC wraps even a two-element loop in runtime alias checks.
+template<int N, typename F>
+constexpr void unrolled(F&& f) noexcept {
+    [&]<std::size_t... I>(std::index_sequence<I...>) {
+        (f(I), ...);
+    }(std::make_index_sequence<N>{});
+}
+
 } // namespace fx_detail
 
 // N-element vector; default construction leaves it uninitialised, like a plain float. Sizes that
@@ -82,8 +92,7 @@ class alignas((sizeof(T) * N) % 16 == 0 ? 16 : alignof(T)) FxVec {
 
     // Constructor from a single value (fills every component)
     constexpr explicit FxVec(T a) noexcept {
-        for (T& e : m_v)
-            e = a;
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] = a; });
     }
 
     // Constructor from one value per component
@@ -250,49 +259,41 @@ class alignas((sizeof(T) * N) % 16 == 0 ? 16 : alignof(T)) FxVec {
 
     // In-place operations with another vector (component-wise)
     constexpr FxVec& operator+=(const FxVec& rhs) & noexcept {
-        for (int i = 0; i < N; ++i)
-            m_v[i] += rhs.m_v[i];
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] += rhs.m_v[i]; });
         return *this;
     }
     constexpr FxVec& operator-=(const FxVec& rhs) & noexcept {
-        for (int i = 0; i < N; ++i)
-            m_v[i] -= rhs.m_v[i];
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] -= rhs.m_v[i]; });
         return *this;
     }
     constexpr FxVec& operator*=(const FxVec& rhs) & noexcept {
-        for (int i = 0; i < N; ++i)
-            m_v[i] *= rhs.m_v[i];
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] *= rhs.m_v[i]; });
         return *this;
     }
     constexpr FxVec& operator/=(const FxVec& rhs) & noexcept {
-        for (int i = 0; i < N; ++i)
-            m_v[i] /= rhs.m_v[i];
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] /= rhs.m_v[i]; });
         return *this;
     }
 
     // In-place scalar operations with generic Numeric s
     template<Numeric S>
     constexpr FxVec& operator+=(S s) & noexcept {
-        for (T& e : m_v)
-            e += static_cast<T>(s);
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] += static_cast<T>(s); });
         return *this;
     }
     template<Numeric S>
     constexpr FxVec& operator-=(S s) & noexcept {
-        for (T& e : m_v)
-            e -= static_cast<T>(s);
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] -= static_cast<T>(s); });
         return *this;
     }
     template<Numeric S>
     constexpr FxVec& operator*=(S s) & noexcept {
-        for (T& e : m_v)
-            e *= static_cast<T>(s);
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] *= static_cast<T>(s); });
         return *this;
     }
     template<Numeric S>
     constexpr FxVec& operator/=(S s) & noexcept {
-        for (T& e : m_v)
-            e /= static_cast<T>(s);
+        fx_detail::unrolled<N>([&](std::size_t i) { m_v[i] /= static_cast<T>(s); });
         return *this;
     }
 
@@ -300,14 +301,13 @@ class alignas((sizeof(T) * N) % 16 == 0 ? 16 : alignof(T)) FxVec {
     friend constexpr FxVec operator+(FxVec lhs, const FxVec& rhs) noexcept { return lhs += rhs; }
     friend constexpr FxVec operator-(FxVec lhs, const FxVec& rhs) noexcept { return lhs -= rhs; }
     friend constexpr FxVec operator-(FxVec v) noexcept {
-        for (T& e : v.m_v)
-            e = -e;
+        fx_detail::unrolled<N>([&](std::size_t i) { v.m_v[i] = -v.m_v[i]; });
         return v;
     }
     friend constexpr bool operator==(const FxVec& lhs, const FxVec& rhs) noexcept {
-        for (int i = 0; i < N; ++i)
-            if (!(lhs.m_v[i] == rhs.m_v[i])) return false;
-        return true;
+        bool equal = true;
+        fx_detail::unrolled<N>([&](std::size_t i) { equal = equal && lhs.m_v[i] == rhs.m_v[i]; });
+        return equal;
     }
 
     // Scalar operations with generic Numeric s
@@ -337,14 +337,12 @@ class alignas((sizeof(T) * N) % 16 == 0 ? 16 : alignof(T)) FxVec {
     }
     template<Numeric S>
     friend constexpr FxVec operator-(S s, FxVec v) noexcept {
-        for (T& e : v.m_v)
-            e = static_cast<T>(s) - e;
+        fx_detail::unrolled<N>([&](std::size_t i) { v.m_v[i] = static_cast<T>(s) - v.m_v[i]; });
         return v;
     }
     template<Numeric S>
     friend constexpr FxVec operator/(S s, FxVec v) noexcept {
-        for (T& e : v.m_v)
-            e = static_cast<T>(s) / e;
+        fx_detail::unrolled<N>([&](std::size_t i) { v.m_v[i] = static_cast<T>(s) / v.m_v[i]; });
         return v;
     }
 
