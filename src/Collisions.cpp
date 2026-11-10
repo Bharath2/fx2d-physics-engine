@@ -131,6 +131,64 @@ static std::pair<FxVec2f, FxVec2f> closest_capsule_to_polygon(const FxShape* cap
     return {best_p1, best_p2};
 }
 
+// Segment [q0, q1] clipped to the span of reference segment [s, e]: the two ends of their
+// overlap, and their heights above the reference line along n. False if the overlap is shorter
+// than a manifold's two points may be, or the segments are not near parallel.
+static bool clip_to_span(const FxVec2f& q0, const FxVec2f& q1, const FxVec2f& s, const FxVec2f& e,
+                         const FxVec2f& n, FxVec2f out[2], float height[2]) {
+    const FxVec2f u = e - s;
+    const float span = u.norm();
+    const FxVec2f q = q1 - q0;
+    const float length = q.norm();
+    if (span < 1e-6f || length < 1e-6f) return false;
+    // Both segments square to the normal, within ~8.6 degrees, or the heights mean nothing.
+    if (std::fabs(q.dot(n)) > 0.15f * length || std::fabs(u.dot(n)) > 0.15f * span) return false;
+    const float a0 = (q0 - s).dot(u) / span, a1 = (q1 - s).dot(u) / span;
+    float lo = std::clamp((0.0f - a0) / (a1 - a0), 0.0f, 1.0f);
+    float hi = std::clamp((span - a0) / (a1 - a0), 0.0f, 1.0f);
+    if (lo > hi) std::swap(lo, hi);
+    if ((hi - lo) * length < 0.01f) return false;
+    out[0] = q0 + lo * q;
+    out[1] = q0 + hi * q;
+    for (int i = 0; i < 2; ++i)
+        height[i] = (out[i] - s).dot(n);
+    return true;
+}
+
+// A capsule lying along a polygon's face, or along another capsule, rests on two points: one,
+// the closest, would see it rock from end to end and never settle. `ref` carries the reference
+// segment [s, e] with outward normal n; `inc` is the capsule's core; positions go on ref's skin.
+static void rest_along(FxContact& c, const FxVec2f& s, const FxVec2f& e, const FxVec2f& n,
+                       float ref_skin, const FxVec2f& inc0, const FxVec2f& inc1, float skins) {
+    FxVec2f points[2];
+    float height[2];
+    if (!clip_to_span(inc0, inc1, s, e, n, points, height)) return;
+    for (int i = 0; i < 2; ++i) {
+        c.position[i] = points[i] - n * (height[i] - ref_skin);
+        c.point_depth[i] = skins - height[i];
+    }
+    c.penetration_depth = std::max(c.point_depth[0], c.point_depth[1]);
+    c.count = 2;
+}
+
+// The polygon face a contact with normal `out` (pointing away from the polygon) presses on, if
+// it is near square to it; otherwise the contact is at a corner and keeps its single point.
+static void rest_capsule_on_face(FxContact& c, const FxShape* capsule, const FxShape* poly,
+                                 const FxVec2f& out) {
+    const auto& pv = poly->vertices();
+    const auto& cv = capsule->vertices();
+    for (size_t i = 0, n = pv.size(); i < n; ++i) {
+        const FxVec2f& s = pv[i];
+        const FxVec2f& e = pv[(i + 1) % n];
+        FxVec2f face_normal = (e - s).perp().normalized();
+        if (face_normal.dot(s - poly->centroid()) < 0.0f) face_normal = -face_normal;
+        if (face_normal.dot(out) < 0.99f) continue;
+        rest_along(c, s, e, face_normal, poly->skin_radius(), cv[0], cv[1],
+                   capsule->skin_radius() + poly->skin_radius());
+        return;
+    }
+}
+
 // Edge vs polygon: use the segment as the reference axis (generic capsule misses interiors).
 static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) {
     const auto& ev = edge->vertices();
@@ -479,6 +537,7 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
                 contact.penetration_depth = pen;
                 contact.position[0] = pA + n * (rA - 0.5f * pen);
                 contact.count = 1;
+                rest_along(contact, av[0], av[1], n, rA, bv[0], bv[1], rA + rB);
             } else contact.set_valid(false);
             return contact;
         }
@@ -486,7 +545,9 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
         if (A_shape->is_edge()) return edge_polygon_contact(A_shape, B_shape);
         // Capsule vs polygon: closest seg-vs-polygon point, then circle-vs-polygon.
         auto [pCap, pPoly] = closest_capsule_to_polygon(A_shape, B_shape);
-        return circle_vs_polygon_contact(pCap, rA, B_shape);
+        FxContact c = circle_vs_polygon_contact(pCap, rA, B_shape);
+        if (c.is_valid(false)) rest_capsule_on_face(c, A_shape, B_shape, -c.normal);
+        return c;
     }
     if (B_shape->is_capsule()) {
         // Symmetric: swap and flip normal so it stays A->B.

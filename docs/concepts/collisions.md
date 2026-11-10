@@ -133,6 +133,8 @@ Capsule collisions reduce to "virtual circle at closest segment point" vs the ot
 
 The capsule's `skin_radius` plays the role of the virtual circle's radius. A zero-length capsule reduces exactly to a circle; a zero-radius capsule is a bare line segment (an edge).
 
+One closest point is enough for a capsule meeting a corner or another capsule end-on, but not for one lying along a polygon face or another capsule: resting on whichever end was lower, it rocked from end to end and never slept. When the capsule's core lies within about 8.6 degrees of parallel to the polygon face it presses on, or to the other capsule's core, it is clipped to that face's or core's span instead, giving two points, each with its own depth (`clip_to_span`, `rest_along`). The normal and the detection stay the exact closest-point ones, so a capsule's round end never reports contact early at a corner, as a test on face normals alone would.
+
 #### Edge–X
 
 An edge is a zero-skin capsule, so edge–circle and edge–capsule pairs use the capsule reductions above with `rA = 0`. Its endpoints are kept as authored, so its body's position can be anywhere relative to it; the final "normal points from entity 1 to entity 2" fix-up, which compares the two bodies' positions, is therefore skipped for edges as it is for chains, and every edge branch orients its own normal from the geometry.
