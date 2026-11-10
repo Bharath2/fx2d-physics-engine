@@ -136,6 +136,14 @@ the joint to `set_angle`/`set_position` or `set_angular_velocity`/`set_velocity`
 `pid` gains, limited by `max_effort`. See [Joints and motors](/guides/joints) for how each mode
 behaves.
 
+`add_distance_joint(name, body1, body2, anchor1, anchor2, min_length, max_length, compliance)`
+links an anchor on each body, in each body's frame, and keeps them between the two lengths;
+lengths left out take the distance the anchors are apart now, so equal limits make a rigid rod,
+and `compliance` stretches it by that many metres per newton of load. `add_rope_joint` is the
+same with no minimum: it stops the anchors parting further than its length and goes slack when
+they come closer. Rotation stays free at both ends, so a chain of them hangs like a rope. Their
+motors drive the separation, through `set_length`, `set_rate` or `set_force`.
+
 ## State in bulk
 
 `scene.poses()` and `scene.velocities()` return `(n, 3)` NumPy arrays of every body's

@@ -512,6 +512,22 @@ NB_MODULE(_fx2d, m) {
         .def("set_velocity", &FxPrismaticJoint::set_velocity, "velocity"_a, "instant"_a = true)
         .def("set_force", &FxPrismaticJoint::set_force, "force"_a);
 
+    nb::class_<FxDistanceJoint, FxJoint>(m, "DistanceJoint",
+                                         "Holds two anchors within [min_length, max_length] "
+                                         "apart; rotation stays free.")
+        .def_prop_ro("length", &FxDistanceJoint::get_length, "the anchors' separation now")
+        .def_prop_ro("rate", &FxDistanceJoint::get_rate, "how fast the separation is changing")
+        .def_prop_ro("min_length", &FxDistanceJoint::get_min_length)
+        .def_prop_ro("max_length", &FxDistanceJoint::get_max_length)
+        .def("set_limits", &FxDistanceJoint::set_limits, "min_length"_a, "max_length"_a,
+             "New limits. A large change is solved within one substep, so reel in gradually.")
+        .def("set_compliance", &FxDistanceJoint::set_compliance, "compliance"_a,
+             "Metres of stretch per newton of load; 0 for a rigid link.")
+        .def("set_length", &FxDistanceJoint::set_length, "length"_a, "instant"_a = true)
+        .def("set_rate", &FxDistanceJoint::set_rate, "rate"_a, "instant"_a = true)
+        .def("set_force", &FxDistanceJoint::set_force, "force"_a,
+             "Positive pushes the anchors apart.");
+
     using Body = std::shared_ptr<FxEntity>;
     nb::class_<FxScene>(m, "Scene",
                         "A world of bodies and joints, held by name. Wherever a body or joint "
@@ -599,6 +615,40 @@ NB_MODULE(_fx2d, m) {
             "position_min"_a = -1000.0f, "position_max"_a = 1000.0f,
             "A slider along `axis`, in body1's frame. Joints start as position motors holding\n"
             "their start (P = 1); set control_mode to EFFORT for a free joint.")
+        .def(
+            "add_distance_joint",
+            [](FxScene& s, const std::string& name, const BodyRef& body1, const BodyRef& body2,
+               const Vec2& anchor1, const Vec2& anchor2, std::optional<float> min_length,
+               std::optional<float> max_length, double compliance) {
+                auto j =
+                    std::make_shared<FxDistanceJoint>(name, resolve(s, body1), resolve(s, body2),
+                                                      to_fx(anchor1), to_fx(anchor2),
+                                                      min_length.value_or(-1.0f),
+                                                      max_length.value_or(-1.0f));
+                if (compliance > 0.0) j->set_compliance(compliance);
+                if (!s.add_joint(j)) throw std::runtime_error("could not add joint '" + name + "'");
+                return j;
+            },
+            "name"_a, "body1"_a, "body2"_a, "anchor1"_a = Vec2{0.0f, 0.0f},
+            "anchor2"_a = Vec2{0.0f, 0.0f}, "min_length"_a = nb::none(),
+            "max_length"_a = nb::none(), "compliance"_a = 0.0,
+            "A link between anchors in each body's frame. Limits left out take the distance the\n"
+            "anchors are apart now; equal limits make a rigid link.")
+        .def(
+            "add_rope_joint",
+            [](FxScene& s, const std::string& name, const BodyRef& body1, const BodyRef& body2,
+               const Vec2& anchor1, const Vec2& anchor2, std::optional<float> length) {
+                auto j =
+                    std::make_shared<FxDistanceJoint>(name, resolve(s, body1), resolve(s, body2),
+                                                      to_fx(anchor1), to_fx(anchor2), 0.0f,
+                                                      length.value_or(-1.0f));
+                if (!s.add_joint(j)) throw std::runtime_error("could not add joint '" + name + "'");
+                return j;
+            },
+            "name"_a, "body1"_a, "body2"_a, "anchor1"_a = Vec2{0.0f, 0.0f},
+            "anchor2"_a = Vec2{0.0f, 0.0f}, "length"_a = nb::none(),
+            "A rope: it stops the anchors parting further than `length`, by default the distance\n"
+            "they are apart now, and goes slack when they come closer.")
         .def("body", &body_named, "name"_a)
         .def("__getitem__", &body_named, "name"_a)
         .def("__contains__", &FxScene::entity_exists, "name"_a)
