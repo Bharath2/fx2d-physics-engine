@@ -601,12 +601,12 @@ const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1,
         if (picked_ba && (A->is_chain() || B->is_chain())) contact.normal = -contact.normal;
     }
 
-    // Ensure normal points from entity1 -> entity2. Skipped for chains: their entity pose is
-    // the polyline origin, not anywhere near the contact, so a centre-to-centre flip is
-    // arbitrary and inverts correct one-sided face normals. The chain branch orients its own.
+    // Ensure normal points from entity1 -> entity2. Skipped for chains and edges: their entity
+    // pose is wherever their points were authored from, so a centre-to-centre flip is arbitrary
+    // and can invert correct normals. Their branches orient their own.
     if (contact.is_valid(false)) {
-        const bool chain_involved = A->is_chain() || B->is_chain();
-        if (!chain_involved) {
+        const bool own_normal = A->is_chain() || B->is_chain() || A->is_edge() || B->is_edge();
+        if (!own_normal) {
             FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
             if (delta.dot(contact.normal) < 0.0f) contact.normal = -contact.normal;
         }

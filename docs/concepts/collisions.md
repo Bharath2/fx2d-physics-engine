@@ -135,7 +135,7 @@ The capsule's `skin_radius` plays the role of the virtual circle's radius. A zer
 
 #### Edge–X
 
-An edge is a zero-skin capsule, so edge–circle and edge–capsule pairs use the capsule reductions above with `rA = 0`.
+An edge is a zero-skin capsule, so edge–circle and edge–capsule pairs use the capsule reductions above with `rA = 0`. Its endpoints are kept as authored, so its body's position can be anywhere relative to it; the final "normal points from entity 1 to entity 2" fix-up, which compares the two bodies' positions, is therefore skipped for edges as it is for chains, and every edge branch orients its own normal from the geometry.
 
 Edge–polygon needs its own query (`edge_polygon_contact`). The capsule reduction measures the distance to the polygon *boundary*, which stays positive once the segment lies inside the polygon, so a bare segment would report no contact exactly when it is most deeply penetrating. Instead the segment's line becomes the reference axis: the normal is the segment perpendicular oriented toward the polygon centroid, and the polygon vertices lying behind that line (within the segment's span, offset by the polygon's own skin) supply up to two contact points, deepest first.
 
