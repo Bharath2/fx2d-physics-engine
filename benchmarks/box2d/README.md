@@ -36,27 +36,28 @@ CMake downloads Box2D at a pinned, checksummed version and builds Fx2D from this
 
 ## Results
 
-Measured on 2026-11-08 on an Intel Core i7-11800H laptop, Windows 11, MinGW GCC 15, 5 rounds of 60
-steps. Absolute times varied up to 5x between runs as the laptop throttled; the ratios, measured
-side by side, held steady. Fx2D's time per step divided by Box2D's:
+Measured on an Intel Core i7-11800H laptop, Windows 11, MinGW GCC 15, 5 rounds of 60 steps.
+Absolute times varied up to 5x between runs as the laptop throttled; the ratios, measured side
+by side, held steady. Fx2D's time per step divided by Box2D's:
 
 | | settling_boxes (200-3000) | pile (300-1200) | stacks (200-600) |
 |---|---|---|---|
-| Default settings, sleeping on | 27-33x | 24-43x | not comparable: Box2D's columns sleep |
-| Sleeping off | 23-36x | 22-44x | 43-46x |
-| Sleeping off, Box2D at 14 substeps | 16-17x | 10-21x | 14-19x |
+| Default settings, sleeping on | 18-21x | 20-39x | not comparable: Box2D's columns sleep |
+| Sleeping off | 18-22x | 20-35x | 30x |
 
-Fx2D's AVX2 build gives the same ratios as its SSE2 build. The contact counts of the two engines
-agree to within 10% on every scene.
+Before Fx2D held contacts through its substeps (2026-11-08), with sleeping off, the three
+scenes read 23-36x, 22-44x and 43-46x. Fx2D's AVX2 build gives the same ratios as its SSE2
+build, and the contact counts of the two engines agree to within 10% on every scene.
 
-Fx2D runs collision detection, integration (which also refreshes each shape's world vertices)
-and 4 velocity passes in every one of its 14 substeps: 56 velocity sweeps per step against Box2D's
-8. Box2D detects collisions once per step and solves batches of 8 contacts at a time over body
-state kept in packed arrays. Where Fx2D's step goes, from `-DFX2D_PROFILE=ON`:
+Fx2D now detects collisions mostly once per step, as Box2D does, but still runs 4 velocity
+passes in each of its 14 substeps: 56 velocity sweeps per step against Box2D's 8. Fewer fail its
+quality suite ([engineering notes](../../docs/engineering-notes.md#tried-and-turned-down)). Box2D also solves batches of 8 contacts at a time over
+body state kept in packed arrays. Where Fx2D's step goes, from `-DFX2D_PROFILE=ON`:
 
 | share of the step | settling_boxes (800) | pile (300, 600) | stacks (600) |
 |---|---|---|---|
-| velocity passes | 24% | 44-45% | 39% |
-| collision detection (broad and narrow phase) | 28% | 30-32% | 30% |
-| integration and world-vertex refresh | 42% | 12-13% | 22% |
-| everything else | 6% | 10% | 9% |
+| velocity passes | 35% | 52%, 42% | 56% |
+| narrow phase (mostly re-measuring held contacts) | 26% | 28%, 37% | 24% |
+| broad phase | 16% | 4%, 6% | 1% |
+| integration | 11% | 3%, 3% | 6% |
+| everything else | 12% | 13%, 12% | 13% |

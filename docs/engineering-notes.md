@@ -168,6 +168,21 @@ arithmetic a vectorised integrator would speed up.
 **Sharing lever arms between the position and velocity solves.** Not viable: the position
 solve moves the bodies first, so the two compute lever arms against different poses.
 
+**Fewer substeps or velocity passes, after contacts were held.** Every configuration from 4 to
+14 substeps and 1 to 4 passes was run against the quality suite; only the 14 x 4 default
+passes. At 10 x 4 a 15-box stack sinks 0.36 into itself, at 12 x 4 unit boxes end up inside
+one another, and at 14 x 3 a settled stack never falls asleep.
+
+**A per-point position solve, to make fewer substeps pass.** The position solve splits each
+manifold's deepest depth evenly across its points. Correcting each point by its own depth
+instead, measured from the held anchors, was tried two ways. Point by point, each measured
+after the one before had moved the bodies, put the first point systematically ahead: a 10-box
+stack drifted 0.28 sideways even at 14 x 4. Both measured first, then each corrected by its
+share, passed everything at 14 x 4 and the adversarial suite at 12 x 4, where an inelastic box
+then rebounded just past the 0.02 the resting suite allows. 10 x 4 still crushed a 1 kg box
+under a 100 kg one, so it was reverted: at 14 x 4 it costs more trigonometry and buys nothing.
+The second form is the lead for whoever tries again.
+
 ## Solver envelope
 
 The adversarial suite (`tests/test_adversarial.cpp`) covers tall stacks, pyramids, mass ratios,
