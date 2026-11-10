@@ -40,7 +40,7 @@ def test_bodies_fall_and_come_to_rest():
     assert math.remainder(crate.angle, math.pi / 2) == pytest.approx(0.0, abs=1e-3)
     assert scene.time == pytest.approx(4.0)
     touching = {frozenset((c.body1, c.body2)): c for c in scene.contacts()}
-    resting = touching[frozenset(("ground", "crate"))]
+    resting = touching[frozenset((scene["ground"], crate))]  # the bodies themselves
     assert len(resting.points) == 2
     assert abs(resting.normal[1]) == pytest.approx(1.0, abs=1e-3)
 
@@ -122,7 +122,7 @@ def test_revolute_motor_turns_the_arm():
 def test_raycast():
     scene = crate_scene()
     hit = scene.raycast((10, 9), (0, -1), 20)
-    assert hit.body == "crate"
+    assert hit.body is scene["crate"]
     assert hit.distance == pytest.approx(9 - 5.0 - 0.5 / math.cos(0.3), abs=1e-3)  # top face
     assert scene.raycast((1, 9), (0, 1), 5) is None
 

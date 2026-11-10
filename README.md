@@ -33,7 +33,7 @@
 - **Reproducible to the bit.** The same seed and the same actions give the same trajectory on Linux, macOS and Windows, x86-64 and ARM64, from GCC, Clang and MSVC builds, checked by bitwise golden tests on every push. A changed result is a real change, never noise.
 - **Gymnasium-native.** `pip install fx2d` installs prebuilt wheels. `gym.make("fx2d/Push-v0")` builds an environment, and `gym.make_vec(..., num_envs=256)` builds a vector environment whose physics runs in one call.
 - **Batched on every core.** `fx2d.step_many` steps independent scenes in parallel with the GIL released, and each scene ends with exactly the bits it gives when stepped alone.
-- **Your own environments in a few lines.** Build scenes in Python from boxes and circles, or in YAML from any shape, polygons, capsules and chains included, with joints driven by position, velocity or effort motors, contacts, ray casts and NumPy views of the state.
+- **A scene builder in Python, the physics in C++.** Every shape the engine has, joints driven by position, velocity or effort motors, groups, contacts, ray and overlap queries and NumPy views of the state. Bodies and joints are held by name, and the scene hands out shared handles to the C++ objects, so your own environment takes a few lines.
 - **Physics you can read.** One explicit pipeline, from broad phase to SAT contacts to a substepped XPBD solver, with [solver](https://bharath2.github.io/fx2d-physics-engine/concepts/xpbd) and [collision](https://bharath2.github.io/fx2d-physics-engine/concepts/collisions) docs that derive the equations the code implements.
 
 ## Quick start
@@ -148,7 +148,7 @@ The [installation guide](https://bharath2.github.io/fx2d-physics-engine/getting-
 
 | Area | What you get |
 |---|---|
-| **Python** | `pip install fx2d`: scenes, bodies, joints, contacts and ray casts, NumPy state, `step_many`, Gymnasium and vector environments |
+| **Python** | `pip install fx2d`: the full scene builder (every shape, joints, groups, queries, events) with named, shared handles, NumPy state, `step_many`, Gymnasium and vector environments |
 | **Shapes** | Circles, capsules, edges, chains for terrain, and convex or rounded polygons |
 | **Collision** | Dynamic AABB tree, SAT contacts with clipped manifolds, opt-in speculative CCD |
 | **Solver** | Substepped XPBD with friction, restitution, drag, warm starting, sleeping and a vectorised contact solve |

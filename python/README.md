@@ -48,8 +48,13 @@ print(scene["crate"].pose)             # (x, y, angle)
 print(scene.poses())                   # every body, as an (n, 3) NumPy array
 ```
 
-Scenes written for the C++ engine load unchanged with `fx2d.Scene.from_yaml(path_or_text)`,
-which also brings in polygons, capsules and chains.
+Every shape the engine has is a `fx2d.Shape`: boxes and convex polygons, rounded or not,
+circles, capsules, and edges and chains for terrain. `scene.add_body(name, shape, ...)` adds one,
+static, kinematic or free. Bodies and joints are held by name, and the scene hands out shared
+handles to the C++ objects: `scene["crate"] is scene["crate"]`, and wherever a body or joint is
+asked for, its name and its object both do. Groups, collision filters, ray and overlap queries
+and contact events are there too, and scenes written for the C++ engine load unchanged with
+`fx2d.Scene.from_yaml(path_or_text)`.
 
 ## Joints and motors
 
@@ -76,7 +81,7 @@ have left it.
 ## Determinism
 
 The same scene stepped the same way gives the same bits, run to run and machine to machine. The
-engine's test suite checks stored hashes of simulated state on GCC, Clang and MSVC builds, x86-64
+engine's test suite checks stored hashes of simulated state on Linux, macOS and Windows, x86-64
 and 64-bit ARM, so a changed result in an experiment is a real change, never noise.
 
 ## Links

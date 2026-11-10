@@ -34,20 +34,86 @@ The world spans `[0, width] x [0, height]`, and bodies that reach its edges boun
 `step(dt)` takes steps of at least 0.001 s; a step longer than 0.06 s is shortened to 0.06 s, so
 take more steps to cover a longer span.
 
-## Bodies
+## Building scenes
 
-`add_box` and `add_circle` take a name, a position and a size, then optional `angle`, `mass`
-(1 kg), `static`, `elasticity`, `static_friction` and `dynamic_friction`. Materials left out keep
-the engine's defaults: elasticity 0.1 and no friction. A static body never moves and is not
-pushed by anything. `damping` adds drag to speed and spin alike, as a floor does to bodies seen
-from above: about e^-1 of each is left after `1 / damping` seconds.
+A scene is built the way the C++ engine builds one, and the physics runs in C++: Python only
+describes the scene and reads it back. Every shape the engine has is a `fx2d.Shape`, given in
+the body's own frame:
 
-A body's `pose`, `velocity`, `mass`, material values and `sleeping` flag are attributes.
-`set_state(pose, velocity)` places it as if it had started there: awake, with no forces pending.
+```python
+scene = fx2d.Scene(size=(20, 10), gravity=(0, -10))
+scene.add_body("terrain", fx2d.Shape.chain([(1, 7), (8, 2), (19, 2)]), static=True)
+scene.add_body("wall", fx2d.Shape.edge((19, 2), (19, 8)), static=True)
+scene.add_body("wedge", fx2d.Shape.polygon([(-0.5, -0.3), (0.5, -0.3), (0, 0.4)]),
+               position=(4, 7))
+scene.add_body("log", fx2d.Shape.capsule(1.2, 0.2), position=(6, 6), angle=0.4)
+scene.add_box("crate", position=(10, 4), size=(0.8, 0.8), rounding=0.05)
+scene.add_circle("ball", position=(12, 5), radius=0.3)
+```
+
+| shape | what it is |
+|---|---|
+| `Shape.box(size, rounding=0)` | a width x height box, its corners optionally rounded |
+| `Shape.circle(radius)` | a disc |
+| `Shape.polygon(vertices, rounding=0)` | a convex polygon, re-centred on the mean of its vertices |
+| `Shape.capsule(length, radius)` | a segment along the body's x axis, rounded by `radius` |
+| `Shape.edge(start, end)` | a segment with no thickness, for static bodies |
+| `Shape.chain(points)` | an open polyline for static terrain, solid on the left of the direction its points run |
+
+`add_body(name, shape, position, angle, mass, ...)` adds a body of any shape; `add_box` and
+`add_circle` are shortcuts for the two commonest. Each also takes `static`, `kinematic`,
+`elasticity`, `static_friction` and `dynamic_friction`. Materials left out keep the engine's
+defaults: elasticity 0.1 and no friction. A static body never moves. A kinematic body moves only
+by the velocity it is given, a moving platform or a paddle; neither is pushed by contacts,
+forces or gravity. Edges and chains have no area, so they are static.
+
+A body's `pose`, `velocity`, `mass`, materials, `enabled`, `is_sensor` and `sleeping` are
+attributes. `damping` adds drag to speed and spin alike, as a floor does to bodies seen from
+above: about e^-1 of each is left after `1 / damping` seconds. `set_state(pose, velocity)`
+places a body as if it had started there: awake, with no forces pending. `to_world`,
+`to_local` and `velocity_at` convert points between frames, `shape` is a copy of the body's
+geometry, and `world_vertices()` gives its vertices where the body is now, to draw it.
 
 `apply_force(force, point=None)` and `apply_torque(torque)` act for the whole of the next step
 and then lapse, so continuous control applies them before every step. `apply_impulse` changes
 the velocity once.
+
+## Names and handles
+
+Everything in a scene has a name, and the scene hands out shared handles to the C++ objects,
+much as `get_entity` hands out a `std::shared_ptr` in C++:
+
+```python
+crate = scene["crate"]                  # or scene.body("crate")
+assert scene["crate"] is crate          # one name, one object, every time
+hinge = scene.add_revolute_joint("hinge", "wall", crate)   # names and handles both work
+assert hinge.body2 is crate and scene.joint("hinge") is hinge
+```
+
+Wherever a body or a joint is asked for, its name and its object both do. Contacts, contact
+events, ray hits and queries return the `Body` objects themselves, so `contact.body1.name` and
+`contact.body1 is crate` both work. A handle keeps its body alive: after `scene.remove("crate")`,
+or once the scene itself is gone, `crate` can still be read, though nothing moves it.
+
+`"crate" in scene`, `len(scene)` and `scene.bodies` look the scene up. `scene.remove(body)` or
+`del scene["crate"]` takes a body out along with the joints that hold it, and
+`scene.remove_joint(joint)` takes out one joint.
+
+## Groups and collision filtering
+
+```python
+for name, x in (("upper", 14), ("lower", 15), ("hand", 16), ("gripper", 17)):
+    scene.add_box(name, position=(x, 8), size=(0.9, 0.2))
+arm = scene.add_group("arm", ["upper", "lower", "hand"])   # members never collide with each other
+scene.add_to_group("arm", "gripper")
+arm.set_enabled(False)                                       # the whole arm leaves the simulation
+scene.remove_group("arm")                                    # and its bodies with it
+```
+
+`add_group(name, bodies, self_collide=False)` keeps its members from colliding with one another
+unless `self_collide` is set, which suits the links of one robot. `disable_collision(a, b)`
+exempts a single pair, and bodies sharing a negative `collision_group` never collide with each
+other. Bodies joined by a joint never collide with each other either.
 
 ## Joints and motors
 
@@ -76,18 +142,30 @@ behaves.
 `(x, y, angle)` and `(vx, vy, angular)`, in the order of `scene.bodies`. They are copies, safe
 to keep after the next step.
 
-## Contacts and ray casts
+## Contacts, queries and events
 
-`scene.contacts()` lists the pairs touching after the last step, each with both body names, the
-normal (pointing from `body1` to `body2`), the touching points, the depth and the normal impulse.
-`scene.raycast(origin, direction, max_distance)` returns the nearest hit, with the body's name,
-point, normal and distance, or `None`.
+`scene.contacts()` lists the pairs touching after the last step, each with its two bodies, the
+normal (pointing from `body1` to `body2`), the touching points, the depth, the normal impulse and
+whether a sensor was involved. `contacts_began()` and `contacts_ended()` list the pairs that
+started or stopped touching during the last step, which is how a sensor reports what entered it.
+
+| query | returns |
+|---|---|
+| `raycast(origin, direction, max_distance)` | the nearest hit, with its body, point, normal and distance, or `None` |
+| `raycast_all(origin, direction, max_distance)` | every hit along the ray, nearest first |
+| `overlap(shape, position, angle=0)` | the bodies a shape placed there would overlap |
+| `overlap_circle(centre, radius)`, `overlap_box(centre, size)` | the bodies overlapping a circle or an upright box |
+| `body_at(point)` | the first body covering a point, or `None` |
 
 ## YAML scenes
 
-`fx2d.Scene.from_yaml(path_or_text)` loads a scene file written for the C++ engine, or YAML text.
-Shapes the Python API does not build yet, such as polygons, capsules and chains, come in this
-way. See [Scene authoring](/guides/scene-authoring) for the format.
+`fx2d.Scene.from_yaml(path_or_text)` loads a scene file written for the C++ engine, or YAML text,
+and the bodies, joints and groups it defines are then reached by name like any other. A scene can
+be loaded from YAML and then extended from Python. See [Scene authoring](/guides/scene-authoring)
+for the format.
+
+`reset()` puts a scene back as it was when it first stepped. To keep bodies added after that,
+call `capture_initial_state()` once they are in.
 
 ## Many scenes at once
 
@@ -104,8 +182,8 @@ scene, so a few scenes go faster on fewer threads. The threads are kept between 
 ## Determinism
 
 The same scene, stepped the same way, gives the same bits on every run and machine. The engine's
-test suite checks stored hashes of simulated state; they match on Windows and Linux, x86-64 and
-64-bit ARM, and GCC, Clang and MSVC builds. `scene.reset()` puts a scene back as it was when it
+test suite checks stored hashes of simulated state, and CI finds them identical on Linux, macOS
+and Windows, x86-64 and 64-bit ARM, and GCC, Clang, Apple Clang and MSVC builds. `scene.reset()` puts a scene back as it was when it
 first stepped, so a reset scene replays the same trajectory.
 
 ## Gymnasium environments
