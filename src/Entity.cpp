@@ -245,7 +245,7 @@ FxVec3f FxEntity::apply_pose_correction(const FxVec3f& delta) {
     return applied;
 }
 
-void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
+void FxEntity::step(const FxVec2f& gravity, const double& step_dt, bool place_shapes) {
     // A body that cannot move and is not moving cannot change pose, but set_world_pose still
     // rotates every vertex -- and static geometry never sleeps, so it would pay that forever.
     // Comparing against the pose the shape was built at keeps this exact if `pose` was set.
@@ -278,12 +278,10 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
     __update_pose(step_dt); // pose += velocity * step_dt;
 
     // update pose of the collision shape and visual shape
-    if (m_collision != nullptr) {
-        // In-place: the returning form allocates, and this runs for every entity every substep.
-        m_collision->set_world_pose(pose, m_bounding_box);
-    }
-    if (m_visual != nullptr) {
-        m_visual->set_world_pose(pose);
+    if (place_shapes) {
+        // In-place: the returning form allocates, and this runs for every entity every step.
+        if (m_collision != nullptr) m_collision->set_world_pose(pose, m_bounding_box);
+        if (m_visual != nullptr) m_visual->set_world_pose(pose);
     }
 
     // reset effective force, moment, and impulses
@@ -291,4 +289,15 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
     m_eff_moment = 0.0f; // reset effective moment
     m_eff_impulse = {0.0f, 0.0f}; // reset effective impulse
     m_eff_impulse_moment = 0.0f; // reset effective impulse moment
+}
+
+// Compared first, so a shape already at the current pose costs three float comparisons.
+void FxEntity::refresh_collision_shape() {
+    if (m_collision != nullptr && m_collision->world_pose() != pose)
+        m_collision->set_world_pose(pose, m_bounding_box);
+}
+
+void FxEntity::refresh_world_shapes() {
+    refresh_collision_shape();
+    if (m_visual != nullptr && m_visual->world_pose() != pose) m_visual->set_world_pose(pose);
 }

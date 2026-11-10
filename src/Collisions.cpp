@@ -194,6 +194,8 @@ static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) 
     c.count = 1;
     if (nb == 2 && (best[1] - best[0]).norm() >= 0.01f) {
         c.position[1] = best[1];
+        c.point_depth[0] = -bsd[0];
+        c.point_depth[1] = -bsd[1];
         c.count = 2;
     }
     return c;
@@ -320,6 +322,21 @@ static FxContact polygon_contact_from_sat(const FxShape* A_shape, const FxShape*
     const FxVec2f skin_shift = -rB * sat.normal;
     contact.position[0] = contact_points.first + skin_shift;
     contact.position[1] = contact_points.second + skin_shift;
+    // The points lie on A's reference edge; each one's depth is how far B's incident edge sits
+    // below it there, skins included, as sat.gap measures. Linear along that edge.
+    const float skin_sum = A_shape->skin_radius() + rB;
+    const FxVec2f& u = sat.ref_edge_dir;
+    const float t_start = (B_edge_start - A_edge_start).dot(u);
+    const float t_end = (B_edge_end - A_edge_start).dot(u);
+    const float d_start = skin_sum - (B_edge_start - A_edge_start).dot(sat.normal);
+    const float d_end = skin_sum - (B_edge_end - A_edge_start).dot(sat.normal);
+    auto depth_at = [&](const FxVec2f& q) {
+        if (std::fabs(t_end - t_start) < 1e-6f) return contact.penetration_depth;
+        const float s = ((q - A_edge_start).dot(u) - t_start) / (t_end - t_start);
+        return d_start + s * (d_end - d_start);
+    };
+    contact.point_depth[0] = depth_at(contact_points.first);
+    contact.point_depth[1] = depth_at(contact_points.second);
     // Check if points are too close and resolve to one point if needed
     float dist = (contact.position[1] - contact.position[0]).norm();
     contact.count = (dist < 0.01f) ? 1 : 2;
@@ -748,6 +765,67 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
     c.entity1 = entity1.get();
     c.entity2 = entity2.get();
     return c;
+}
+
+// How far a held manifold may drift before the narrow phase is asked again: either body turning
+// more than kHoldTurn radians, or a point sliding more than kHoldSlide, since detection. A held
+// contact is released once every point is more than kHoldRelease clear.
+static constexpr float kHoldTurn = 0.02f;
+static constexpr float kHoldSlide = 0.01f;
+static constexpr float kHoldRelease = 0.01f;
+
+// A circle looks the same at every angle, so a point on it is held relative to its centre and
+// does not turn with the body; a rolling circle keeps its contact. Other shapes' points turn.
+static bool turns_with_body(const FxEntity& e) {
+    const auto& shape = e.collision_geometry();
+    return !(shape && shape->is_circle());
+}
+static FxVec2f to_held_frame(const FxEntity& e, const FxVec2f& world_point) {
+    return turns_with_body(e) ? e.to_entity_frame(world_point) : world_point - e.pose.xy();
+}
+static FxVec2f from_held_frame(const FxEntity& e, const FxVec2f& held_point) {
+    return turns_with_body(e) ? e.to_world_frame(held_point) : e.pose.xy() + held_point;
+}
+
+void hold_contact(FxHeldContact& held, const FxContact& contact) {
+    held.contact = contact;
+    for (size_t i = 0; i < contact.count; ++i) {
+        held.local1[i] = to_held_frame(*contact.entity1, contact.position[i]);
+        held.local2[i] = to_held_frame(*contact.entity2, contact.position[i]);
+    }
+    for (size_t i = 0; i < contact.count; ++i) {
+        const float d = contact.point_depth[i];
+        held.detect_depth[i] = std::isfinite(d) ? d : contact.penetration_depth;
+    }
+    held.detect_theta1 = contact.entity1->pose.theta();
+    held.detect_theta2 = contact.entity2->pose.theta();
+    held.held = true;
+}
+
+bool remeasure_contact(FxHeldContact& held) {
+    FxContact& c = held.contact;
+    const FxEntity& A = *c.entity1;
+    const FxEntity& B = *c.entity2;
+    auto turned = [](const FxEntity& e, float theta0) {
+        return turns_with_body(e) && std::fabs(FxAngleWrap(e.pose.theta() - theta0)) > kHoldTurn;
+    };
+    if (turned(A, held.detect_theta1) || turned(B, held.detect_theta2)) return false;
+
+    // Each point's two anchors coincided at detection, so how far they have since moved apart
+    // along the normal is how much shallower that point is. The normal stays as detected.
+    const FxVec2f tangent = c.normal.perp();
+    float deepest = -FxInfinityf;
+    for (size_t i = 0; i < c.count; ++i) {
+        const FxVec2f on_a = from_held_frame(A, held.local1[i]);
+        const FxVec2f on_b = from_held_frame(B, held.local2[i]);
+        const FxVec2f apart = on_b - on_a;
+        if (std::fabs(apart.dot(tangent)) > kHoldSlide) return false;
+        deepest = std::max(deepest, held.detect_depth[i] - apart.dot(c.normal));
+        c.position[i] = on_b;
+    }
+    if (deepest < -kHoldRelease) return false;
+    c.penetration_depth = deepest;
+    return true;
 }
 
 } // namespace FxSolver

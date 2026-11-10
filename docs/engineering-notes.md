@@ -76,6 +76,28 @@ Most of what remains is GCC now vectorising the per-point loop in `init_velocity
 did not attempt through Eigen's types. Instructions are not cycles; a cycle count on hardware
 with counters is still owed.
 
+### Holding contacts through a step
+
+Collision detection used to run in all 14 substeps. It now runs mostly once per step, with
+each contact held and re-measured from the bodies' poses in later substeps (see *Contacts held
+through a step* in [collisions](./concepts/collisions.md)). Instruction counts against the Eigen
+build, from valgrind with GCC 13:
+
+| build | settling_boxes (400) | pile (300) | stacks (200) |
+|---|---|---|---|
+| SSE2 | -28% | -7% | -24% |
+| AVX2 (`-march=x86-64-v3`) | -28% | -9% | -25% |
+
+Integration fell from 42% of the `settling_boxes` step to 11%, since world vertices are now
+refreshed once per step instead of 14 times. The pile gains least: circle contacts were cheap to
+detect, and its step is mostly velocity passes.
+
+One detail decided whether it worked. A two-point manifold reports a single depth, the deepest
+point's, and the narrow phase used to hand both points that depth. Re-detecting every substep
+hid this; holding a manifold did not. A box rocking onto its raised corner had that corner's
+depth overestimated by however high it sat at detection, the position solve over-corrected, and
+the rocking never died out. The narrow phase now records each point's own depth.
+
 ## Where step time goes now
 
 | | stacks | pile | settling_boxes |

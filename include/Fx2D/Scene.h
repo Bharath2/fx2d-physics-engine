@@ -95,6 +95,11 @@ class FxScene {
     // Reset whenever that list is rebuilt; the pair list is stable across the substeps of a
     // step, so after the first substep a contact finds its slot by index instead of by hash.
     std::vector<uint32_t> m_pair_slot;
+    // The contact each broad-phase pair holds this step, re-measured by later substeps instead of
+    // detected again. Reset with the pair list, once per step.
+    std::vector<FxHeldContact> m_held_contacts;
+    // The velocity each body's proxy was swept with this step, by packed index.
+    std::vector<FxVec2f> m_swept_velocity;
     // Monotonic step counter, used only to stamp pair slots. Never reset by reset(), because a
     // stale stamp equal to the current step would revive a dead slot's step_slot.
     uint64_t m_step_counter = 0;

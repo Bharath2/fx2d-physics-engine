@@ -3,6 +3,10 @@
 #include "Fx2D/Profile.h"
 
 namespace {
+// A body whose velocity has drifted this far, times the step, from the one its proxy was swept
+// with may have left the proxy: the tree's fat margin is never smaller.
+constexpr float kOffPathDrift = 0.01f;
+
 uint64_t pack_contact_key(uint32_t a, uint32_t b) {
     if (a > b) std::swap(a, b);
     return static_cast<uint64_t>(a) << 32 | static_cast<uint64_t>(b);
@@ -514,13 +518,14 @@ void FxScene::step(double step_dt) {
         m_joints.for_each(std::execution::seq,
                           [&](auto joint) { joint->apply_controls(substep_dt); });
 
-        // Sequential by measurement, not by omission: see the note above step().
+        // Sequential by measurement, not by omission: see the note above step(). Shapes are
+        // placed on the first substep only; later ones move just the shapes of the pairs they test.
         {
             FX2D_PROF_SCOPE(Integration);
             m_entities.for_each(std::execution::seq, [&](auto entity) {
                 if (!entity->enabled || entity->is_sleeping())
                     return; // Skip disabled/sleeping entities
-                entity->step(gravity, substep_dt);
+                entity->step(gravity, substep_dt, /*place_shapes=*/iter == 0);
                 // Boundary handling with elasticity bounce
                 if ((entity->pose.x() >= static_cast<float>(size.x()) &&
                      entity->velocity.x() > 0.0f) ||
@@ -537,24 +542,41 @@ void FxScene::step(double step_dt) {
             });
         }
 
-        // The proxy sync is per substep; the pair walk behind it is not. If no leaf moved the
-        // tree is unchanged and the walk would rebuild the identical list, so it is skipped --
-        // exact, and about 90% of substeps in a settled scene. See docs/concepts/collisions.md.
-        {
+        // Once per step: each proxy is swept over the whole step, so the pair list covers every
+        // body that follows its velocity until the next step. See docs/concepts/collisions.md.
+        if (iter == 0) {
             FX2D_PROF_SCOPE(BroadPhase);
-            // Swept over the whole step on the first substep, so a body at constant velocity
-            // needs no reinsertion for the rest of it. Later substeps use the substep dt, which
-            // only has to catch bodies thrown off that path.
-            const bool tree_changed =
-                m_entities.sync_broad_phase(static_cast<float>(iter == 0 ? clamped_dt : substep_dt),
-                                            /*sweep_all_movers=*/true);
-            if (tree_changed || iter == 0) {
+            m_entities.sync_broad_phase(static_cast<float>(clamped_dt), /*sweep_all_movers=*/true);
+            m_entities.collect_broad_phase_pairs(broad_phase_pairs, /*skip_sleeping_pairs=*/false);
+            // A new pair list: every cached slot index and held contact refers to the old one.
+            m_pair_slot.assign(broad_phase_pairs.size(), FxContact::kNoCacheSlot);
+            m_held_contacts.assign(broad_phase_pairs.size(), FxHeldContact{});
+            // Colour it while it stands. Pairs in one colour touch disjoint movable bodies,
+            // which is what lets the velocity sweeps run a colour several lanes at a time.
+            m_contact_graph.color_pairs(broad_phase_pairs, entities_vec);
+            m_swept_velocity.resize(entities_vec.size());
+            for (size_t i = 0; i < entities_vec.size(); ++i)
+                m_swept_velocity[i] = entities_vec[i]->velocity.xy();
+        } else {
+            FX2D_PROF_SCOPE(BroadPhase);
+            // A body knocked off the path its proxy was swept along can reach pairs the list
+            // lacks. Such bodies get their boxes refreshed, and if one has left its proxy the
+            // list is rebuilt, every pair in it detected afresh.
+            bool off_path = false;
+            for (size_t i = 0; i < entities_vec.size(); ++i) {
+                FxEntity& e = *entities_vec[i];
+                if (!e.enabled || e.is_sleeping()) continue;
+                const FxVec2f drift = e.velocity.xy() - m_swept_velocity[i];
+                if (drift.norm() * static_cast<float>(clamped_dt) <= kOffPathDrift) continue;
+                e.refresh_collision_shape();
+                off_path = true;
+            }
+            if (off_path && m_entities.sync_broad_phase(static_cast<float>(substep_dt),
+                                                        /*sweep_all_movers=*/true)) {
                 m_entities.collect_broad_phase_pairs(broad_phase_pairs,
                                                      /*skip_sleeping_pairs=*/false);
-                // The pair list moved, so every cached slot index refers to the wrong pair.
                 m_pair_slot.assign(broad_phase_pairs.size(), FxContact::kNoCacheSlot);
-                // Colour it while it stands. Pairs in one colour touch disjoint movable bodies,
-                // which is what lets the velocity sweeps run a colour several lanes at a time.
+                m_held_contacts.assign(broad_phase_pairs.size(), FxHeldContact{});
                 m_contact_graph.color_pairs(broad_phase_pairs, entities_vec);
             }
         }
@@ -574,51 +596,67 @@ void FxScene::step(double step_dt) {
                 // that built it, while both answers change as the substeps run -- a sleeper can
                 // be woken by an earlier pair, and the bodies keep moving.
                 if (!ccd && first->is_sleeping() && second->is_sleeping()) continue;
-                // A CCD pair is never rejected on boxes, because a speculative contact is
-                // generated precisely when the bodies are still apart.
-                if (!ccd && !FxSolver::aabb_overlap_check(*first, *second)) continue;
 
-                FxContact c = FxSolver::collision_check(first, second);
-                if (!c.is_valid() && ccd)
-                    c = FxSolver::speculative_contact_check(first, second,
-                                                            static_cast<float>(substep_dt));
-                if (c.is_valid()) {
+                // A pair already touching this step is re-measured, not detected again, until
+                // remeasure_contact finds its manifold no longer stands.
+                FxHeldContact& held = m_held_contacts[pair_index];
+                FxContact c;
+                if (held.held && FxSolver::remeasure_contact(held)) {
+                    if (held.contact.penetration_depth <= 0.0f) continue; // apart, still held
+                    c = held.contact;
+                } else {
+                    held.held = false;
+                    first->refresh_collision_shape();
+                    second->refresh_collision_shape();
+                    // A CCD pair is never rejected on boxes, because a speculative contact is
+                    // generated precisely when the bodies are still apart.
+                    if (!ccd && !FxSolver::aabb_overlap_check(*first, *second)) continue;
+
+                    c = FxSolver::collision_check(first, second);
+                    const bool touching = c.is_valid();
+                    if (!touching && ccd)
+                        c = FxSolver::speculative_contact_check(first, second,
+                                                                static_cast<float>(substep_dt));
+                    if (!c.is_valid()) continue;
                     c.body1 = c.entity1->packed_index();
                     c.body2 = c.entity2->packed_index();
                     bind_contact_slot(c, pair_index);
-
-                    // A sensor is buffered for events but skipped by every solver stage, and must
-                    // not wake a sleeper since it applies no force.
-                    if (c.entity1->is_sensor || c.entity2->is_sensor) {
-                        record_contact(c);
-                        continue;
-                    }
-
-                    // Wake only when a moving, awake partner disturbs a sleeper.
-                    auto wake_if_disturbed = [](FxEntity* sleeper, FxEntity* other) {
-                        if (!sleeper || !other || !sleeper->is_sleeping()) return;
-                        if (other->is_sleeping()) return;
-                        const bool moving =
-                            other->velocity.xy().norm() > sleeper->sleep_threshold_linear ||
-                            std::fabs(other->velocity.theta()) > sleeper->sleep_threshold_angular;
-                        if (moving) sleeper->wake();
-                    };
-                    wake_if_disturbed(c.entity1, c.entity2);
-                    wake_if_disturbed(c.entity2, c.entity1);
-
-                    const FxContactPairSlot& cached = m_contact_slots[c.cache_slot];
-                    // A significantly changed normal means the tangent basis flipped, so the
-                    // cached friction impulse is dropped. A slot allocated this substep holds a
-                    // zero normal, so the test fails and both guesses stay zero.
-                    const bool normal_stable = cached.normal.dot(c.normal) > 0.99f;
-                    for (size_t contact_idx = 0; contact_idx < 2; ++contact_idx) {
-                        // Warm-start guess only; jn_accumulated stays 0 until warm_start.
-                        c.jn_warm[contact_idx] = cached.jn[contact_idx];
-                        c.jt_warm[contact_idx] = normal_stable ? cached.jt[contact_idx] : 0.0f;
-                    }
-                    contacts.emplace_back(c);
-                    m_contact_colors.push_back(m_contact_graph.color_of_pair(pair_index));
+                    // Sensors and speculative contacts are detected afresh every substep.
+                    if (touching && !c.entity1->is_sensor && !c.entity2->is_sensor)
+                        FxSolver::hold_contact(held, c);
                 }
+
+                // A sensor is buffered for events but skipped by every solver stage, and must
+                // not wake a sleeper since it applies no force.
+                if (c.entity1->is_sensor || c.entity2->is_sensor) {
+                    record_contact(c);
+                    continue;
+                }
+
+                // Wake only when a moving, awake partner disturbs a sleeper.
+                auto wake_if_disturbed = [](FxEntity* sleeper, FxEntity* other) {
+                    if (!sleeper || !other || !sleeper->is_sleeping()) return;
+                    if (other->is_sleeping()) return;
+                    const bool moving =
+                        other->velocity.xy().norm() > sleeper->sleep_threshold_linear ||
+                        std::fabs(other->velocity.theta()) > sleeper->sleep_threshold_angular;
+                    if (moving) sleeper->wake();
+                };
+                wake_if_disturbed(c.entity1, c.entity2);
+                wake_if_disturbed(c.entity2, c.entity1);
+
+                const FxContactPairSlot& cached = m_contact_slots[c.cache_slot];
+                // A significantly changed normal means the tangent basis flipped, so the
+                // cached friction impulse is dropped. A slot allocated this substep holds a
+                // zero normal, so the test fails and both guesses stay zero.
+                const bool normal_stable = cached.normal.dot(c.normal) > 0.99f;
+                for (size_t contact_idx = 0; contact_idx < 2; ++contact_idx) {
+                    // Warm-start guess only; jn_accumulated stays 0 until warm_start.
+                    c.jn_warm[contact_idx] = cached.jn[contact_idx];
+                    c.jt_warm[contact_idx] = normal_stable ? cached.jt[contact_idx] : 0.0f;
+                }
+                contacts.emplace_back(c);
+                m_contact_colors.push_back(m_contact_graph.color_of_pair(pair_index));
             }
         }
         // Solve contact penetration (position-level)
@@ -663,6 +701,10 @@ void FxScene::step(double step_dt) {
             record_contact(c);
         }
     }
+
+    // Shapes were last placed where the pair tests needed them; queries, the renderer and the
+    // step callback need every one at its final pose.
+    m_entities.for_each(std::execution::seq, [](auto entity) { entity->refresh_world_shapes(); });
 
     evict_stale_contact_slots();
     pin_contact_entities();

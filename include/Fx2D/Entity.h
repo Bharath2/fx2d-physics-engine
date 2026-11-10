@@ -220,7 +220,12 @@ class FxEntity {
     // be shifted to match. Sub-ulp corrections are banked in double rather than rounded away.
     FxVec3f apply_pose_correction(const FxVec3f& delta);
 
-    void step(const FxVec2f& gravity, const double& step_dt);
+    // place_shapes = false leaves the shapes where they were: FxScene places them only on a
+    // step's first substep, and later for the pairs it tests (refresh_collision_shape).
+    void step(const FxVec2f& gravity, const double& step_dt, bool place_shapes = true);
+    // Bring the collision shape and bounding box, or every shape, to the current pose.
+    void refresh_collision_shape();
+    void refresh_world_shapes();
 
     ~FxEntity() {}
 };
