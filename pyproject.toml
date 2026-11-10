@@ -1,0 +1,61 @@
+[build-system]
+requires = ["scikit-build-core>=0.11", "nanobind>=2.4"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "fx2d"
+version = "0.1.0"
+description = "Deterministic 2D rigid-body physics for simulation and control"
+readme = "python/README.md"
+requires-python = ">=3.10"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Bharath Chandra Irigireddy" }]
+keywords = ["physics", "simulation", "rigid body", "reinforcement learning", "control", "gymnasium"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+gym = ["gymnasium>=1.0"]
+test = ["pytest>=7", "gymnasium>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/Bharath2/fx2d-physics-engine"
+Documentation = "https://bharath2.github.io/fx2d-physics-engine/guides/python"
+Issues = "https://github.com/Bharath2/fx2d-physics-engine/issues"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build-python/{wheel_tag}"
+cmake.build-type = "Release"
+wheel.packages = ["python/fx2d"]
+sdist.include = ["LICENSE"]
+sdist.exclude = ["build*", "docs", "examples", "benchmarks", ".github", "lib", "fxmake"]
+
+[tool.scikit-build.cmake.define]
+FX2D_PYTHON = "ON"
+FX2D_HEADLESS = "ON"
+FX2D_BUILD_TESTS = "OFF"
+# Always the pinned yaml-cpp, built into the module: a wheel cannot lean on a system copy.
+CMAKE_DISABLE_FIND_PACKAGE_yaml-cpp = "ON"
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = "*-musllinux_* *-win32 *_i686"
+test-extras = ["test"]
+test-command = "pytest {project}/python/tests"
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+# The runner is Apple silicon: the x86_64 wheels are built there but cannot be run.
+test-skip = "*-macosx_x86_64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }

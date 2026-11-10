@@ -1,0 +1,58 @@
+name: wheels
+
+# Builds the Python wheels and the source distribution, tests every wheel against
+# python/tests, and keeps them as workflow artifacts. Nothing is uploaded to PyPI here.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "python/**"
+      - "pyproject.toml"
+      - "CMakeLists.txt"
+      - "include/**"
+      - "src/**"
+      - ".github/workflows/wheels.yml"
+  workflow_dispatch:
+
+jobs:
+  wheels:
+    name: wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-24.04-arm builds the aarch64 manylinux wheels natively; macos-14 is Apple
+        # silicon and builds both macOS architectures.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build and test wheels
+        uses: pypa/cibuildwheel@v4.2.1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  sdist:
+    name: source distribution
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build the sdist
+        run: pipx run build --sdist
+
+      - name: install and test it
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install "$(ls dist/*.tar.gz)[test]"
+          cd /tmp && /tmp/venv/bin/python -m pytest "$GITHUB_WORKSPACE/python/tests"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz

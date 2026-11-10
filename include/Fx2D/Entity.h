@@ -153,6 +153,9 @@ class FxEntity {
 
     // resets current state to inital state
     void reset();
+    // Place the body at a pose and velocity as if it started there: no carried rounding or
+    // pending forces, awake, shapes at the new pose. reset() is this with the initial state.
+    void set_state(const FxVec3f& o_pose, const FxVec3f& o_velocity);
 
     // methods to set mass and inertia
     void set_mass(const float& mass);

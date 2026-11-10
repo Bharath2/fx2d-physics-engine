@@ -116,6 +116,7 @@ export default defineConfig({
             { text: "Collision setup", link: "/guides/collisions" },
             { text: "Constraints", link: "/guides/constraints" },
             { text: "Headless simulation", link: "/guides/headless" },
+            { text: "Python", link: "/guides/python" },
             { text: "Renderer", link: "/guides/renderer" },
             { text: "Input", link: "/guides/input" },
             { text: "Joints and motors", link: "/guides/joints" },

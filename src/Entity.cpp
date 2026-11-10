@@ -39,10 +39,14 @@ void FxEntity::set_inertia() {
 
 // resets current state to inital state
 void FxEntity::reset() {
-    pose = _init_pose;
-    velocity = _init_velocity;
-    prev_pose = _init_pose;
-    prev_velocity = _init_velocity;
+    set_state(_init_pose, _init_velocity);
+}
+
+void FxEntity::set_state(const FxVec3f& o_pose, const FxVec3f& o_velocity) {
+    pose = o_pose;
+    velocity = o_velocity;
+    prev_pose = o_pose;
+    prev_velocity = o_velocity;
     m_pose_carry = {0, 0, 0};
     m_correction_carry = {0, 0, 0};
     m_eff_force = {0.0f, 0.0f};

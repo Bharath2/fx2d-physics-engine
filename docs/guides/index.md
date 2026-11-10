@@ -11,6 +11,7 @@ These guides are organized around the parts of an application you will actually 
 - [Collision setup](/guides/collisions) — configure colliders, materials, sensors, filtering, and CCD.
 - [Constraints](/guides/constraints) — assemble direct XPBD constraints or choose a motorized joint.
 - [Headless simulation](/guides/headless) — run the same physics core without a renderer.
+- [Python](/guides/python) — drive scenes from Python, step many at once, and train on Gymnasium environments.
 - [Renderer](/guides/renderer) — own the window, camera, frame timing, and draw callbacks.
 - [Input](/guides/input) — consume keyboard and mouse state in visual or headless applications.
 - [Joints and motors](/guides/joints) — use revolute and prismatic control modes, and the click-drag mouse joint.

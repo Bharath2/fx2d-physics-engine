@@ -38,6 +38,13 @@ option(FX2D_YAML "Build the YAML scene loader (needs yaml-cpp)" ON)
 # instead, for distribution packaging or offline builds.
 option(FX2D_FETCH_DEPS "Download yaml-cpp, raylib, Dear ImGui and rlImGui when not installed" ON)
 
+# The Python module in python/, which scikit-build-core builds from pyproject.toml. Everything it
+# links is static, so all of it has to be position-independent.
+option(FX2D_PYTHON "Build the Python module" OFF)
+if (FX2D_PYTHON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # ============================================================
 # Dependencies: use what is installed, otherwise download it
 # ============================================================
@@ -489,6 +496,19 @@ if (FX2D_BUILD_BENCH)
   add_executable(Fx2DBench scripts/bench.cpp)
   target_link_libraries(Fx2DBench PRIVATE Fx2Dlib)
   fx2d_tune_target(Fx2DBench)
+endif()
+
+# ============================================================
+# Python module
+# ============================================================
+if (FX2D_PYTHON)
+  find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+  execute_process(COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+                  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+  find_package(nanobind CONFIG REQUIRED)
+  nanobind_add_module(_fx2d NB_STATIC python/src/module.cpp)
+  target_link_libraries(_fx2d PRIVATE Fx2Dlib)
+  install(TARGETS _fx2d LIBRARY DESTINATION fx2d)
 endif()
 
 if (FX2D_BUILD_TESTS)
