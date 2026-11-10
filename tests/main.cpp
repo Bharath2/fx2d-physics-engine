@@ -62,7 +62,7 @@ const Suite kSuites[] = {
     {"mouse_joint", FX2D_YAML_SUITE(run_mouse_joint_tests), false},
     {"contact_graph", run_contact_graph_tests, false},
     {"solver_regression", run_solver_regression_tests, false},
-    {"distance_joint", run_distance_joint_tests, false},
+    {"distance_joint", FX2D_YAML_SUITE(run_distance_joint_tests), false},
 };
 
 bool skip_slow_requested() {

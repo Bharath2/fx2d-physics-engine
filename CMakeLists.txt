@@ -528,7 +528,6 @@ if (FX2D_BUILD_TESTS)
     tests/test_slingshot.cpp
     tests/test_contact_graph.cpp
     tests/test_solver_regression.cpp
-    tests/test_distance_joint.cpp
   )
   # These suites load YAML scenes. Without FX2D_YAML they are left out, and tests/main.cpp
   # skips them, so the dependency-free build still runs the rest.
@@ -540,6 +539,7 @@ if (FX2D_BUILD_TESTS)
       tests/test_yaml_inertia.cpp
       tests/test_chain.cpp
       tests/test_mouse_joint.cpp
+      tests/test_distance_joint.cpp
     )
   endif()
 

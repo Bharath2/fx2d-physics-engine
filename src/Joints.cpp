@@ -342,8 +342,7 @@ void FxPrismaticJoint::apply_controls(double dt) {
 FxDistanceJoint::FxDistanceJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
                                  const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor1,
                                  const FxVec2f& anchor2, float min_length, float max_length) :
-    FxJoint(name, e1, e2) {
-    m_link = std::make_shared<FxDistanceConstraint>(e1, e2, anchor1, anchor2);
+    FxJoint(name, e1, e2), m_link(std::make_shared<FxDistanceConstraint>(e1, e2, anchor1, anchor2)) {
 
     // Unset limits take the separation the scene was authored with, so a link placed in a scene
     // holds what it was drawn holding.
