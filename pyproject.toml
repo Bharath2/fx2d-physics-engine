@@ -5,16 +5,17 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "fx2d"
 version = "0.1.0"
-description = "Deterministic 2D rigid-body physics for simulation and control"
+description = "Deterministic 2D physics for reinforcement learning and control, with Gymnasium environments"
 readme = "python/README.md"
 requires-python = ">=3.10"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [{ name = "Bharath Chandra Irigireddy" }]
-keywords = ["physics", "simulation", "rigid body", "reinforcement learning", "control", "gymnasium"]
+keywords = ["reinforcement learning", "gymnasium", "physics", "simulation", "rigid body", "robotics", "control"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Physics",

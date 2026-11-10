@@ -2,7 +2,7 @@
 layout: home
 title: Fx2D
 titleTemplate: false
-description: Fx2D is an open-source 2D rigid-body physics engine in C++20 with SAT collision detection, an XPBD constraint solver, motorized joints, YAML scenes, and a headless mode for simulation, testing and reinforcement learning.
+description: Fx2D is an open-source, deterministic 2D rigid-body physics engine for reinforcement learning and control. pip install fx2d for Gymnasium environments, scenes stepped in parallel across cores and results that are bit-identical on every platform, on a C++20 engine with SAT collision detection, an XPBD solver and motorized joints.
 
 hero:
   name: |
@@ -14,17 +14,20 @@ hero:
         <path transform="translate(250 0)" d="M12 12V88H34C62 88 78 72 78 50C78 28 62 12 34 12Z" />
       </g>
     </svg>
-  text: 2D physics in C++
-  tagline: Fx2D is an open-source rigid-body physics engine written in C++20. It uses SAT collision detection and XPBD constraints, with YAML scene loading and optional raylib rendering. Licensed under BSD-3-Clause.
+  text: Deterministic 2D physics for reinforcement learning
+  tagline: pip install fx2d for Gymnasium environments, scenes stepped in parallel across cores, and results that are the same bits on every platform. Underneath is an open-source C++20 rigid-body engine with SAT contacts, an XPBD solver and motorized joints, under BSD-3-Clause.
   image:
     src: /demos/angry-boxes.gif
     alt: Angry Boxes demo — a slingshot ball topples a tower of boxes simulated by Fx2D
   actions:
     - theme: brand
+      text: Python and RL
+      link: /guides/python
+    - theme: alt
       text: Browser playground
       link: /playground
     - theme: alt
-      text: Build instructions
+      text: C++ build
       link: /getting-started/install
     - theme: alt
       text: Examples
@@ -34,6 +37,12 @@ hero:
       link: https://github.com/Bharath2/fx2d-physics-engine
 
 features:
+  - icon: ⟳
+    title: Gymnasium environments
+    details: pip install fx2d, then gym.make or gym.make_vec. Vector environments step every copy's scene in one parallel call with the GIL released, and each copy matches a copy run on its own.
+  - icon: ≡
+    title: Bit-identical everywhere
+    details: The same seed and actions give the same trajectory on every compiler and CPU tested in CI, so a changed result is a real change, never noise.
   - icon: ◒
     title: Collision detection
     details: A dynamic AABB tree finds candidate pairs. Skin-aware SAT generates contacts for circles, capsules, convex polygons, edges, and chains.
@@ -43,13 +52,7 @@ features:
   - icon: ↗
     title: Scene queries and input
     details: Ray casts, overlap queries, contact events, sensors, entity groups, and keyboard and mouse input. A mouse joint supports dragging bodies.
-  - icon: ▣
-    title: Headless simulation
-    details: Run the physics library without a window or raylib. Step scenes from C++ and read body state, contacts, and query results.
   - icon: ⧉
-    title: Regression tests
-    details: Tests cover joints, collisions, contact events, resting stability, and adversarial scenes. Golden-state tests check that results are bit-identical on every compiler and CPU in CI.
-  - icon: ≡
     title: YAML scenes
     details: Define bodies, geometry, joints, textures, and solver settings in YAML. Load a scene from C++ and reset it to its authored state.
 ---
@@ -60,9 +63,18 @@ The [playground](/playground) runs the engine compiled to WebAssembly. You can d
 
 ## Running a simulation
 
-Define a scene in YAML, load it, then step it. Use `Fx2D/Core.h` to add the raylib viewer, or work directly with `FxScene` for a headless simulation.
+From Python, train on an environment or step a scene of your own. From C++, define a scene in YAML, load it, then step it; use `Fx2D/Core.h` to add the raylib viewer, or work directly with `FxScene` for a headless simulation.
 
 ::: code-group
+
+```python [Python]
+import gymnasium as gym
+import fx2d.envs  # registers the environments
+
+envs = gym.make_vec("fx2d/Push-v0", num_envs=64)
+obs, info = envs.reset(seed=0)
+obs, reward, terminated, truncated, info = envs.step(envs.action_space.sample())
+```
 
 ```cpp [With a window]
 #include "Fx2D/Core.h"
@@ -90,7 +102,7 @@ int main() {
 
 :::
 
-See the [installation guide](/getting-started/install) for dependencies and build commands, and [your first scene](/getting-started/first-scene) for a YAML example.
+See the [Python guide](/guides/python) for the package and its environments, the [installation guide](/getting-started/install) for the C++ build, and [your first scene](/getting-started/first-scene) for a YAML example.
 
 ## Examples
 
@@ -111,12 +123,13 @@ Each simulation step finds potentially colliding pairs, generates contacts, and 
 
 | | Fx2D |
 |---|---|
+| Python | `pip install fx2d`: NumPy state, `step_many`, Gymnasium and vector environments |
 | Language | C++20; physics core built as a static library |
 | Collision | Dynamic AABB tree + skin-aware SAT, opt-in speculative CCD |
 | Solver | Substepped XPBD, warm-started, Coulomb friction, restitution |
 | Joints | Revolute and prismatic with position / velocity / effort motors |
 | Scenes | YAML with textures, joints, groups, reset |
-| Headless | Yes — no raylib, no window, same API |
+| Headless | Yes, from Python or C++: no raylib, no window, same API |
 | Rendering | raylib + Dear ImGui inspector, optional |
 | License | BSD-3-Clause |
 
