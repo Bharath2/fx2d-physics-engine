@@ -393,3 +393,25 @@ Clang's `-Wconversion` implies `-Wsign-conversion`; GCC's does not. Building wit
 pushing is the cheapest way to catch that class, and the `clang` CI job is there to keep it from
 accumulating between macOS runs. MSVC `/W4` flags a different set again, which is why
 `FX2D_WERROR` is off for the MSVC job until those have been worked through.
+
+## The Python package
+
+`pip install .` from the repository root builds the module into the active environment, and
+`python -m pytest python/tests` runs its tests; `benchmarks/python/throughput.py` measures the
+environments. The `wheels` workflow builds and tests wheels for every supported platform and
+Python on pushes to `main` and on pull requests that touch the engine or the package.
+
+### Releasing
+
+A published GitHub release uploads that commit's wheels and sdist to PyPI.
+
+1. Set `version` in `pyproject.toml` to the new version, and merge that to `main`.
+2. Create a release on GitHub with a new tag `v<version>`, for example `v0.2.0`, and publish it.
+   The `wheels` workflow builds everything again from the tag and, once every wheel passes its
+   tests, the `publish` job uploads them. It stops if the tag and the version differ.
+
+PyPI accepts the upload through Trusted Publishing: no token is stored in the repository. A
+project owner sets this up once, on PyPI under *Your projects* > *Publishing* (or, before the
+first release, *Add a new pending publisher*), with the owner `Bharath2`, the repository
+`fx2d-physics-engine`, the workflow `wheels.yml` and the environment `pypi`. A version can be
+uploaded only once, so a mistake is fixed with a new version.

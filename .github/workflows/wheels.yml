@@ -1,11 +1,13 @@
 name: wheels
 
 # Builds the Python wheels and the source distribution, tests every wheel against
-# python/tests, and keeps them as workflow artifacts. Nothing is uploaded to PyPI here.
+# python/tests, and keeps them as workflow artifacts. Publishing a GitHub release also uploads
+# them to PyPI.
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+  release:
+    types: [published]
   pull_request:
     paths:
       - "python/**"
@@ -56,3 +58,34 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
+
+  publish:
+    name: publish to PyPI
+    # PyPI trusts this job through Trusted Publishing (the pypi environment of this workflow), so
+    # no token is stored in the repository. See "Releasing" in docs/contributing.md.
+    if: github.event_name == 'release'
+    needs: [wheels, sdist]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fx2d/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the release tag matches the package version
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "release tag $GITHUB_REF_NAME does not match version $version in pyproject.toml"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: upload to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.2
