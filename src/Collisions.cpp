@@ -820,7 +820,8 @@ bool remeasure_contact(FxHeldContact& held) {
         const FxVec2f on_b = from_held_frame(B, held.local2[i]);
         const FxVec2f apart = on_b - on_a;
         if (std::fabs(apart.dot(tangent)) > kHoldSlide) return false;
-        deepest = std::max(deepest, held.detect_depth[i] - apart.dot(c.normal));
+        c.point_depth[i] = held.detect_depth[i] - apart.dot(c.normal);
+        deepest = std::max(deepest, c.point_depth[i]);
         c.position[i] = on_b;
     }
     if (deepest < -kHoldRelease) return false;

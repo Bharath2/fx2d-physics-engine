@@ -81,8 +81,8 @@ struct FxContact {
                                                         // coordinates
     FxVec2f normal{0.0f, 0.0f}; // Contact normal (unit vector)
     float penetration_depth = FxInfinityf; // Penetration depth (positive if overlapping)
-    // Each point's own depth where the narrow phase measures it (two-point manifolds), else
-    // infinite: penetration_depth, the deepest, is all that is known.
+    // Each point's own depth where it is known (two-point manifolds, held contacts), else
+    // infinite: penetration_depth, the deepest, is all there is. Points apart are not solved.
     float point_depth[2] = {FxInfinityf, FxInfinityf};
 
     // The two colliding bodies, borrowed not owned: FxScene pins a shared_ptr to every entity
@@ -389,6 +389,13 @@ inline bool contact_is_solvable(const FxContact& contact) {
     if (!contact.is_valid() || contact.penetration_depth <= 0.0f) return false;
     if (!contact.entity1 || !contact.entity2) return false;
     return contact.body1 >= 0 && contact.body2 >= 0;
+}
+
+// False for a manifold point that has come apart: a held manifold keeps a corner that lifts
+// off, and solving it would hold that corner up, or bounce it before it lands.
+inline constexpr float kContactPointApart = 1e-4f;
+inline bool contact_point_touches(const FxContact& contact, size_t i) {
+    return !(contact.point_depth[i] < -kContactPointApart);
 }
 
 // AABB overlap check methods

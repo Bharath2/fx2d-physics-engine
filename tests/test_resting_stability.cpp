@@ -214,6 +214,33 @@ void test_inelastic_box_landing_does_not_bounce() {
     require(box->is_sleeping(), "a landed inelastic box must fall asleep");
 }
 
+// A box landing on a corner must rock to rest, with or without friction. Held contacts once
+// kept solving a corner that had lifted off, which held one box tilted and rocked the other.
+void test_tilted_box_comes_to_rest() {
+    for (const float friction : {0.5f, 0.0f}) {
+        FxScene scene = make_scene();
+        auto ground = make_ground(scene, 6.0f, 0.75f, 12.0f, 1.5f, 0.1f);
+        auto box = make_box(scene, "box", 6.0f, 4.0f, 1.0f, 1.0f, 1.0f, 0.1f);
+        for (const auto& e : {ground, box}) {
+            e->static_friction = friction;
+            e->dynamic_friction = friction;
+        }
+        box->set_init_pose(FxVec3f{6.0f, 4.0f, 0.3f});
+        box->reset();
+
+        for (int i = 0; i < 240; ++i)
+            scene.step(kFrame); // 4 s
+
+        const float quarter = 1.5707963f;
+        const float theta = box->pose.theta();
+        const float off_face = std::fabs(theta - quarter * std::round(theta / quarter));
+        const std::string with = " (friction " + std::to_string(friction) + ")";
+        require(off_face < 1e-3f, "a box dropped on its corner must settle on a face, left at " +
+                                      std::to_string(off_face) + " rad" + with);
+        require(box->is_sleeping(), "a box dropped on its corner must fall asleep" + with);
+    }
+}
+
 // Friction regression: the friction cone budget changed (it used to double count
 // each contact point), so sliding must still be damped out.
 void test_friction_stops_a_sliding_box() {
@@ -305,6 +332,7 @@ void run_resting_stability_tests() {
     test_elastic_ball_still_bounces();
     test_inelastic_ball_does_not_gain_energy();
     test_inelastic_box_landing_does_not_bounce();
+    test_tilted_box_comes_to_rest();
     test_friction_stops_a_sliding_box();
     test_resting_penetration_stays_small();
     std::cout << "Resting stability tests passed." << std::endl;

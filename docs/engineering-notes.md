@@ -98,6 +98,15 @@ hid this; holding a manifold did not. A box rocking onto its raised corner had t
 depth overestimated by however high it sat at detection, the position solve over-corrected, and
 the rocking never died out. The narrow phase now records each point's own depth.
 
+A second detail turned up later. A held manifold keeps both points until both are 0.01 clear,
+and the solver treated the one that had lifted off as touching: the velocity passes stopped
+that corner falling back, and bounced it before it landed. A box dropped on its corner then
+settled 0.002 rad off level and never slept with friction, and rocked for good without it,
+where it had come to rest in under 2 s before contacts were held. Points more than 1e-4 clear
+now drop out of the solve until they touch again, as the narrow phase's clipping drops them
+from a fresh manifold. Of the bitwise goldens only the `tumble` scene moved, and instruction
+counts fell 0.3-2.4% on the three benchmark scenes.
+
 ## Where step time goes now
 
 | | stacks | pile | settling_boxes |
