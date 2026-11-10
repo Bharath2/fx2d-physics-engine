@@ -2,18 +2,18 @@
 
 The `fx2d` Python package runs the same engine as the C++ library: the same solver, the same
 YAML scenes, the same bits. It adds NumPy views of a scene's state, a call that steps many scenes
-on all cores, and Gymnasium environments.
+on all cores, and Gymnasium environments with vector versions built on that call.
 
 ## Install
 
-From a clone of the repository, with a C++20 compiler and CMake 3.16 or newer:
-
 ```bash
-pip install .            # the engine; NumPy is its only dependency
-pip install ".[gym]"     # with the Gymnasium environments
+pip install fx2d            # the engine; NumPy is its only dependency
+pip install "fx2d[gym]"     # with the Gymnasium environments
 ```
 
-CMake downloads and builds the YAML loader into the module, so nothing else needs installing.
+Wheels are built for CPython 3.10 and newer on Linux (x86-64 and ARM64), macOS and Windows. To
+build from a clone instead, with a C++20 compiler and CMake 3.16 or newer, run `pip install .`
+in the repository; CMake downloads the YAML loader and builds it into the module.
 
 ## A first scene
 
@@ -39,7 +39,8 @@ take more steps to cover a longer span.
 `add_box` and `add_circle` take a name, a position and a size, then optional `angle`, `mass`
 (1 kg), `static`, `elasticity`, `static_friction` and `dynamic_friction`. Materials left out keep
 the engine's defaults: elasticity 0.1 and no friction. A static body never moves and is not
-pushed by anything.
+pushed by anything. `damping` adds drag to speed and spin alike, as a floor does to bodies seen
+from above: about e^-1 of each is left after `1 / damping` seconds.
 
 A body's `pose`, `velocity`, `mass`, material values and `sleeping` flag are attributes.
 `set_state(pose, velocity)` places it as if it had started there: awake, with no forces pending.
@@ -96,8 +97,9 @@ fx2d.step_many(scenes, 1 / 60, steps=600)           # every core, the GIL releas
 ```
 
 Each scene is stepped from start to finish by one thread, so every scene ends exactly where
-stepping it alone would have left it, whatever the thread count. `threads=0`, the default, uses
-every core. A scene listed twice is refused, since two threads would then step it at once.
+stepping it alone would have left it, whatever the thread count. `threads=0`, the default, uses a
+thread per four scenes up to every core: waking a thread costs about as much as stepping a small
+scene, so a few scenes go faster on fewer threads. The threads are kept between calls. A scene listed twice is refused, since two threads would then step it at once.
 
 ## Determinism
 
@@ -112,15 +114,91 @@ first stepped, so a reset scene replays the same trajectory.
 import gymnasium as gym
 import fx2d.envs  # registers the environments
 
-env = gym.make("fx2d/CartPole-v0")
+env = gym.make("fx2d/Push-v0")
 obs, info = env.reset(seed=0)
-obs, reward, terminated, truncated, info = env.step(1)
+obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
 ```
 
 | id | task | observation | action |
 |---|---|---|---|
+| `fx2d/Push-v0` | push a box onto a goal with a disc in a walled 4 m arena, seen from above, 200 steps; the floor drags both and their contact has friction, so a push off the box's centre turns it | disc position and velocity, box position, angle (cos, sin), velocity and spin, goal position | force on the disc, 2-D in [-1, 1], up to 10 N |
 | `fx2d/CartPole-v0` | keep a pole hinged on a sliding cart upright, 500 steps | cart position and velocity, pole angle and rate | push left (0) or right (1), 10 N |
 | `fx2d/Pendulum-v0` | swing a rod up from any angle and hold it upright, 200 steps | cos and sin of the angle from upright, angular rate | torque in [-2, 2] N m |
 
-Both are built from an ordinary `fx2d.Scene`, which each environment keeps as `env.unwrapped.scene`,
-and both are seeded through `reset(seed=...)`.
+`Push-v0` rewards minus the box's distance to the goal and a tenth of the disc's distance to the
+box, and ends with a bonus of 10, and `info["is_success"]`, once the box is within 0.15 m of the
+goal. All three are seeded through `reset(seed=...)`, and each keeps its scene as
+`env.unwrapped.scene`.
+
+## Vector environments
+
+```python
+envs = gym.make_vec("fx2d/Push-v0", num_envs=256)
+obs, info = envs.reset(seed=0)          # copy i is seeded with 0 + i
+obs, rewards, terminated, truncated, info = envs.step(envs.action_space.sample())
+```
+
+`gym.make_vec` builds an `Fx2DVectorEnv`. Each step applies every copy's action, steps all of
+their scenes in one `step_many` call, then reads each copy's result. A copy that finished on the
+previous step is reset instead, as in Gymnasium's own vector environments (next-step autoreset),
+and the results match Gymnasium's `SyncVectorEnv` bit for bit. Pass `threads=` to `make_vec` to
+fix the thread count.
+
+Measured with [benchmarks/python/throughput.py](https://github.com/Bharath2/fx2d-physics-engine/blob/main/benchmarks/python/throughput.py)
+on an 8-core Intel i7-11800H laptop under Linux, in environment steps per second:
+
+| `fx2d/Push-v0` | 16 copies | 64 copies | 256 copies |
+|---|---|---|---|
+| Gymnasium `SyncVectorEnv` | 17,900 | 18,300 | 18,600 |
+| `Fx2DVectorEnv` | 25,200 | 32,700 | 49,800 |
+
+The physics alone runs about 4-6x faster across 256 scenes than stepping them one by one; the
+rest of each step is Python reading observations and computing rewards. CartPole and Pendulum
+are so cheap to simulate that Python dominates, and they gain only from batches of hundreds.
+
+## Writing your own environment
+
+Subclass `fx2d.envs.Fx2DEnv`: build `self.scene` in `__init__`, set `self.dt`, and split a step
+into `_act(action)`, which applies the action to the scene, and `_outcome()`, which returns
+`(observation, reward, terminated, truncated, info)` once the scene has stepped. The base class
+steps the scene between the two, and `Fx2DVectorEnv(MyEnv, num_envs=64)` batches it with no
+further code.
+
+```python
+import numpy as np
+from gymnasium import spaces
+
+import fx2d
+from fx2d.envs import Fx2DEnv
+
+
+class Hover(Fx2DEnv):
+    """Hold a falling box at a height of 3 m by thrusting up."""
+
+    def __init__(self):
+        self.dt = 0.05
+        self.observation_space = spaces.Box(-np.inf, np.inf, shape=(2,), dtype=np.float32)
+        self.action_space = spaces.Box(0.0, 1.0, shape=(1,), dtype=np.float32)
+        self.scene = fx2d.Scene(size=(4, 6), gravity=(0, -9.81))
+        self.body = self.scene.add_box("body", position=(2, 3), size=(0.5, 0.5))
+
+    def _observation(self):
+        return np.array([self.body.position[1] - 3.0, self.body.velocity[1]], dtype=np.float32)
+
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
+        self.scene.reset()
+        self.body.set_state((2.0, 3.0 + self.np_random.uniform(-1, 1), 0.0))
+        return self._observation(), {}
+
+    def _act(self, action):
+        self.body.apply_force((0.0, 20.0 * float(action[0])))  # up to twice its weight
+
+    def _outcome(self):
+        obs = self._observation()
+        return obs, -abs(float(obs[0])), False, False, {}
+```
+
+Register it with `gymnasium.register(id=..., entry_point=Hover,
+vector_entry_point=functools.partial(fx2d.envs.Fx2DVectorEnv, Hover), max_episode_steps=200)`
+to get `gym.make` and `gym.make_vec` for it.

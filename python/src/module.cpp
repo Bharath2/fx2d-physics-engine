@@ -17,8 +17,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
 #include <exception>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -116,7 +120,96 @@ nb::ndarray<nb::numpy, float, nb::shape<-1, 3>> body_column(FxScene& scene, Get 
     return nb::ndarray<nb::numpy, float, nb::shape<-1, 3>>(data, {n, 3}, owner);
 }
 
-// Each scene is stepped by one thread, so its results are the bits a single-threaded run gives.
+// Workers kept from call to call: starting threads cost more than stepping a small scene, and
+// vector environments call step_many every step. The calling thread works alongside them, and
+// each scene goes to one thread, start to finish, so it gets the bits a single thread gives.
+class StepPool {
+  public:
+    // `pool` threads in all, the caller included, of which `workers` take part in this call.
+    void run(const std::vector<FxScene*>& scenes, double dt, int steps, size_t pool,
+             size_t workers) {
+        std::lock_guard<std::mutex> one_call(m_call); // calls from several Python threads queue
+        resize(pool - 1);
+        const size_t helpers = std::min(workers - 1, m_threads.size());
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_scenes = &scenes;
+            m_dt = dt;
+            m_steps = steps;
+            m_next = 0;
+            m_error = nullptr;
+            m_tickets = helpers;
+            ++m_job;
+        }
+        for (size_t i = 0; i < helpers; ++i)
+            m_wake.notify_one();
+        drain();
+        // Every scene is taken: helpers still asleep are not waited for, only those working.
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_tickets = 0;
+        m_done.wait(lock, [this] { return m_busy == 0; });
+        if (m_error) std::rethrow_exception(m_error);
+    }
+
+  private:
+    void resize(size_t helpers) {
+        if (m_threads.size() == helpers) return;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_stop = true;
+        }
+        m_wake.notify_all();
+        for (auto& t : m_threads)
+            t.join();
+        m_threads.clear();
+        m_stop = false;
+        for (size_t i = 0; i < helpers; ++i)
+            m_threads.emplace_back([this, job = m_job] { work(job); });
+    }
+
+    void work(uint64_t seen) {
+        for (;;) {
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_wake.wait(lock, [&] { return m_stop || m_job != seen; });
+                if (m_stop) return;
+                seen = m_job;
+                if (m_tickets == 0) continue; // woke after the job was handed out
+                --m_tickets;
+                ++m_busy;
+            }
+            drain();
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (--m_busy == 0) m_done.notify_one();
+        }
+    }
+
+    void drain() {
+        for (size_t i = m_next.fetch_add(1); i < m_scenes->size(); i = m_next.fetch_add(1)) {
+            try {
+                for (int k = 0; k < m_steps; ++k)
+                    (*m_scenes)[i]->step(m_dt);
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                if (!m_error) m_error = std::current_exception();
+            }
+        }
+    }
+
+    std::mutex m_call, m_mutex;
+    std::condition_variable m_wake, m_done;
+    std::vector<std::thread> m_threads;
+    const std::vector<FxScene*>* m_scenes = nullptr;
+    double m_dt = 0.0;
+    int m_steps = 0;
+    std::atomic<size_t> m_next{0};
+    size_t m_tickets = 0; // helpers that may still join the current job
+    size_t m_busy = 0; // helpers that joined it and are not done
+    uint64_t m_job = 0;
+    bool m_stop = false;
+    std::exception_ptr m_error;
+};
+
 void step_many(const std::vector<FxScene*>& scenes, double dt, int steps, int threads) {
     if (std::find(scenes.begin(), scenes.end(), nullptr) != scenes.end())
         throw std::invalid_argument("step_many: None is not a scene");
@@ -124,9 +217,12 @@ void step_many(const std::vector<FxScene*>& scenes, double dt, int steps, int th
     std::sort(sorted.begin(), sorted.end());
     if (std::adjacent_find(sorted.begin(), sorted.end()) != sorted.end())
         throw std::invalid_argument("step_many: a scene is listed twice");
-    size_t workers = threads > 0 ? static_cast<size_t>(threads) :
-                                   std::max(1u, std::thread::hardware_concurrency());
-    workers = std::min(workers, scenes.size());
+    // By default a thread per four scenes, up to every core: waking a thread costs about as
+    // much as stepping a small scene, so a few scenes go faster on fewer threads.
+    const size_t pool = threads > 0 ? static_cast<size_t>(threads) :
+                                      std::max(1u, std::thread::hardware_concurrency());
+    const size_t wanted = threads > 0 ? pool : std::max<size_t>(1, scenes.size() / 4);
+    const size_t workers = std::min({wanted, pool, scenes.size()});
     nb::gil_scoped_release release;
     if (workers <= 1) {
         for (FxScene* s : scenes)
@@ -134,23 +230,9 @@ void step_many(const std::vector<FxScene*>& scenes, double dt, int steps, int th
                 s->step(dt);
         return;
     }
-    std::vector<std::exception_ptr> errors(workers);
-    std::vector<std::thread> pool;
-    for (size_t w = 0; w < workers; ++w) {
-        pool.emplace_back([&, w] {
-            try {
-                for (size_t i = w; i < scenes.size(); i += workers)
-                    for (int k = 0; k < steps; ++k)
-                        scenes[i]->step(dt);
-            } catch (...) {
-                errors[w] = std::current_exception();
-            }
-        });
-    }
-    for (auto& t : pool)
-        t.join();
-    for (const auto& e : errors)
-        if (e) std::rethrow_exception(e);
+    // Never destroyed: joining threads while a process exits can hang on some platforms.
+    static StepPool* step_pool = new StepPool();
+    step_pool->run(scenes, dt, steps, pool, workers);
 }
 
 } // namespace
@@ -211,6 +293,8 @@ NB_MODULE(_fx2d, m) {
         .def_rw("static_friction", &FxEntity::static_friction)
         .def_rw("dynamic_friction", &FxEntity::dynamic_friction)
         .def_rw("gravity_scale", &FxEntity::gravity_scale)
+        .def_rw("damping", &FxEntity::vel_damping,
+                "drag on speed and spin: about e^-1 of each is left after 1 / damping seconds")
         .def_rw("enabled", &FxEntity::enabled)
         .def_rw("is_sensor", &FxEntity::is_sensor)
         .def_rw("ccd", &FxEntity::enable_ccd)
@@ -403,5 +487,6 @@ NB_MODULE(_fx2d, m) {
 
     m.def("step_many", &step_many, "scenes"_a, "dt"_a = 1.0 / 60.0, "steps"_a = 1, "threads"_a = 0,
           "Step independent scenes in parallel, each on one thread, with the GIL released. "
-          "threads=0 uses every core. Each scene's results are identical to stepping it alone.");
+          "threads=0 uses a thread per four scenes, up to every core. Each scene's results are "
+          "identical to stepping it alone.");
 }

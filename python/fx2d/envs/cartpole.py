@@ -2,14 +2,15 @@
 
 import math
 
-import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
 import fx2d
 
+from .base import Fx2DEnv
 
-class CartPoleEnv(gym.Env):
+
+class CartPoleEnv(Fx2DEnv):
     """The cart-pole balancing task, simulated by Fx2D.
 
     A pole is hinged on top of a cart that slides along a frictionless rail. Each step pushes the
@@ -20,8 +21,6 @@ class CartPoleEnv(gym.Env):
     Observation: cart position, cart velocity, pole angle (positive when leaning toward +x) and
     the pole's angular velocity.
     """
-
-    metadata = {"render_modes": []}
 
     def __init__(self, force=10.0, dt=0.02):
         self.force = float(force)
@@ -66,11 +65,12 @@ class CartPoleEnv(gym.Env):
         )
         return self._observation(), {}
 
-    def step(self, action):
+    def _act(self, action):
         if not self.action_space.contains(action):
             raise ValueError(f"action must be 0 or 1, got {action!r}")
         self.slider.set_force(self.force if action == 1 else -self.force)
-        self.scene.step(self.dt)
+
+    def _outcome(self):
         obs = self._observation()
         terminated = bool(abs(obs[0]) > self.x_limit or abs(obs[2]) > self.theta_limit)
         return obs, 1.0, terminated, False, {}

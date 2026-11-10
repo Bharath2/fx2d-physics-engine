@@ -2,14 +2,15 @@
 
 import math
 
-import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
 import fx2d
 
+from .base import Fx2DEnv
 
-class PendulumEnv(gym.Env):
+
+class PendulumEnv(Fx2DEnv):
     """Pendulum swing-up, simulated by Fx2D.
 
     A 1 m, 1 kg rod hangs from a hinge whose motor gives at most 2 N m, less than gravity's
@@ -20,8 +21,6 @@ class PendulumEnv(gym.Env):
     Observation: cos and sin of the rod's angle from upright, and its angular velocity.
     Action: the motor torque in N m.
     """
-
-    metadata = {"render_modes": []}
 
     def __init__(self, max_torque=2.0, dt=0.05, gravity=10.0):
         self.max_torque = float(max_torque)
@@ -37,6 +36,7 @@ class PendulumEnv(gym.Env):
         self.hinge = self.scene.add_revolute_joint("hinge", "pivot", "rod", anchor=(0, 0))
         self.hinge.control_mode = fx2d.ControlMode.EFFORT
         self.hinge.set_torque(0.0)
+        self._cost = 0.0
 
     def _observation(self):
         angle = self.hinge.angle
@@ -53,11 +53,12 @@ class PendulumEnv(gym.Env):
                                     (-spin * r[1], spin * r[0], spin))
         return self._observation(), {}
 
-    def step(self, action):
+    def _act(self, action):
         torque = float(np.clip(np.asarray(action, dtype=np.float32).reshape(-1)[0],
                                -self.max_torque, self.max_torque))
         angle, spin = self.hinge.angle, self.hinge.angular_velocity
-        cost = angle ** 2 + 0.1 * spin ** 2 + 0.001 * torque ** 2
+        self._cost = angle ** 2 + 0.1 * spin ** 2 + 0.001 * torque ** 2  # the state acted on
         self.hinge.set_torque(torque)
-        self.scene.step(self.dt)
-        return self._observation(), -cost, False, False, {}
+
+    def _outcome(self):
+        return self._observation(), -self._cost, False, False, {}
