@@ -47,6 +47,8 @@ void FxEntity::reset() {
     m_correction_carry = {0, 0, 0};
     m_eff_force = {0.0f, 0.0f};
     m_eff_moment = 0.0f;
+    m_step_force = {0.0f, 0.0f};
+    m_step_moment = 0.0f;
     m_eff_impulse = {0.0f, 0.0f};
     m_eff_impulse_moment = 0.0f;
     // A body asleep before the reset must not stay frozen after it.
@@ -196,11 +198,11 @@ FxVec3f FxEntity::calc_acceleration() {
 FxVec3f FxEntity::calc_acceleration(const FxVec2f& gravity) {
     FxVec3f acc{0.0, 0.0, 0.0};
     if (_mass > 0.0f) {
-        acc.set_xy(acc.xy() + m_eff_force * _inv_mass); // Linear acceleration
+        acc.set_xy(acc.xy() + (m_step_force + m_eff_force) * _inv_mass); // Linear acceleration
         acc.set_xy(acc.xy() + gravity_scale * gravity); // Gravity effect
     }
     if (_inertia > 0.0f) {
-        acc.theta() += m_eff_moment * _inv_inertia; // Angular acceleration
+        acc.theta() += (m_step_moment + m_eff_moment) * _inv_inertia; // Angular acceleration
     }
     return acc;
 }
@@ -289,6 +291,13 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt, bool place_sh
     m_eff_moment = 0.0f; // reset effective moment
     m_eff_impulse = {0.0f, 0.0f}; // reset effective impulse
     m_eff_impulse_moment = 0.0f; // reset effective impulse moment
+}
+
+void FxEntity::hold_step_forces() {
+    m_step_force = m_eff_force;
+    m_step_moment = m_eff_moment;
+    m_eff_force = {0.0f, 0.0f};
+    m_eff_moment = 0.0f;
 }
 
 // Compared first, so a shape already at the current pose costs three float comparisons.

@@ -53,6 +53,8 @@ x*  = x + h · v*           // then advance position
 
 Where acceleration `a` includes gravity scaled by `gravity_scale`, plus any user-applied forces and torques divided by mass/inertia. The previous pose `x_prev` is saved before the update for velocity derivation in step 5.
 
+Forces and torques applied between steps are held for every substep of the next step (`FxEntity::hold_step_forces`), so a force `F` on mass `m` adds `F·dt/m` to the velocity over a step of `dt`, and then lapses. Joint motors apply their effort afresh in each substep, and that effort lasts the one substep.
+
 On a step's first substep the entity's shapes and AABB are synchronised to the new pose. Later substeps leave them where they are until a pair test needs them, and the step ends by placing every shape at its final pose.
 
 ---

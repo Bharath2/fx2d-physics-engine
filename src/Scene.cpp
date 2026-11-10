@@ -506,6 +506,7 @@ void FxScene::step(double step_dt) {
     // Stamps every pair slot touched from here on. Bumped before the substeps so a slot left
     // over from the previous step cannot be mistaken for one recorded during this one.
     ++m_step_counter;
+    m_entities.for_each(std::execution::seq, [](auto entity) { entity->hold_step_forces(); });
 
     // Substeps. Both buffers live outside the loop so their capacity is reached once and the
     // substeps never allocate; at 14 substeps that was 28 allocations per step.

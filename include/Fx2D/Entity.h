@@ -74,6 +74,9 @@ class FxEntity {
     // total resultant force and moment on the body
     float m_eff_moment = 0.0f;
     FxVec2f m_eff_force{0, 0};
+    // What was applied between steps, held for every substep of the next (hold_step_forces).
+    float m_step_moment = 0.0f;
+    FxVec2f m_step_force{0, 0};
 
     // accumulated impulses for the current step
     float m_eff_impulse_moment = 0.0f;
@@ -223,6 +226,9 @@ class FxEntity {
     // place_shapes = false leaves the shapes where they were: FxScene places them only on a
     // step's first substep, and later for the pairs it tests (refresh_collision_shape).
     void step(const FxVec2f& gravity, const double& step_dt, bool place_shapes = true);
+    // FxScene calls this before a step's substeps: forces applied since the last step act on
+    // every substep of this one, while those applied during it, as joint motors do, last one.
+    void hold_step_forces();
     // Bring the collision shape and bounding box, or every shape, to the current pose.
     void refresh_collision_shape();
     void refresh_world_shapes();
