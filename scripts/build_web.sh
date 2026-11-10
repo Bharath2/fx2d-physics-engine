@@ -3,8 +3,8 @@
 # docs/public/playground/, where the documentation site serves it.
 #
 # Needs an activated emsdk (emcc on PATH), git and cmake. Everything third-party is fetched
-# and built once under build-web/: raylib for the web target, yaml-cpp, Eigen headers, and
-# Dear ImGui + rlImGui into lib/ if those placeholder folders are still empty.
+# and built once under build-web/: raylib for the web target, yaml-cpp, and Dear ImGui +
+# rlImGui into lib/ if those placeholder folders are still empty.
 #
 # Usage: ./scripts/build_web.sh
 set -euo pipefail
@@ -42,14 +42,6 @@ if [[ ! -f "$PREFIX/lib/libyaml-cpp.a" ]]; then
     -DCMAKE_INSTALL_PREFIX="$PREFIX" >/dev/null
   cmake --build "$OUT/yaml-cpp-build" -j
   cmake --install "$OUT/yaml-cpp-build" >/dev/null
-fi
-
-# --- Eigen (headers only; its CMake install needs no build)
-if [[ ! -d "$PREFIX/include/eigen3" ]]; then
-  clone https://gitlab.com/libeigen/eigen.git "$OUT/eigen" 3.4.0
-  cmake -S "$OUT/eigen" -B "$OUT/eigen-build" -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-    -DEIGEN_BUILD_DOC=OFF -DBUILD_TESTING=OFF >/dev/null
-  cmake --install "$OUT/eigen-build" >/dev/null
 fi
 
 # --- the engine and the playground

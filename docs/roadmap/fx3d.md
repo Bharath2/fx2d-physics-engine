@@ -16,7 +16,7 @@ return to the source material, not a leap into the unknown.
 | `AABBTree.h` | ~90% | `FxAABB` gains z; the SAH cost metric switches perimeter → surface area. The algorithm — SAH-guided insertion, fat boxes, dual-tree pair descent — is dimension-blind. |
 | `Registry.h` (entities, pair filter, sleep) | ~90% | Only the AABB type. |
 | Scene step loop (substeps, warm-start cache, sleep logic) | ~70% | Structure identical; math swapped. |
-| XPBD constraint kernels (`Constraints.cpp`) | ~50% | The compliance/Lagrange scheme carries verbatim; the generalized inverse mass becomes quaternion + world-space inertia tensor (`R·I·Rᵀ`). Eigen already provides `Quaternionf`. |
+| XPBD constraint kernels (`Constraints.cpp`) | ~50% | The compliance/Lagrange scheme carries verbatim; the generalized inverse mass becomes quaternion + world-space inertia tensor (`R·I·Rᵀ`). Fx2D's math types gain a quaternion. |
 | Entity | ~50% | `pose {x, y, θ}` → position + quaternion; scalar inertia → 3×3 tensor. |
 | Joints | ~40% | Revolute → hinge (two angular locks + one driven axis), prismatic similar; the paper has exact recipes, and the motor/PID layer carries. |
 | YAML loader | ~80% | Schema grows z and an orientation representation. |
@@ -54,7 +54,7 @@ physics, where the competition is Jolt and PhysX.
 4. **3D AABB tree + registry** — near-mechanical given the reuse map.
 5. **raylib 3D viewer** — `Camera3D`, mesh drawing, the existing ImGui panel.
 6. **Port the stability test suite** — plus the adversarial scenes from
-   roadmap item 8 (tall stacks, mass ratios, loaded chains), in 3D from day
+   the 2D suite (tall stacks, mass ratios, loaded chains), in 3D from day
    one. Robustness is bought with scenes, not architecture.
 
 ## Do these 2D items first

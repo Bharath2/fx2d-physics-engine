@@ -42,4 +42,4 @@ The renderer gives ImGui first refusal over input, so UI clicks do not accidenta
 
 ## Required build mode
 
-This route requires `FX2D_HEADLESS=OFF`, raylib, yaml-cpp, Eigen3, Dear ImGui, and rlImGui. For CMake consumption instructions, use [link Fx2Dlib](/api/linking#enable-the-renderer).
+This route requires `FX2D_HEADLESS=OFF`, raylib, yaml-cpp, Dear ImGui, and rlImGui; CMake downloads any of them it cannot find. For CMake consumption instructions, use [link Fx2Dlib](/api/linking#enable-the-renderer).

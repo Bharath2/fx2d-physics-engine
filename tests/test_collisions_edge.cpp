@@ -38,6 +38,23 @@ std::shared_ptr<FxEntity> make_circle(const std::string& name, float x, float y,
     return e;
 }
 
+// An edge's endpoints are kept as authored, so its body's origin can be far from it. The
+// normal once followed the line from that origin to the other body, and from one side pointed
+// the wrong way: a ball approaching from there was pushed on through the edge.
+void test_edge_far_from_its_origin_faces_both_ways() {
+    auto edge = make_edge("far_edge", FxVec2f{10.0f, 1.0f}, FxVec2f{10.0f, 6.0f});
+    for (const float x : {9.8f, 10.2f}) {
+        auto ball = make_circle("far_ball", x, 3.0f, 0.3f);
+        const float side = x < 10.0f ? -1.0f : 1.0f;
+        FxContact c = FxSolver::collision_check(edge, ball);
+        require(c.is_valid() && c.normal.x() * side > 0.99f,
+                "the edge's normal must point to the side the ball is on");
+        c = FxSolver::collision_check(ball, edge);
+        require(c.is_valid() && c.normal.x() * side < -0.99f,
+                "from the ball, the normal must point back at the edge");
+    }
+}
+
 std::shared_ptr<FxEntity> make_box(const std::string& name, float x, float y, float w = 1.0f,
                                    float h = 1.0f) {
     auto e = std::make_shared<FxEntity>(name);
@@ -198,6 +215,7 @@ void run_edge_tests() {
     test_edge_aabb();
     test_edge_degenerate_throws();
     test_edge_circle_contact();
+    test_edge_far_from_its_origin_faces_both_ways();
     test_edge_circle_separated();
     test_edge_box_contact();
     test_edge_through_box_contact();

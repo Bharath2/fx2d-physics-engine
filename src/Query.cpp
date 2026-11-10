@@ -157,8 +157,11 @@ void FxScene::raycast_all(const FxVec2f& origin, const FxVec2f& direction, float
         out_hits.push_back(hit);
     }
 
-    std::sort(out_hits.begin(), out_hits.end(),
-              [](const FxRayHit& a, const FxRayHit& b) { return a.distance < b.distance; });
+    // Equal distances break by entity id, so ties come back in the same order on every platform.
+    std::sort(out_hits.begin(), out_hits.end(), [](const FxRayHit& a, const FxRayHit& b) {
+        if (a.distance != b.distance) return a.distance < b.distance;
+        return a.entity->get_entity_id() < b.entity->get_entity_id();
+    });
 }
 
 bool FxScene::raycast(const FxVec2f& origin, const FxVec2f& direction, float max_distance,

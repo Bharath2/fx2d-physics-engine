@@ -8,9 +8,10 @@ Contributions are welcome! Please follow the existing code style and conventions
   changes, and open a pull request referencing the issue.
 - Run `./scripts/format.sh` before opening a PR; `./scripts/lint.sh` should
   pass. Both are gated in CI on every push and pull request.
-- **Looking for something to work on?** The roadmap of open targets lives in
-  [roadmap](./roadmap) — each item records the motivation, the
-  relevant code paths, and the suggested approach.
+- **Looking for something to work on?** Planned work is listed in the
+  [roadmap](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap.md), and the
+  [engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md) record what has been
+  measured and tried so far.
 
 ## Linting
 
@@ -35,7 +36,7 @@ reads its suppressions from `scripts/cppcheck-suppressions.txt`.
 Install the tools on Debian/Ubuntu:
 
 ```bash
-sudo apt install clang-format clang-tidy cppcheck libeigen3-dev
+sudo apt install clang-format clang-tidy cppcheck
 ```
 
 On MSYS2 MinGW64: `pacman -S mingw-w64-x86_64-clang-tools-extra` (and cppcheck
@@ -84,9 +85,10 @@ in two parts:
 - **Repeatability.** The same scene built and stepped twice in one process must produce
   bit-identical state. Exact equality on purpose: what it catches is iteration order leaking
   into results, which every tolerance-based test in the suite would pass.
-- **Golden state.** Four scenes stepped a fixed number of times, compared against
-  `tests/goldens_solver_regression.inc` with tight but not bitwise tolerances, so a different
-  compiler or ISA does not fail the suite on its last bits.
+- **Golden state.** Five scenes stepped a fixed number of times, compared against
+  `tests/goldens_solver_regression.inc` bit for bit: a hash of every captured float must match
+  on every compiler and CPU (see [Determinism across targets](#determinism-across-targets)).
+  Per-value tolerances alongside it say how far a value moved when one does.
 
 If a change is supposed to be speed-only and this suite fails, the change altered physics.
 Regenerate the table only when the change to physics was deliberate:
@@ -165,8 +167,8 @@ wall and CPU **both**: a change that halves wall time while spending eight times
 usually the wrong trade for a library that may be one subsystem among many, and a bad trade for
 RL rollouts where many independent sims already saturate the machine. A `cpu/wall` ratio near
 1.0 means serial; well above 1.0 is only a win if wall time actually fell. Any threading change
-needs a before/after from this target — see item 7 under Priority Targets in the
-[roadmap](./roadmap).
+needs a before/after from this target — see the parallel-loop measurements in the
+[engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md#tried-and-turned-down).
 
 ### Reading the phase split
 
@@ -182,7 +184,7 @@ cmake --build build-prof -j --target Fx2DBench
 ```
 
 Use it to decide *what* to optimise before optimising it. The rankings in the
-[SIMD plan](./roadmap/simd) have been overturned twice by re-running this.
+[SIMD plan](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap/simd.md) have been overturned twice by re-running this.
 
 ### Look for allocator traffic first
 
@@ -221,7 +223,7 @@ call before touching the arithmetic.
 
 ### Measure in cycles, not wall time
 
-On a laptop that moves on and off turbo, wall time is not a measurement. During one session the
+On a laptop that moves on and off turbo, wall time is not a measurement. In one series of runs the
 *same unchanged binary* reported `settling_boxes/200` at 8.50, 11.89 and 3.47 ms/step in three
 different windows -- a 3.4x spread on identical code. Two separate changes were nearly reported
 as large wins on the strength of readings like that, and one of them was actually a regression.
@@ -310,42 +312,38 @@ Two knobs:
 
 | option | default | meaning |
 |---|---|---|
-| `FX2D_NATIVE` | `ON` | Tune for the machine doing the build. Right for development, wrong for anything you ship. |
+| `FX2D_NATIVE` | `OFF` | Tune for the machine doing the build. Faster for development, wrong for anything you ship. Results are the same bits either way. |
 | `FX2D_ARCH_BASELINE` | `""` | A fixed ISA the binary may assume everywhere: `sse2`, `avx2`, `avx512`, `armv8-a`, `armv8.2-a`. Takes precedence over `FX2D_NATIVE`. |
 
 ### Determinism across targets
 
-Results are reproducible **within** a build configuration, not across every possible one. Two
-things make that hold as well as it does:
+The same scene and inputs give the same bits on every supported compiler and CPU: GCC, Clang
+and MSVC, x86-64 and ARM64, with or without `FX2D_NATIVE`. `tests/test_solver_regression.cpp`
+enforces it: each golden scene's state is hashed bit for bit, and every CI job must reproduce the
+same hashes. One of the scenes is a dozen boxes tumbling at 4-14 rad/s for 400 steps, which drives
+every shape's rotation through `sin` and `cos` at real angles. Four things make it hold:
 
-- **`FX2D_PIN_FP_CONTRACT`** (default on) passes `-ffp-contract=off` / `/fp:precise`. This is
-  not theoretical: building for aarch64 with contraction left at the compiler default makes
-  `tests/test_solver_regression.cpp` fail, because the fused multiply-add rounds differently
-  than the separate multiply and add the goldens were captured from.
-- **Tolerances, not bit patterns.** The golden tables are compared with absolute tolerances for
-  exactly this reason. They currently pass on GCC x86-64, Clang x86-64, GCC aarch64 under qemu,
-  and MinGW GCC with LTO — but do not tighten them to bitwise equality, because that would hold
-  only on the machine that captured them.
+- **No contraction.** `FX2D_PIN_FP_CONTRACT` (default on) passes `-ffp-contract=off` /
+  `/fp:precise`, and it is PUBLIC on `Fx2Dlib` because much of the maths lives in headers. A fused
+  multiply-add rounds once where a multiply and an add round twice: building for aarch64 with
+  contraction left at the compiler default fails the goldens.
+- **Only correctly rounded operations.** Add, subtract, multiply, divide and square root, which
+  IEEE 754 requires to round the same way everywhere, and no fast-math. Sums are taken in a fixed
+  order (`fx_detail::dot` in `Math.h`), and no reduction is reassociated.
+- **No C library trigonometry.** `sin` and `cos` differ in the last bit between C libraries, and
+  glibc even picks a different implementation on CPUs with FMA. `FxSinCos` computes both from the
+  operations above; `tests/test_angle_precision.cpp` pins its output bits.
+- **No order from hash tables.** Iteration order of `unordered_map` and `unordered_set` differs
+  between standard libraries, so nothing the solver computes depends on it. Where an order is
+  visible (contact events, ray-cast hits), results are sorted, with ties broken by entity id.
 
-**What is actually achieved, measured.** The rule the project *enforces* is bitwise
-repeatability within one process — the regression suite's first half, exact equality, no
-tolerance. Across builds it only promises tolerances.
+Before CI, the goldens were checked on MinGW GCC 15 (SSE2 and AVX-512 native), GCC 16 and Clang
+20, MSVC 14.44 with `/arch:AVX2`, Linux GCC 13 (SSE2, AVX-512 native, and Debug with ASan and
+UBSan), Clang 18 with libc++, and GCC 13 for aarch64 under qemu. Not yet checked: WebAssembly, and 32-bit x86, which must use SSE2
+arithmetic (`-mfpmath=sse`) because x87's extended precision rounds differently.
 
-In practice it currently does better than that. Printing solver state at `setprecision(9)`,
-which round-trips a float exactly, the four golden scenes come out **byte-identical** on GCC
-x86-64, Clang x86-64, and GCC aarch64 run under qemu. So does a deliberately harder scene: a
-dozen boxes tumbling at 4-14 rad/s for 400 steps, which drives `set_world_pose` through
-`std::sin`/`std::cos` at real angles and therefore through aarch64 glibc's own libm.
-
-Treat that as an observed property, not a guarantee. It holds because FP contraction is pinned
-off, nothing uses fast-math, and the arithmetic is plain add/sub/mul/div/sqrt, which IEEE-754
-requires to be correctly rounded everywhere. It could legitimately break on a libm version whose
-`sin` differs in the last bit, on real ARM hardware rather than qemu, or on MSVC — none of which
-has been checked. Nothing in CI asserts it, and promising it would be a strong claim to defend.
-
-If you are building on cross-machine reproducibility — lockstep networking, RL rollouts compared
-across hosts — this is the thing to verify yourself on your own targets first, and to add a CI
-check for if you depend on it.
+When a change is meant to move physics, regenerate the goldens on any one target; every other
+target must then agree with them, and CI will say which does not.
 
 ### Testing ARM without ARM hardware
 
@@ -356,23 +354,13 @@ reaches CI; no checked-in toolchain file is needed:
 ```bash
 sudo apt install g++-aarch64-linux-gnu qemu-user
 
-# yaml-cpp has to exist for the target; Eigen is header-only so the host copy serves both.
-git clone --depth 1 --branch 0.8.0 https://github.com/jbeder/yaml-cpp.git yaml-cpp-src
-cmake -S yaml-cpp-src -B yaml-cpp-arm64 \
-  -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-  -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-  -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=BEFORE -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-  -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-  -DCMAKE_INSTALL_PREFIX=$HOME/arm64-sysroot \
-  -DYAML_BUILD_SHARED_LIBS=OFF -DYAML_CPP_BUILD_TESTS=OFF -DYAML_CPP_BUILD_TOOLS=OFF
-cmake --build yaml-cpp-arm64 -j && cmake --install yaml-cpp-arm64
-
+# No yaml-cpp exists for the target, so CMake downloads and cross-builds it.
 cmake -S . -B build-arm64 -DCMAKE_BUILD_TYPE=Release -DFX2D_HEADLESS=ON \
   -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
   -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
   -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=BEFORE -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
   -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-  -DCMAKE_PREFIX_PATH=$HOME/arm64-sysroot -DFX2D_WERROR=ON
+  -DFX2D_WERROR=ON
 cmake --build build-arm64 -j --target Fx2DTests
 qemu-aarch64 -L /usr/aarch64-linux-gnu ./build-arm64/Fx2DTests
 ```
@@ -388,7 +376,7 @@ about 26% slower -- **with no test failing**, because the results are identical 
 If you are changing that kernel, check the loops still vectorise:
 
 ```bash
-g++ -std=c++20 -O3 -march=native -I include -I /usr/include/eigen3 \
+g++ -std=c++20 -O3 -march=native -I include \
     -c src/Constraints.cpp -o /dev/null -fopt-info-vec | grep vectorized
 ```
 
@@ -405,3 +393,25 @@ Clang's `-Wconversion` implies `-Wsign-conversion`; GCC's does not. Building wit
 pushing is the cheapest way to catch that class, and the `clang` CI job is there to keep it from
 accumulating between macOS runs. MSVC `/W4` flags a different set again, which is why
 `FX2D_WERROR` is off for the MSVC job until those have been worked through.
+
+## The Python package
+
+`pip install .` from the repository root builds the module into the active environment, and
+`python -m pytest python/tests` runs its tests; `benchmarks/python/throughput.py` measures the
+environments. The `wheels` workflow builds and tests wheels for every supported platform and
+Python on pushes to `main` and on pull requests that touch the engine or the package.
+
+### Releasing
+
+A published GitHub release uploads that commit's wheels and sdist to PyPI.
+
+1. Set `version` in `pyproject.toml` to the new version, and merge that to `main`.
+2. Create a release on GitHub with a new tag `v<version>`, for example `v0.2.0`, and publish it.
+   The `wheels` workflow builds everything again from the tag and, once every wheel passes its
+   tests, the `publish` job uploads them. It stops if the tag and the version differ.
+
+PyPI accepts the upload through Trusted Publishing: no token is stored in the repository. A
+project owner sets this up once, on PyPI under *Your projects* > *Publishing* (or, before the
+first release, *Add a new pending publisher*), with the owner `Bharath2`, the repository
+`fx2d-physics-engine`, the workflow `wheels.yml` and the environment `pypi`. A version can be
+uploaded only once, so a mistake is fixed with a new version.

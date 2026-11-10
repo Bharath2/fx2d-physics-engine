@@ -1,6 +1,6 @@
 # Collision Resolution
 
-Fx2D handles collisions in two distinct phases per substep: **detection** (broad + narrow phase geometry tests) and **response** (positional correction followed by velocity-level impulses). Both phases are implemented in `FxSolver` (`src/Collisions.cpp`, declared in `include/Fx2D/Solver.h`).
+Fx2D handles collisions in two distinct phases: **detection** (broad + narrow phase geometry tests, mostly once per step) and **response** (positional correction followed by velocity-level impulses, every substep). Both phases are implemented in `FxSolver` (`src/Collisions.cpp`, declared in `include/Fx2D/Solver.h`).
 
 ---
 
@@ -58,23 +58,29 @@ what you need inside the frame, do not store them.
 
 The candidate pairs come from a SAH-guided dynamic AABB tree (`include/Fx2D/AABBTree.h`), driven by `FxEntityRegistry` (`include/Fx2D/Registry.h`) in two halves:
 
-- **`sync_broad_phase(dt, sweep_all_movers)`** runs every substep. Bodies have just moved, so each proxy is brought up to date from `FxEntity::bounding_box()` — which `FxEntity::step()` refreshed during integration. The tree stores every box **fattened by 20% of its extent**, so a proxy only has to be reinserted when its body leaves that fat box. The function returns whether any leaf was inserted, removed or reinserted.
+- **`sync_broad_phase(dt, sweep_all_movers)`** runs on the first substep of each step. Bodies have just moved, so each proxy is brought up to date from `FxEntity::bounding_box()` — which `FxEntity::step()` refreshes during that substep's integration. The tree stores every box **fattened by 20% of its extent**, so a proxy only has to be reinserted when its body leaves that fat box. The function returns whether any leaf was inserted, removed or reinserted.
 
-  On the first substep the box is also **swept along the body's velocity for the whole step**, so a body moving at constant velocity stays inside the box the tree already holds and needs no reinsertion for the rest of the step. That inflates the pair list slightly, which the tight-AABB filter below rejects cheaply. This was tried once before and reverted for costing more than it saved; it only became worth it after the narrow phase got roughly three times cheaper. See the [roadmap](../roadmap#recently-delivered).
+  The box is also **swept along the body's velocity for the whole step**, so the pair list stands for the whole step for every body that keeps to that path. A body knocked off it can reach pairs the list lacks, so a later substep refreshes the box of any body whose velocity has drifted more than the fat margin's 0.01 over the step, re-syncs, and rebuilds the list if one of them left its proxy. That inflates the pair list slightly, which the tight-AABB filter below rejects cheaply. This was tried once before and reverted for costing more than it saved; it only became worth it after the narrow phase got roughly three times cheaper. See the [engineering notes](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/engineering-notes.md#tried-and-turned-down).
 - **`collect_broad_phase_pairs(pairs)`** walks the tree for overlapping proxies and translates them into packed entity indices, applying the registry-level filters (collision-exclusion pairs, negative collision groups, missing geometry).
 
-`FxScene::step()` runs the walk only when the sync reports the tree changed. If no leaf moved, the tree is the same tree, so the walk would rebuild the identical list in the identical order — skipping it changes nothing and saves a tree descent. In a settling or piling scene about 90% of substeps skip it.
+`FxScene::step()` walks the tree on the first substep, and on a later one only when an off-path re-sync reports the tree changed. If no leaf moved, the tree is the same tree, so the walk would rebuild the identical list in the identical order.
 
 Two filters that used to live in the query now run per substep in the narrow-phase loop, because the pair list outlives the substep that built it and both answers change as the substeps run:
 
 - **Sleeping pairs.** A pair with both bodies asleep is skipped. Filtering this at query time would have stopped a wake from propagating: a body woken partway through the step would have had its pairs dropped from the list *before* it woke.
-- **`FxSolver::aabb_overlap_check(entity1, entity2)`**, which tests the two current tight AABBs directly. It is the cheap pre-filter; pairs that fail are skipped without running any geometry. CCD pairs are exempt, since a speculative contact is generated precisely when the bodies are still apart.
+- **`FxSolver::aabb_overlap_check(entity1, entity2)`**, which tests the two current tight AABBs directly. It is the cheap pre-filter; pairs that fail are skipped without running any geometry. CCD pairs are exempt, since a speculative contact is generated precisely when the bodies are still apart, and so are held contacts (below).
 
 `collision_check()` runs the same test internally, so a contact and a broad-phase rejection can never disagree.
 
 ### Narrow Phase
 
 `FxSolver::collision_check(entity1, entity2)` dispatches on the shape types of the two entities.
+
+#### Contacts held through a step
+
+A pair the narrow phase finds touching is **held** for the rest of the step (`FxHeldContact`, `FxSolver::hold_contact`). Each contact point is recorded on both bodies, together with its own depth: a two-point manifold reports one depth, the deepest, but a tilted box's points sit at different depths, and holding both at the deepest one over-corrects the raised corner. Later substeps call `FxSolver::remeasure_contact` instead of `collision_check`: the two records of each point coincided at detection, so how far they have since moved apart along the normal is how much shallower that point is, and the contact's depth is retaken at its deepest point. The normal stays as detected.
+
+The held manifold stands only while the geometry it came from does. It is detected afresh once either body turns more than 0.02 rad or a point slides more than 0.01 since detection, and dropped once every point is more than 0.01 clear. Until then, a point re-measured more than 1e-4 clear is left out of the solve, with no position correction, no velocity constraint and no warm start, and comes back once it touches again: a corner that has lifted off must be free to fall back. A fresh manifold never has such a point, because the narrow phase clips the incident edge where it crosses the surface. A circle looks the same at every angle, so its points are held relative to its centre and never count as turning; a rolling circle keeps its contact. Sensors and speculative CCD contacts are detected afresh every substep.
 
 Polygon-vs-polygon is the one case that has to be tested **both ways** — SAT from A's faces and
 from B's — because the smaller penetration is the correct one. Only the winner's contact points
@@ -127,9 +133,11 @@ Capsule collisions reduce to "virtual circle at closest segment point" vs the ot
 
 The capsule's `skin_radius` plays the role of the virtual circle's radius. A zero-length capsule reduces exactly to a circle; a zero-radius capsule is a bare line segment (an edge).
 
+One closest point is enough for a capsule meeting a corner or another capsule end-on, but not for one lying along a polygon face or another capsule: resting on whichever end was lower, it rocked from end to end and never slept. When the capsule's core lies within about 8.6 degrees of parallel to the polygon face it presses on, or to the other capsule's core, it is clipped to that face's or core's span instead, giving two points, each with its own depth (`clip_to_span`, `rest_along`). The normal and the detection stay the exact closest-point ones, so a capsule's round end never reports contact early at a corner, as a test on face normals alone would.
+
 #### Edge–X
 
-An edge is a zero-skin capsule, so edge–circle and edge–capsule pairs use the capsule reductions above with `rA = 0`.
+An edge is a zero-skin capsule, so edge–circle and edge–capsule pairs use the capsule reductions above with `rA = 0`. Its endpoints are kept as authored, so its body's position can be anywhere relative to it; the final "normal points from entity 1 to entity 2" fix-up, which compares the two bodies' positions, is therefore skipped for edges as it is for chains, and every edge branch orients its own normal from the geometry.
 
 Edge–polygon needs its own query (`edge_polygon_contact`). The capsule reduction measures the distance to the polygon *boundary*, which stays positive once the segment lies inside the polygon, so a bare segment would report no contact exactly when it is most deeply penetrating. Instead the segment's line becomes the reference axis: the normal is the segment perpendicular oriented toward the polygon centroid, and the polygon vertices lying behind that line (within the segment's span, offset by the polygon's own skin) supply up to two contact points, deepest first.
 
@@ -184,7 +192,7 @@ A negative depth is what makes this work: the position solver treats it as "do n
 
 Edges are excluded (`A->is_edge() || B->is_edge()` returns early). A bare segment has no skin, so the distance-minus-radii math degenerates, and edges are static level geometry where discrete contacts suffice.
 
-Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see item 3 in the [roadmap](../roadmap)).
+Speculative contacts reduce tunneling but do not eliminate it, since they still sample velocity once per substep. Time-of-impact sweeps remain future work (see the [roadmap](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap.md)).
 
 ---
 
@@ -248,7 +256,7 @@ Called **after** velocity derivation. `init_velocity_pass` runs once per contact
 
 These three take an `FxSolverBodies` (`include/Fx2D/Solver.h`) rather than reading velocity off the entities. It is a structure of arrays — `vx`, `vy`, `w`, `inv_m`, `inv_i` — indexed by the packed registry index each contact carries in `body1` / `body2`. `FxScene::step()` gathers it once per substep after velocity derivation and scatters it back after the sweeps.
 
-The reason is cost, not style: the sweeps are the hottest phase of the step, and reaching velocity through a `shared_ptr<FxEntity>` is a pointer chase per body per contact per sweep. A sleeping or immovable body gathers a zero inverse mass, which is what makes it immovable in the sweeps. The layout is also what the colored batch solve in the [SIMD plan](../roadmap/simd) is built on.
+The reason is cost, not style: the sweeps are the hottest phase of the step, and reaching velocity through a `shared_ptr<FxEntity>` is a pointer chase per body per contact per sweep. A sleeping or immovable body gathers a zero inverse mass, which is what makes it immovable in the sweeps. The layout is also what the colored batch solve in the [SIMD plan](https://github.com/Bharath2/fx2d-physics-engine/blob/main/docs/roadmap/simd.md) is built on.
 
 ### Normal Impulse (Restitution)
 

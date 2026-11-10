@@ -131,6 +131,64 @@ static std::pair<FxVec2f, FxVec2f> closest_capsule_to_polygon(const FxShape* cap
     return {best_p1, best_p2};
 }
 
+// Segment [q0, q1] clipped to the span of reference segment [s, e]: the two ends of their
+// overlap, and their heights above the reference line along n. False if the overlap is shorter
+// than a manifold's two points may be, or the segments are not near parallel.
+static bool clip_to_span(const FxVec2f& q0, const FxVec2f& q1, const FxVec2f& s, const FxVec2f& e,
+                         const FxVec2f& n, FxVec2f out[2], float height[2]) {
+    const FxVec2f u = e - s;
+    const float span = u.norm();
+    const FxVec2f q = q1 - q0;
+    const float length = q.norm();
+    if (span < 1e-6f || length < 1e-6f) return false;
+    // Both segments square to the normal, within ~8.6 degrees, or the heights mean nothing.
+    if (std::fabs(q.dot(n)) > 0.15f * length || std::fabs(u.dot(n)) > 0.15f * span) return false;
+    const float a0 = (q0 - s).dot(u) / span, a1 = (q1 - s).dot(u) / span;
+    float lo = std::clamp((0.0f - a0) / (a1 - a0), 0.0f, 1.0f);
+    float hi = std::clamp((span - a0) / (a1 - a0), 0.0f, 1.0f);
+    if (lo > hi) std::swap(lo, hi);
+    if ((hi - lo) * length < 0.01f) return false;
+    out[0] = q0 + lo * q;
+    out[1] = q0 + hi * q;
+    for (int i = 0; i < 2; ++i)
+        height[i] = (out[i] - s).dot(n);
+    return true;
+}
+
+// A capsule lying along a polygon's face, or along another capsule, rests on two points: one,
+// the closest, would see it rock from end to end and never settle. `ref` carries the reference
+// segment [s, e] with outward normal n; `inc` is the capsule's core; positions go on ref's skin.
+static void rest_along(FxContact& c, const FxVec2f& s, const FxVec2f& e, const FxVec2f& n,
+                       float ref_skin, const FxVec2f& inc0, const FxVec2f& inc1, float skins) {
+    FxVec2f points[2];
+    float height[2];
+    if (!clip_to_span(inc0, inc1, s, e, n, points, height)) return;
+    for (int i = 0; i < 2; ++i) {
+        c.position[i] = points[i] - n * (height[i] - ref_skin);
+        c.point_depth[i] = skins - height[i];
+    }
+    c.penetration_depth = std::max(c.point_depth[0], c.point_depth[1]);
+    c.count = 2;
+}
+
+// The polygon face a contact with normal `out` (pointing away from the polygon) presses on, if
+// it is near square to it; otherwise the contact is at a corner and keeps its single point.
+static void rest_capsule_on_face(FxContact& c, const FxShape* capsule, const FxShape* poly,
+                                 const FxVec2f& out) {
+    const auto& pv = poly->vertices();
+    const auto& cv = capsule->vertices();
+    for (size_t i = 0, n = pv.size(); i < n; ++i) {
+        const FxVec2f& s = pv[i];
+        const FxVec2f& e = pv[(i + 1) % n];
+        FxVec2f face_normal = (e - s).perp().normalized();
+        if (face_normal.dot(s - poly->centroid()) < 0.0f) face_normal = -face_normal;
+        if (face_normal.dot(out) < 0.99f) continue;
+        rest_along(c, s, e, face_normal, poly->skin_radius(), cv[0], cv[1],
+                   capsule->skin_radius() + poly->skin_radius());
+        return;
+    }
+}
+
 // Edge vs polygon: use the segment as the reference axis (generic capsule misses interiors).
 static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) {
     const auto& ev = edge->vertices();
@@ -194,6 +252,8 @@ static FxContact edge_polygon_contact(const FxShape* edge, const FxShape* poly) 
     c.count = 1;
     if (nb == 2 && (best[1] - best[0]).norm() >= 0.01f) {
         c.position[1] = best[1];
+        c.point_depth[0] = -bsd[0];
+        c.point_depth[1] = -bsd[1];
         c.count = 2;
     }
     return c;
@@ -320,6 +380,21 @@ static FxContact polygon_contact_from_sat(const FxShape* A_shape, const FxShape*
     const FxVec2f skin_shift = -rB * sat.normal;
     contact.position[0] = contact_points.first + skin_shift;
     contact.position[1] = contact_points.second + skin_shift;
+    // The points lie on A's reference edge; each one's depth is how far B's incident edge sits
+    // below it there, skins included, as sat.gap measures. Linear along that edge.
+    const float skin_sum = A_shape->skin_radius() + rB;
+    const FxVec2f& u = sat.ref_edge_dir;
+    const float t_start = (B_edge_start - A_edge_start).dot(u);
+    const float t_end = (B_edge_end - A_edge_start).dot(u);
+    const float d_start = skin_sum - (B_edge_start - A_edge_start).dot(sat.normal);
+    const float d_end = skin_sum - (B_edge_end - A_edge_start).dot(sat.normal);
+    auto depth_at = [&](const FxVec2f& q) {
+        if (std::fabs(t_end - t_start) < 1e-6f) return contact.penetration_depth;
+        const float s = ((q - A_edge_start).dot(u) - t_start) / (t_end - t_start);
+        return d_start + s * (d_end - d_start);
+    };
+    contact.point_depth[0] = depth_at(contact_points.first);
+    contact.point_depth[1] = depth_at(contact_points.second);
     // Check if points are too close and resolve to one point if needed
     float dist = (contact.position[1] - contact.position[0]).norm();
     contact.count = (dist < 0.01f) ? 1 : 2;
@@ -462,6 +537,7 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
                 contact.penetration_depth = pen;
                 contact.position[0] = pA + n * (rA - 0.5f * pen);
                 contact.count = 1;
+                rest_along(contact, av[0], av[1], n, rA, bv[0], bv[1], rA + rB);
             } else contact.set_valid(false);
             return contact;
         }
@@ -469,7 +545,9 @@ FxContact compute_contact_one_way(const FxShape* A_shape, const FxShape* B_shape
         if (A_shape->is_edge()) return edge_polygon_contact(A_shape, B_shape);
         // Capsule vs polygon: closest seg-vs-polygon point, then circle-vs-polygon.
         auto [pCap, pPoly] = closest_capsule_to_polygon(A_shape, B_shape);
-        return circle_vs_polygon_contact(pCap, rA, B_shape);
+        FxContact c = circle_vs_polygon_contact(pCap, rA, B_shape);
+        if (c.is_valid(false)) rest_capsule_on_face(c, A_shape, B_shape, -c.normal);
+        return c;
     }
     if (B_shape->is_capsule()) {
         // Symmetric: swap and flip normal so it stays A->B.
@@ -584,12 +662,12 @@ const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1,
         if (picked_ba && (A->is_chain() || B->is_chain())) contact.normal = -contact.normal;
     }
 
-    // Ensure normal points from entity1 -> entity2. Skipped for chains: their entity pose is
-    // the polyline origin, not anywhere near the contact, so a centre-to-centre flip is
-    // arbitrary and inverts correct one-sided face normals. The chain branch orients its own.
+    // Ensure normal points from entity1 -> entity2. Skipped for chains and edges: their entity
+    // pose is wherever their points were authored from, so a centre-to-centre flip is arbitrary
+    // and can invert correct normals. Their branches orient their own.
     if (contact.is_valid(false)) {
-        const bool chain_involved = A->is_chain() || B->is_chain();
-        if (!chain_involved) {
+        const bool own_normal = A->is_chain() || B->is_chain() || A->is_edge() || B->is_edge();
+        if (!own_normal) {
             FxVec2f delta = entity2->pose.xy() - entity1->pose.xy();
             if (delta.dot(contact.normal) < 0.0f) contact.normal = -contact.normal;
         }
@@ -631,7 +709,7 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
     // Bare segments carry no skin, so the distance-minus-radii gap math degenerates for them.
     // Edges are static level geometry, where discrete contacts are sufficient.
     if (A->is_edge() || B->is_edge() || A->is_chain() || B->is_chain()) return FxContact(false);
-    FxVec2f rel_vel = entity2->velocity.head<2>() - entity1->velocity.head<2>();
+    FxVec2f rel_vel = entity2->velocity.xy() - entity1->velocity.xy();
 
     FxVec2f normal;
     float gap;
@@ -748,6 +826,68 @@ FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
     c.entity1 = entity1.get();
     c.entity2 = entity2.get();
     return c;
+}
+
+// How far a held manifold may drift before the narrow phase is asked again: either body turning
+// more than kHoldTurn radians, or a point sliding more than kHoldSlide, since detection. A held
+// contact is released once every point is more than kHoldRelease clear.
+static constexpr float kHoldTurn = 0.02f;
+static constexpr float kHoldSlide = 0.01f;
+static constexpr float kHoldRelease = 0.01f;
+
+// A circle looks the same at every angle, so a point on it is held relative to its centre and
+// does not turn with the body; a rolling circle keeps its contact. Other shapes' points turn.
+static bool turns_with_body(const FxEntity& e) {
+    const auto& shape = e.collision_geometry();
+    return !(shape && shape->is_circle());
+}
+static FxVec2f to_held_frame(const FxEntity& e, const FxVec2f& world_point) {
+    return turns_with_body(e) ? e.to_entity_frame(world_point) : world_point - e.pose.xy();
+}
+static FxVec2f from_held_frame(const FxEntity& e, const FxVec2f& held_point) {
+    return turns_with_body(e) ? e.to_world_frame(held_point) : e.pose.xy() + held_point;
+}
+
+void hold_contact(FxHeldContact& held, const FxContact& contact) {
+    held.contact = contact;
+    for (size_t i = 0; i < contact.count; ++i) {
+        held.local1[i] = to_held_frame(*contact.entity1, contact.position[i]);
+        held.local2[i] = to_held_frame(*contact.entity2, contact.position[i]);
+    }
+    for (size_t i = 0; i < contact.count; ++i) {
+        const float d = contact.point_depth[i];
+        held.detect_depth[i] = std::isfinite(d) ? d : contact.penetration_depth;
+    }
+    held.detect_theta1 = contact.entity1->pose.theta();
+    held.detect_theta2 = contact.entity2->pose.theta();
+    held.held = true;
+}
+
+bool remeasure_contact(FxHeldContact& held) {
+    FxContact& c = held.contact;
+    const FxEntity& A = *c.entity1;
+    const FxEntity& B = *c.entity2;
+    auto turned = [](const FxEntity& e, float theta0) {
+        return turns_with_body(e) && std::fabs(FxAngleWrap(e.pose.theta() - theta0)) > kHoldTurn;
+    };
+    if (turned(A, held.detect_theta1) || turned(B, held.detect_theta2)) return false;
+
+    // Each point's two anchors coincided at detection, so how far they have since moved apart
+    // along the normal is how much shallower that point is. The normal stays as detected.
+    const FxVec2f tangent = c.normal.perp();
+    float deepest = -FxInfinityf;
+    for (size_t i = 0; i < c.count; ++i) {
+        const FxVec2f on_a = from_held_frame(A, held.local1[i]);
+        const FxVec2f on_b = from_held_frame(B, held.local2[i]);
+        const FxVec2f apart = on_b - on_a;
+        if (std::fabs(apart.dot(tangent)) > kHoldSlide) return false;
+        c.point_depth[i] = held.detect_depth[i] - apart.dot(c.normal);
+        deepest = std::max(deepest, c.point_depth[i]);
+        c.position[i] = on_b;
+    }
+    if (deepest < -kHoldRelease) return false;
+    c.penetration_depth = deepest;
+    return true;
 }
 
 } // namespace FxSolver

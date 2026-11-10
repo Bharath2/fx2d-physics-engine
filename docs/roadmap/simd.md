@@ -1,7 +1,7 @@
 # SIMD Plan
 
 The plan of record for vectorizing the solver. Single-threaded throughout: SIMD widens what
-one core does per instruction, and the layout it builds is also the prerequisite for item 7's
+one core does per instruction, and the layout it builds is also the prerequisite for any future
 threading, should that ever pass its A/B gate.
 
 ## The premise
@@ -31,7 +31,7 @@ Shares on the `pile` scene at 300 bodies (807 contacts), x86-64 GCC 13, Release:
 The first column already differed from the old 11x8 numbers the plan used to quote: velocity
 passes were 38%, not 47%, and the broad phase grew with scene size — 12% at 50 bodies, 25% at
 1200 — because the pair query ran once per substep. That put the broad phase ahead of Phase C
-for a while, and it was done first for that reason ([roadmap](../roadmap) item 3).
+for a while, and it was done first for that reason (see the [engineering notes](../engineering-notes.md)).
 
 With it done, the ranking has returned to what the plan originally assumed, but for measured
 reasons rather than assumed ones: **the velocity passes are the step**, at 48% and rising as a
@@ -278,7 +278,7 @@ where `-fopt-info-vec` proves the compiler failed, never as the first move — a
 4-wide fixed width to pay about half what AVX2's 8 does, so measure per target rather than
 averaging.
 
-Effort: B is small now that A has landed; C is two sessions; D is small if it happens at all.
+Effort: B is small now that A has landed; C is the largest; D is small if it happens at all.
 
 ## The order from here
 
@@ -305,7 +305,7 @@ after. What is left, in order of what a further pass should look at:
    Since examined and **declined**, after the SAT/clip split brought `sat_query` to 24.9%: about
    half of it is loop control, the bit-exact options are worth 3-4%, and the one large win, a
    rectangle fast path, would move results and add a second narrow-phase path. See
-   [next steps](../next_steps) and the [roadmap](../roadmap) pending list.
+   the [engineering notes](../engineering-notes.md#tried-and-turned-down).
 2. **`FxScene::step` itself**, 13-21%. That figure is inlined lambdas, the gather and scatter,
    the sleep scan and the contact write-back, not one hot loop -- it needs line-level
    attribution before anything is done to it.

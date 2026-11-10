@@ -11,4 +11,4 @@ if [[ "${1:-}" == "--core" ]]; then
   exit 0
 fi
 
-find include/Fx2D src tests examples scripts   \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \)   ! -path '*/lib/*'   ! -path '*/build*/*'   | sort
+find include/Fx2D src tests examples scripts benchmarks python/src   \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \)   ! -path '*/lib/*'   ! -path '*/build*/*'   | sort

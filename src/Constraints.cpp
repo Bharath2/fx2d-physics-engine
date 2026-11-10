@@ -314,8 +314,14 @@ void resolve_penetration(const FxContact& contact, double dt) {
     const float wA = eff_inv_mass(A), wB = eff_inv_mass(B);
     const float IA = eff_inv_inertia(A), IB = eff_inv_inertia(B);
 
+    size_t touching = 0;
+    for (size_t i = 0; i < contact.count; i++)
+        touching += contact_point_touches(contact, i) ? 1u : 0u;
+    if (touching == 0) return;
+
     // Resolve each contact point individually
     for (size_t i = 0; i < contact.count; i++) {
+        if (!contact_point_touches(contact, i)) continue;
         // Get contact point for this iteration
         FxVec2f contact_point = contact.position[i];
 
@@ -330,14 +336,14 @@ void resolve_penetration(const FxContact& contact, double dt) {
         K_n = K_n + static_cast<float>(compliance / (dt * dt));
 
         if (K_n > 1e-8f) {
-            float correction_depth = (contact.penetration_depth - penetration_tolerance) /
-                                     static_cast<float>(contact.count);
+            float correction_depth =
+                (contact.penetration_depth - penetration_tolerance) / static_cast<float>(touching);
             float lambdaP = correction_depth / K_n;
             FxVec2f dP = n * lambdaP;
-            A.pose.xy() -= wA * dP;
-            B.pose.xy() += wB * dP;
-            A.prev_pose.xy() -= wA * dP;
-            B.prev_pose.xy() += wB * dP;
+            A.pose.set_xy(A.pose.xy() - wA * dP);
+            B.pose.set_xy(B.pose.xy() + wB * dP);
+            A.prev_pose.set_xy(A.prev_pose.xy() - wA * dP);
+            B.prev_pose.set_xy(B.prev_pose.xy() + wB * dP);
 
             // Apply angular corrections
             A.pose.theta() = FxAngleWrap(A.pose.theta() - IA * lambdaP * ra_n);
@@ -372,10 +378,11 @@ void init_velocity_pass(FxContact& contact, FxContactSolverData& data,
     data.mu_static = std::clamp(std::min(A.static_friction, B.static_friction), 0.0f, 10.0f);
     data.mu_kinetic = std::clamp(std::min(A.dynamic_friction, B.dynamic_friction), 0.0f, 10.0f);
 
-    // Slots past the manifold are zeroed, not left stale: the batched solve reads a zero
-    // effective mass as inactive, and this record is reused across substeps, so an old second
-    // point would otherwise still look live.
-    for (size_t i = contact.count; i < 2; ++i) {
+    // Slots past the manifold and points that have come apart are zeroed, not left stale: the
+    // batched solve reads a zero effective mass as inactive, and this record is reused across
+    // substeps, so an old second point would otherwise still look live.
+    for (size_t i = 0; i < 2; ++i) {
+        if (i < contact.count && contact_point_touches(contact, i)) continue;
         data.K_n[i] = 0.0f;
         data.K_t[i] = 0.0f;
         data.rA[i] = {0.0f, 0.0f};
@@ -386,6 +393,7 @@ void init_velocity_pass(FxContact& contact, FxContactSolverData& data,
     const FxVec2f pA = A.pose.get_xy();
     const FxVec2f pB = B.pose.get_xy();
     for (size_t i = 0; i < contact.count; ++i) {
+        if (!contact_point_touches(contact, i)) continue;
         const FxVec2f p = contact.position[i];
         data.rA[i] = p - pA;
         data.rB[i] = p - pB;
@@ -400,10 +408,8 @@ void init_velocity_pass(FxContact& contact, FxContactSolverData& data,
 
         const FxVec2f vA = bodies.velocity_at(contact.body1, data.rA[i]);
         const FxVec2f vB = bodies.velocity_at(contact.body2, data.rB[i]);
-        // Eigen 5 dot() explicitly uses FMA, bypassing -ffp-contract=off. Keep this
-        // restitution input's rounding stable across Eigen versions and CPU targets.
         const FxVec2f relative_velocity = vB - vA;
-        data.vn_pre[i] = relative_velocity.x() * n.x() + relative_velocity.y() * n.y();
+        data.vn_pre[i] = relative_velocity.dot(n);
     }
 }
 
@@ -614,8 +620,9 @@ void warm_start(FxContact& contact, const FxContactSolverData& data, FxSolverBod
     FxVec2f t(-n.y(), n.x());
 
     for (size_t i = 0; i < contact.count; ++i) {
-        const float jn = contact.jn_warm[i];
-        const float jt = contact.jt_warm[i];
+        const bool touches = contact_point_touches(contact, i);
+        const float jn = touches ? contact.jn_warm[i] : 0.0f;
+        const float jt = touches ? contact.jt_warm[i] : 0.0f;
         FxVec2f impulse = n * jn + t * jt;
         bodies.vx[ia] -= data.wA * impulse.x();
         bodies.vy[ia] -= data.wA * impulse.y();

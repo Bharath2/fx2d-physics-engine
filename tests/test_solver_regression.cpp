@@ -6,15 +6,17 @@
 // bit-identical, exact equality on purpose, because it catches iteration order leaking into
 // results -- which every tolerance-based test would pass.
 
-// Golden state: short non-chaotic scenes against values from a known-good build, with tight but
-// not bitwise tolerances, since a different compiler or ISA moves the last bits. Re-baseline by
-// running with FX2D_PRINT_GOLDENS=1, and only when the physics change was deliberate.
+// Golden state: scenes against a known-good build, bit for bit on every compiler and ISA, plus
+// tolerances that show how far a value moved. Re-baseline by running with FX2D_PRINT_GOLDENS=1,
+// and only when the physics change was deliberate.
 
 #include "Fx2D/Scene.h"
 #include "test_harness.h"
 #include "test_scene_builders.h"
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -49,6 +51,19 @@ Snapshot capture(FxScene& scene) {
         snap.values.push_back(e->velocity.theta());
     });
     return snap;
+}
+
+// FNV-1a over the bit patterns: equal only when every captured float is bit-identical.
+std::uint64_t bits_hash(const Snapshot& snap) {
+    std::uint64_t h = 1469598103934665603ull;
+    for (float v : snap.values) {
+        const std::uint32_t u = std::bit_cast<std::uint32_t>(v);
+        for (int byte = 0; byte < 4; ++byte) {
+            h ^= (u >> (8 * byte)) & 0xffu;
+            h *= 1099511628211ull;
+        }
+    }
+    return h;
 }
 
 void run_steps(FxScene& scene, int steps) {
@@ -101,6 +116,19 @@ void build_pile(FxScene& scene) {
     }
 }
 
+// A dozen boxes spinning at 4-14 rad/s, dropped to tumble into each other. Chaotic, so it says
+// nothing about accuracy, but it drives every shape's rotation through FxSinCos at real angles.
+void build_tumble(FxScene& scene) {
+    make_static(add_box(scene, "ground", {10.0f, 1.0f}, {18.0f, 1.0f}));
+    for (int i = 0; i < 12; ++i) {
+        const float fi = static_cast<float>(i);
+        auto box = add_box(scene, "t" + std::to_string(i),
+                           {2.5f + fi * 1.35f, 4.0f + static_cast<float>(i % 3) * 1.5f},
+                           {0.8f, 0.5f}, FxBody{1.0f, 0.2f, 0.5f, 0.4f});
+        box->set_init_velocity(FxVec3f{i % 2 == 0 ? 0.5f : -0.5f, 0.0f, 4.0f + fi * 10.0f / 11.0f});
+    }
+}
+
 struct RegressionScene {
     const char* name;
     void (*build)(FxScene&);
@@ -115,14 +143,16 @@ const RegressionScene kScenes[] = {
     // The pile rearranges, so it amplifies differences faster than the others. A looser
     // tolerance keeps it a useful net without making it a tripwire for the last bit.
     {"pile", build_pile, 90, 5e-3f},
+    {"tumble", build_tumble, 400, 5e-3f},
 };
 
 // --- Goldens ------------------------------------------------------------------------------
-// Captured on x86-64 GCC 13, Release, -ffp-contract=off, at the 14x4 substep/pass default.
-// Regenerate with FX2D_PRINT_GOLDENS=1 -- and only when the physics change was intended.
+// Captured on x86-64 MinGW GCC 15, Release, at the 14x4 default; every compiler and CPU must
+// reproduce the same bits. Regenerate with FX2D_PRINT_GOLDENS=1 -- only for intended changes.
 
 struct Golden {
     const char* scene;
+    std::uint64_t bits; // bits_hash of the values below
     std::vector<float> values;
 };
 
@@ -138,7 +168,8 @@ const Golden* find_golden(const char* scene) {
 }
 
 void print_golden_table(const char* scene, const Snapshot& snap) {
-    std::cout << "    {\"" << scene << "\", {";
+    std::cout << "    {\"" << scene << "\", 0x" << std::hex << bits_hash(snap) << std::dec
+              << "ull, {";
     // showpoint keeps a decimal point on whole numbers, so "10" prints as "10.0000000" and the
     // pasted literal is "10.0000000f" rather than the ill-formed "10f".
     std::cout << std::setprecision(9) << std::showpoint;
@@ -200,6 +231,15 @@ void check_golden(const RegressionScene& rs, bool print_mode) {
         require_near(snap.values[i], golden->values[i], rs.tolerance,
                      std::string("regression/") + rs.name + ": entity " + std::to_string(entity) +
                          " " + kField[i % 6] + " drifted from golden");
+    }
+
+    const std::uint64_t bits = bits_hash(snap);
+    if (bits != golden->bits) {
+        std::ostringstream msg;
+        msg << "regression/" << rs.name << ": within tolerance, but the bits differ from the golden"
+            << " (0x" << std::hex << bits << " vs 0x" << golden->bits << "). Results must be"
+            << " bit-identical on every compiler and CPU.";
+        throw std::runtime_error(msg.str());
     }
 }
 
