@@ -261,6 +261,30 @@ void test_friction_stops_a_sliding_box() {
     require(box->is_sleeping(), "a box stopped by friction must fall asleep");
 }
 
+// vel_damping is drag on both velocities: a free body at rate 1 keeps about e^-1 of its speed
+// and spin after a second. The field was once read from YAML and documented but never applied.
+void test_damping_slows_a_free_body() {
+    FxScene scene = ::make_scene(FxVec2f{12.0f, 8.0f}, 0.0f);
+    auto damped = make_box(scene, "damped", 4.0f, 4.0f, 1.0f, 1.0f, 1.0f, 0.0f);
+    auto free_body = make_box(scene, "free", 8.0f, 4.0f, 1.0f, 1.0f, 1.0f, 0.0f);
+    damped->vel_damping = 1.0f;
+    for (const auto& e : {damped, free_body})
+        e->velocity = FxVec3f{1.0f, 0.0f, 2.0f};
+
+    for (int i = 0; i < 60; ++i)
+        scene.step(kFrame); // 1 s
+
+    const float kept = 0.368f; // (1 + h)^(-1/h) at 14 substeps of 1/60 s
+    require(std::fabs(damped->velocity.x() - kept) < 0.01f,
+            "a body damped at rate 1 must keep about 37% of its speed after 1 s, kept " +
+                std::to_string(damped->velocity.x()));
+    require(std::fabs(damped->velocity.theta() - 2.0f * kept) < 0.02f,
+            "damping must slow the spin as it slows the speed");
+    require(std::fabs(free_body->velocity.x() - 1.0f) < 5e-3f,
+            "a body without damping must keep its speed, has " +
+                std::to_string(free_body->velocity.x()));
+}
+
 // Penetration recovery must keep resting overlap small: the fix must not be a
 // matter of simply letting bodies sink until contacts stop reporting.
 void test_resting_penetration_stays_small() {
@@ -334,6 +358,7 @@ void run_resting_stability_tests() {
     test_inelastic_box_landing_does_not_bounce();
     test_tilted_box_comes_to_rest();
     test_friction_stops_a_sliding_box();
+    test_damping_slows_a_free_body();
     test_resting_penetration_stays_small();
     std::cout << "Resting stability tests passed." << std::endl;
 }

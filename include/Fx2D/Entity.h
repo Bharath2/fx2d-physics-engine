@@ -110,7 +110,7 @@ class FxEntity {
     // physics config
     float elasticity = 0.1f; // restitution mixes by max, so 1.0 made every
                              // unconfigured body a perfect trampoline
-    float vel_damping = 0.0f;
+    float vel_damping = 0.0f; // drag: each substep divides velocity by (1 + h * vel_damping)
     float gravity_scale = 1.0f;
     float static_friction = 0.0f;
     float dynamic_friction = 0.0f;

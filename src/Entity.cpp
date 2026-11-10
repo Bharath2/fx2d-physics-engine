@@ -281,6 +281,8 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt, bool place_sh
     prev_pose = pose;
     prev_velocity = velocity;
     velocity += calc_acceleration(gravity) * step_dt;
+    // Implicit drag, stable at any step. Speed falls by about e^-1 in 1 / vel_damping seconds.
+    if (vel_damping > 0.0f) velocity /= 1.0f + static_cast<float>(step_dt) * vel_damping;
     __update_pose(step_dt); // pose += velocity * step_dt;
 
     // update pose of the collision shape and visual shape
