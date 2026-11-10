@@ -25,9 +25,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ubuntu-24.04-arm builds the aarch64 manylinux wheels natively; macos-14 is Apple
+        # ubuntu-24.04-arm builds the aarch64 manylinux wheels natively; macos-15 is Apple
         # silicon and builds both macOS architectures.
-        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-14]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-15]
     steps:
       - uses: actions/checkout@v4
 
