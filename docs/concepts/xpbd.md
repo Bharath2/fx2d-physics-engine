@@ -16,7 +16,7 @@ fastest configuration passing the full quality suite):
 
 $$h = \frac{dt}{N}$$
 
-Constraints and collisions are solved once per substep. A smaller `h` increases stability and accuracy at the cost of performance.
+Constraints and contacts are solved once per substep; collision detection mostly runs once per step (stage 2). A smaller `h` increases stability and accuracy at the cost of performance.
 
 The substep count can be configured when building a scene:
 
@@ -53,16 +53,18 @@ x*  = x + h · v*           // then advance position
 
 Where acceleration `a` includes gravity scaled by `gravity_scale`, plus any user-applied forces and torques divided by mass/inertia. The previous pose `x_prev` is saved before the update for velocity derivation in step 5.
 
-After position update, the entity's collision shape and AABB are synchronised to the new pose.
+Forces and torques applied between steps are held for every substep of the next step (`FxEntity::hold_step_forces`), so a force `F` on mass `m` adds `F·dt/m` to the velocity over a step of `dt`, and then lapses. Joint motors apply their effort afresh in each substep, and that effort lasts the one substep.
+
+On a step's first substep the entity's shapes and AABB are synchronised to the new pose. Later substeps leave them where they are until a pair test needs them, and the step ends by placing every shape at its final pose.
 
 ---
 
 ### 2. Collision Detection
 
-Contacts are recomputed every substep using a two-phase process:
+Detection mostly runs once per step, following Macklin et al., *Small Steps in Physics Simulation* (2019), in two phases:
 
-1. **Broad phase** — the dynamic AABB tree is re-synced with the poses integration just produced, and walked for overlapping proxies. The walk is skipped when the sync reports no leaf moved, since the tree would produce the identical list; in a settling scene that skips about 90% of substeps. Proxies are swept along velocity for the whole step on the first substep, so a body at constant velocity needs no reinsertion for the rest of it.
-2. **Narrow phase** — each candidate pair is rejected cheaply on its current tight AABBs, then `FxSolver::collision_check()` runs SAT/geometry tests on what survives, producing `FxContact` structs.
+1. **Broad phase** — on the first substep the dynamic AABB tree is synced and walked for overlapping proxies, with every proxy swept along its body's velocity for the whole step, so the pair list stands for the step. A later substep re-syncs only when a body has been knocked off the path its proxy was swept along, and rebuilds the list only if one left its proxy.
+2. **Narrow phase** — a pair found touching earlier in the step is **held**: its contact points stay attached to the two bodies and are re-measured from the current poses, with no SAT. Every other pair is rejected cheaply on its current tight AABBs, then `FxSolver::collision_check()` runs SAT/geometry tests on what survives, producing `FxContact` structs. A held contact is detected again once either body turns, or a point slides, too far for it to stand.
 
 Sleeping entities that receive a new contact are woken up automatically.
 

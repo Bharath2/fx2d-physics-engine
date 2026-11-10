@@ -5,7 +5,7 @@ description: Use Fx2D vectors, poses, transforms, and collision shapes safely.
 
 # Math and geometry
 
-Fx2D's public math types are small extensions of Eigen types. Use `FxVec2f` for 2D values, and `FxVec3f` for a body's `(x, y, theta)` pose or `(vx, vy, omega)` velocity.
+Fx2D's public math types are small fixed-size vectors and matrices defined in `Fx2D/Math.h`. Use `FxVec2f` for 2D values, and `FxVec3f` for a body's `(x, y, theta)` pose or `(vx, vy, omega)` velocity.
 
 ```cpp
 #include "Fx2D/Scene.h"  // brings in math, geometry, entities, and the solver
@@ -26,7 +26,9 @@ FxVec2f screen_turn  = heading.rotate(90.0f);  // degrees
 float relative = FxAngleWrap(body_b->pose.theta() - body_a->pose.theta());
 ```
 
-`FxVec2f` also supplies `perp()`, `perpCW()`, and a scalar 2D `cross()`. The inherited Eigen operations such as `.dot()`, `.norm()`, and `.normalized()` are available too.
+`FxVec2f` also supplies `perp()`, `perpCW()`, and a scalar 2D `cross()`, along with `.dot()`, `.norm()`, `.squaredNorm()`, and `.normalized()`.
+
+A pose's `xy()` returns a copy of its position, so write a new position back with `set_xy()`; assigning to `pose.xy()` does not compile.
 
 ## Move between body and world space
 

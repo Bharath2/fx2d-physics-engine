@@ -34,6 +34,9 @@ scene.set_step_callback([](FxScene& scene, double dt) {
 });
 ```
 
+A force or torque applied between steps acts for the whole of the next step and then lapses, so
+continuous control applies it again every step. An impulse changes the velocity once.
+
 ### Queries
 
 ```cpp

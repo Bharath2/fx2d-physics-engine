@@ -20,3 +20,9 @@ imgui.ini
 !docs/package-lock.json
 ./Makefile
 ./Scene.yml
+# Python package builds
+__pycache__/
+*.egg-info/
+/dist/
+/wheelhouse/
+.pytest_cache/

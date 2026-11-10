@@ -39,14 +39,20 @@ void FxEntity::set_inertia() {
 
 // resets current state to inital state
 void FxEntity::reset() {
-    pose = _init_pose;
-    velocity = _init_velocity;
-    prev_pose = _init_pose;
-    prev_velocity = _init_velocity;
+    set_state(_init_pose, _init_velocity);
+}
+
+void FxEntity::set_state(const FxVec3f& o_pose, const FxVec3f& o_velocity) {
+    pose = o_pose;
+    velocity = o_velocity;
+    prev_pose = o_pose;
+    prev_velocity = o_velocity;
     m_pose_carry = {0, 0, 0};
     m_correction_carry = {0, 0, 0};
     m_eff_force = {0.0f, 0.0f};
     m_eff_moment = 0.0f;
+    m_step_force = {0.0f, 0.0f};
+    m_step_moment = 0.0f;
     m_eff_impulse = {0.0f, 0.0f};
     m_eff_impulse_moment = 0.0f;
     // A body asleep before the reset must not stay frozen after it.
@@ -142,7 +148,7 @@ void FxEntity::tick_sleep(float dt) {
         m_sleep_timer = 0.0f;
         return;
     } // static bodies never sleep
-    float speed_lin = velocity.head<2>().norm();
+    float speed_lin = velocity.xy().norm();
     float speed_ang = std::abs(velocity.theta());
     if (speed_lin < sleep_threshold_linear && speed_ang < sleep_threshold_angular) {
         m_sleep_timer += dt;
@@ -196,11 +202,11 @@ FxVec3f FxEntity::calc_acceleration() {
 FxVec3f FxEntity::calc_acceleration(const FxVec2f& gravity) {
     FxVec3f acc{0.0, 0.0, 0.0};
     if (_mass > 0.0f) {
-        acc.xy() += m_eff_force * _inv_mass; // Linear acceleration
-        acc.xy() += gravity_scale * gravity; // Gravity effect
+        acc.set_xy(acc.xy() + (m_step_force + m_eff_force) * _inv_mass); // Linear acceleration
+        acc.set_xy(acc.xy() + gravity_scale * gravity); // Gravity effect
     }
     if (_inertia > 0.0f) {
-        acc.theta() += m_eff_moment * _inv_inertia; // Angular acceleration
+        acc.theta() += (m_step_moment + m_eff_moment) * _inv_inertia; // Angular acceleration
     }
     return acc;
 }
@@ -245,7 +251,7 @@ FxVec3f FxEntity::apply_pose_correction(const FxVec3f& delta) {
     return applied;
 }
 
-void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
+void FxEntity::step(const FxVec2f& gravity, const double& step_dt, bool place_shapes) {
     // A body that cannot move and is not moving cannot change pose, but set_world_pose still
     // rotates every vertex -- and static geometry never sleeps, so it would pay that forever.
     // Comparing against the pose the shape was built at keeps this exact if `pose` was set.
@@ -265,7 +271,7 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
 
     // Apply accumulated impulses to velocity
     if (_inv_mass > 0.0f) {
-        velocity.xy() += m_eff_impulse * _inv_mass;
+        velocity.set_xy(velocity.xy() + m_eff_impulse * _inv_mass);
     }
     if (_inv_inertia > 0.0f) {
         velocity.theta() += m_eff_impulse_moment * _inv_inertia;
@@ -275,21 +281,15 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
     prev_pose = pose;
     prev_velocity = velocity;
     velocity += calc_acceleration(gravity) * step_dt;
-    // Drag-like damping on both the linear and angular parts. Implicit rather than
-    // `v *= 1 - d*dt`, so it stays stable and never reverses the velocity however large the
-    // coefficient or the timestep. A coefficient of zero, the default, is exactly no damping.
-    if (vel_damping > 0.0f) {
-        velocity *= 1.0f / (1.0f + vel_damping * static_cast<float>(step_dt));
-    }
+    // Implicit drag, stable at any step. Speed falls by about e^-1 in 1 / vel_damping seconds.
+    if (vel_damping > 0.0f) velocity /= 1.0f + static_cast<float>(step_dt) * vel_damping;
     __update_pose(step_dt); // pose += velocity * step_dt;
 
     // update pose of the collision shape and visual shape
-    if (m_collision != nullptr) {
-        // In-place: the returning form allocates, and this runs for every entity every substep.
-        m_collision->set_world_pose(pose, m_bounding_box);
-    }
-    if (m_visual != nullptr) {
-        m_visual->set_world_pose(pose);
+    if (place_shapes) {
+        // In-place: the returning form allocates, and this runs for every entity every step.
+        if (m_collision != nullptr) m_collision->set_world_pose(pose, m_bounding_box);
+        if (m_visual != nullptr) m_visual->set_world_pose(pose);
     }
 
     // reset effective force, moment, and impulses
@@ -297,4 +297,22 @@ void FxEntity::step(const FxVec2f& gravity, const double& step_dt) {
     m_eff_moment = 0.0f; // reset effective moment
     m_eff_impulse = {0.0f, 0.0f}; // reset effective impulse
     m_eff_impulse_moment = 0.0f; // reset effective impulse moment
+}
+
+void FxEntity::hold_step_forces() {
+    m_step_force = m_eff_force;
+    m_step_moment = m_eff_moment;
+    m_eff_force = {0.0f, 0.0f};
+    m_eff_moment = 0.0f;
+}
+
+// Compared first, so a shape already at the current pose costs three float comparisons.
+void FxEntity::refresh_collision_shape() {
+    if (m_collision != nullptr && m_collision->world_pose() != pose)
+        m_collision->set_world_pose(pose, m_bounding_box);
+}
+
+void FxEntity::refresh_world_shapes() {
+    refresh_collision_shape();
+    if (m_visual != nullptr && m_visual->world_pose() != pose) m_visual->set_world_pose(pose);
 }

@@ -101,6 +101,38 @@ void test_effort_mode_applies_direct_effort() {
     }
 }
 
+// A force applied between steps acts for the whole next step, as a joint effort does, and
+// then lapses. It used to be cleared after the first substep, so it gave 1/14 of the push.
+void test_applied_force_lasts_one_whole_step() {
+    FxScene scene({20, 20});
+    scene.set_gravity({0.0f, 0.0f});
+    auto free_body = make_collision_entity("pushed", 5.0f, 10.0f);
+    auto rail = make_collision_entity("rail", 15.0f, 5.0f);
+    auto cart = make_collision_entity("cart", 15.0f, 10.0f);
+    rail->enable_external_forces(false);
+    for (const auto& e : {free_body, rail, cart})
+        scene.add_entity(e);
+    auto slider = std::make_shared<FxPrismaticJoint>("slider", rail, cart, FxVec2f{1.0f, 0.0f});
+    scene.add_joint(slider);
+    slider->set_control_mode(ControlMode::EFFORT);
+    slider->set_force(10.0f);
+
+    const float dt = 1.0f / 60.0f;
+    free_body->apply_force({10.0f, 0.0f});
+    free_body->apply_torque(3.0f);
+    scene.step(dt);
+    require(approx_equal(free_body->velocity.x(), 10.0f * dt, 1e-3f),
+            "10 N on 1 kg for one step must add 10 dt to the speed");
+    require(approx_equal(free_body->velocity.theta(), 3.0f * dt, 1e-3f),
+            "3 N m on 1 kg m^2 for one step must add 3 dt to the spin");
+    require(approx_equal(free_body->velocity.x(), cart->velocity.x(), 1e-3f),
+            "an applied force must push as hard as the same joint effort");
+
+    scene.step(dt);
+    require(approx_equal(free_body->velocity.x(), 10.0f * dt, 1e-3f),
+            "an applied force must lapse after the step it was applied for");
+}
+
 void test_pid_state_resets_on_target_and_mode_changes() {
     auto e1 = make_entity("joint_reset_a");
     auto e2 = make_entity("joint_reset_b");
@@ -300,6 +332,7 @@ void run_joint_tests() {
     test_pid_round_trip();
     test_effort_aliases();
     test_effort_mode_applies_direct_effort();
+    test_applied_force_lasts_one_whole_step();
     test_pid_state_resets_on_target_and_mode_changes();
     test_yaml_joint_build_supports_effort_mode_and_aliases();
     test_entity_registry_remove_keeps_broad_phase_consistent();

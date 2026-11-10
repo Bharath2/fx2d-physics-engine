@@ -10,6 +10,9 @@ url: "https://bharath2.github.io/fx2d-physics-engine/"
 license: BSD-3-Clause
 keywords:
   - physics engine
+  - reinforcement learning
+  - gymnasium
+  - python
   - rigid body dynamics
   - XPBD
   - collision detection

@@ -67,7 +67,7 @@ void test_rigid_link_holds_its_length() {
     require_near(rig.bob->pose.y(), 13.5f, 5e-3f, "the bob must hang directly below the anchor");
 
     // Push it sideways: the length is a constraint, not a vertical one.
-    rig.bob->velocity.xy() = FxVec2f{4.0f, 0.0f};
+    rig.bob->velocity.set_xy(FxVec2f{4.0f, 0.0f});
     float worst = 0.0f;
     for (int i = 0; i < 120; ++i) {
         rig.scene.step(kFrame);
@@ -201,7 +201,7 @@ void test_chain_of_links_hangs_without_drift() {
     require_near(links.back()->pose.x(), 10.0f, 0.05f, "a hanging chain must not drift sideways");
 
     // Swing it and let it settle: the links must still be the length they started.
-    links.back()->velocity.xy() = FxVec2f{5.0f, 0.0f};
+    links.back()->velocity.set_xy(FxVec2f{5.0f, 0.0f});
     step_for(scene, 4.0);
     for (size_t i = 0; i < joints.size(); ++i) {
         require_near(joints[i]->get_length(), kSpacing, 0.03f,

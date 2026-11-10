@@ -128,7 +128,7 @@ Controls how the entity responds to forces, gravity, and collisions.
 | `mass` | float | `1.0` | Mass in kg. Set to `0` for a static (immovable) body |
 | `inertia` | float | computed | Rotational inertia about the centre of mass. If omitted, computed from the **visual** geometry and mass |
 | `gravity_scale` | float | `1.0` | Multiplier on scene gravity. `0.0` disables gravity for this entity |
-| `vel_damping` | float | `0.0` | Linear/angular velocity damping applied each step |
+| `vel_damping` | float | `0.0` | Drag on linear and angular velocity alike: each substep divides both by `1 + h * vel_damping`, so about e^-1 of each is left after `1 / vel_damping` seconds |
 | `elasticity` | float | `0.1` | Coefficient of restitution (0 = inelastic, 1 = perfectly elastic). A contact takes the **larger** of the two bodies' values, so a bouncy body bounces off anything |
 | `static_friction` | float | `0.0` | Static friction coefficient. A contact takes the **smaller** of the two values, so the slipperier surface wins |
 | `dynamic_friction` | float | `0.0` | Kinetic friction coefficient. A contact takes the **smaller** of the two values |

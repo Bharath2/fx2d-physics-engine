@@ -81,6 +81,9 @@ struct FxContact {
                                                         // coordinates
     FxVec2f normal{0.0f, 0.0f}; // Contact normal (unit vector)
     float penetration_depth = FxInfinityf; // Penetration depth (positive if overlapping)
+    // Each point's own depth where it is known (two-point manifolds, held contacts), else
+    // infinite: penetration_depth, the deepest, is all there is. Points apart are not solved.
+    float point_depth[2] = {FxInfinityf, FxInfinityf};
 
     // The two colliding bodies, borrowed not owned: FxScene pins a shared_ptr to every entity
     // its contact buffers name, so one deleted between steps still survives to be reported.
@@ -118,6 +121,19 @@ struct FxContact {
                                 std::isfinite(penetration_depth) && normal.norm() > 1e-3f));
     }
     void set_valid(bool valid) { m_is_valid = valid; }
+};
+
+// A contact carried through the substeps of one step: the manifold as the narrow phase found it,
+// plus where its points sit on each body, so later substeps re-measure it from the current poses
+// rather than detect it again (Macklin et al., "Small Steps in Physics Simulation", 2019).
+struct FxHeldContact {
+    FxContact contact;
+    FxVec2f local1[2] = {{0.0f, 0.0f}, {0.0f, 0.0f}}; // contact points in entity1's frame
+    FxVec2f local2[2] = {{0.0f, 0.0f}, {0.0f, 0.0f}}; // and in entity2's
+    float detect_depth[2] = {0.0f, 0.0f}; // each point's depth at detection
+    float detect_theta1 = 0.0f;
+    float detect_theta2 = 0.0f;
+    bool held = false; // false until the pair is detected this step, and again once released
 };
 
 // Position-based constraint base class for XPBD solver
@@ -399,6 +415,13 @@ inline bool contact_is_solvable(const FxContact& contact) {
     return contact.body1 >= 0 && contact.body2 >= 0;
 }
 
+// False for a manifold point that has come apart: a held manifold keeps a corner that lifts
+// off, and solving it would hold that corner up, or bounce it before it lands.
+inline constexpr float kContactPointApart = 1e-4f;
+inline bool contact_point_touches(const FxContact& contact, size_t i) {
+    return !(contact.point_depth[i] < -kContactPointApart);
+}
+
 // AABB overlap check methods
 bool aabb_overlap_check(const FxEntity& entity1, const FxEntity& entity2);
 bool aabb_overlap_check(const std::shared_ptr<FxEntity>& entity1,
@@ -413,6 +436,13 @@ const FxContact collision_check(const std::shared_ptr<FxEntity>& entity1,
 // approaching fast enough to close the gap within this substep.
 FxContact speculative_contact_check(const std::shared_ptr<FxEntity>& entity1,
                                     const std::shared_ptr<FxEntity>& entity2, float substep_dt);
+
+// Holds a contact the narrow phase just found, recording where its points sit on each body.
+void hold_contact(FxHeldContact& held, const FxContact& contact);
+// Moves a held contact's points with their bodies and re-takes its depth at the deepest point.
+// False once either body has turned or a point has slid too far for the manifold to stand, or
+// the bodies have come apart; the pair is then tested by the narrow phase again.
+bool remeasure_contact(FxHeldContact& held);
 
 // Main collision resolution method
 void resolve_penetration(const FxContact& contact, double dt = 0.016f);

@@ -1,6 +1,6 @@
 # Fx2D documentation
 
-These pages are the source of the [documentation site](https://bharath2.github.io/fx2d-physics-engine/), which adds the browser playground, runnable demos and the generated C++ API reference. Every page also reads fine here on GitHub.
+These pages are the source of the [documentation site](https://bharath2.github.io/fx2d-physics-engine/), which adds the browser playground, runnable demos and the generated C++ API reference. Every page also reads fine here on GitHub. The roadmap, engineering notes and design plans under Project are kept here and are not published on the site.
 
 ## Getting started
 
@@ -35,8 +35,8 @@ These pages are the source of the [documentation site](https://bharath2.github.i
 
 ## Project
 
-- [Roadmap](roadmap.md): what comes next, with the measurements behind each decision
+- [Roadmap](roadmap.md): what is in progress, what comes next, and known limitations
+- [Engineering notes](engineering-notes.md): where step time goes, what paid, and what was tried and turned down
 - [SIMD plan](roadmap/simd.md) and [Fx3D plan](roadmap/fx3d.md): longer-range design notes
-- [Next steps](next_steps.md): handoff notes on where step time goes and what to pick up
 - [Contributing](contributing.md): workflow, lint gate, tests and measurement rules
 - [Demos](demos.md) and [Playground](playground.md): the example gallery and the in-browser sandbox

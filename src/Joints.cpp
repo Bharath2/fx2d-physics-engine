@@ -96,7 +96,7 @@ FxJoint::FxJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
 FxRevoluteJoint::FxRevoluteJoint(const std::string& name, const std::shared_ptr<FxEntity>& e1,
                                  const std::shared_ptr<FxEntity>& e2, const FxVec2f& anchor_point,
                                  float angle_min, float angle_max) :
-    FxJoint(name, e1, e2), m_anchor_point(anchor_point) {
+    FxJoint(name, e1, e2) {
     m_constraints.reserve(2);
 
     auto anchor_constraint = std::make_shared<FxAnchorConstraint>(e1, e2, anchor_point, true);
@@ -261,12 +261,12 @@ void FxPrismaticJoint::set_position(float position, bool instant) {
             FxVec2f pos_correction1 = -correction * (m1 / total_inv_mass);
             FxVec2f pos_correction2 = correction * (m2 / total_inv_mass);
 
-            entity1->pose.xy() += pos_correction1;
-            entity2->pose.xy() += pos_correction2;
+            entity1->pose.set_xy(entity1->pose.xy() + pos_correction1);
+            entity2->pose.set_xy(entity2->pose.xy() + pos_correction2);
 
             // Also update previous pose to maintain consistency
-            entity1->prev_pose.xy() += pos_correction1;
-            entity2->prev_pose.xy() += pos_correction2;
+            entity1->prev_pose.set_xy(entity1->prev_pose.xy() + pos_correction1);
+            entity2->prev_pose.set_xy(entity2->prev_pose.xy() + pos_correction2);
         }
     }
 }
@@ -296,8 +296,8 @@ void FxPrismaticJoint::set_velocity(float velocity, bool instant) {
             FxVec2f vel_correction1 = -correction * (m1 / total_inv_mass);
             FxVec2f vel_correction2 = correction * (m2 / total_inv_mass);
 
-            entity1->velocity.xy() += vel_correction1;
-            entity2->velocity.xy() += vel_correction2;
+            entity1->velocity.set_xy(entity1->velocity.xy() + vel_correction1);
+            entity2->velocity.set_xy(entity2->velocity.xy() + vel_correction2);
         }
     }
 }
@@ -412,12 +412,12 @@ void FxDistanceJoint::set_length(float length, bool instant) {
             const FxVec2f pos_correction1 = -correction * (m1 / total_inv_mass);
             const FxVec2f pos_correction2 = correction * (m2 / total_inv_mass);
 
-            entity1->pose.xy() += pos_correction1;
-            entity2->pose.xy() += pos_correction2;
+            entity1->pose.set_xy(entity1->pose.xy() + pos_correction1);
+            entity2->pose.set_xy(entity2->pose.xy() + pos_correction2);
 
             // Shift the previous pose too, so the move registers no velocity.
-            entity1->prev_pose.xy() += pos_correction1;
-            entity2->prev_pose.xy() += pos_correction2;
+            entity1->prev_pose.set_xy(entity1->prev_pose.xy() + pos_correction1);
+            entity2->prev_pose.set_xy(entity2->prev_pose.xy() + pos_correction2);
         }
     }
 }
@@ -440,8 +440,8 @@ void FxDistanceJoint::set_rate(float rate, bool instant) {
 
         if (total_inv_mass > 1e-12f) {
             const FxVec2f correction = axis * rate_error;
-            entity1->velocity.xy() += -correction * (m1 / total_inv_mass);
-            entity2->velocity.xy() += correction * (m2 / total_inv_mass);
+            entity1->velocity.set_xy(entity1->velocity.xy() - correction * (m1 / total_inv_mass));
+            entity2->velocity.set_xy(entity2->velocity.xy() + correction * (m2 / total_inv_mass));
         }
     }
 }

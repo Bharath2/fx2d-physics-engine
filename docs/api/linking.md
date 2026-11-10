@@ -4,7 +4,7 @@ title: Link Fx2Dlib
 
 # Link `Fx2Dlib`
 
-Fx2D’s CMake project creates one static-library target: `Fx2Dlib`. Link your executable to that target; its public include path and required Eigen/yaml-cpp dependencies propagate through the target.
+Fx2D’s CMake project creates one static-library target: `Fx2Dlib`, also available as `Fx2D::Fx2D`. Link your executable to that target; its public include path and its yaml-cpp dependency propagate through the target.
 
 Fx2D does **not** currently export an installed package configuration, so this will not work yet:
 
@@ -26,7 +26,7 @@ add_executable(my_sim main.cpp)
 target_link_libraries(my_sim PRIVATE Fx2Dlib)
 ```
 
-Use `FX2D_HEADLESS=ON` for simulations, CI, and tooling. It excludes `Renderer.cpp`, the viewer executable, and visual examples; raylib and ImGui are not needed.
+Use `FX2D_HEADLESS=ON` for simulations, CI, and tooling. It excludes `Renderer.cpp`, the viewer executable, and visual examples; raylib and ImGui are not needed. Added this way, Fx2D already defaults to headless with no tests, so the two `set()` lines only make that explicit. Set `FX2D_YAML` off as well and `Fx2Dlib` needs nothing beyond the C++ standard library.
 
 ## Fetch with CMake
 
@@ -60,15 +60,17 @@ add_executable(my_viewer main.cpp)
 target_link_libraries(my_viewer PRIVATE Fx2Dlib)
 ```
 
-Before configuring, populate Fx2D’s placeholder `lib/imgui/` and `lib/rlImGui/` directories with their upstream source files. The renderer build also needs raylib, yaml-cpp, and Eigen3 discoverable by CMake. The top-level [installation guide](/getting-started/install) has the full dependency list.
+Any of raylib, yaml-cpp, Dear ImGui, and rlImGui that CMake cannot find is downloaded and built with your project. The top-level [installation guide](/getting-started/install) covers the system packages raylib needs on Linux.
 
 ## Build options
 
 | Option | Default | Effect |
 |---|---:|---|
-| `FX2D_HEADLESS` | `OFF` | Remove raylib/ImGui renderer code and visual examples. |
-| `FX2D_BUILD_TESTS` | `ON` | Build the `Fx2DTests` CTest executable. |
-| `FX2D_BUILD_EXAMPLES` | `OFF` | Build visual sample targets. Mutually exclusive with headless mode. |
+| `FX2D_HEADLESS` | `OFF` (`ON` as a subproject) | Remove raylib/ImGui renderer code and visual examples. |
+| `FX2D_YAML` | `ON` | Build the YAML scene loader (`FxYAML`), the only part that uses yaml-cpp. |
+| `FX2D_FETCH_DEPS` | `ON` | Download yaml-cpp, raylib, Dear ImGui, and rlImGui when they are not installed. |
+| `FX2D_BUILD_TESTS` | `ON` (`OFF` as a subproject) | Build the `Fx2DTests` CTest executable. |
+| `FX2D_BUILD_EXAMPLES` | `OFF` | Build the sample targets; headless builds get only the two renderer-free ones. |
 | `FX2D_BUILD_BENCH` | `OFF` | Build the `Fx2DBench` headless benchmark. |
 | `FX2D_WARNINGS` | `ON` | Enable the project’s higher compiler warning level. |
 | `FX2D_WERROR` | `OFF` | Treat warnings as errors. |

@@ -9,85 +9,155 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TARGET_NAME Fx2D)
 
+# Built on its own, Fx2D defaults to the full build: viewer, tests and the YAML loader. Added to
+# another project with add_subdirectory() or FetchContent, it defaults to the headless physics
+# library, without tests.
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(FX2D_IS_TOP_LEVEL ON)
+  set(FX2D_HEADLESS_DEFAULT OFF)
+else()
+  set(FX2D_IS_TOP_LEVEL OFF)
+  set(FX2D_HEADLESS_DEFAULT ON)
+endif()
+
 # Options
 option(FX2D_WARNINGS "Enable extra warnings" ON)
 option(FX2D_WERROR   "Treat warnings as errors" OFF)
-option(FX2D_BUILD_TESTS "Build unit tests" ON)
+option(FX2D_BUILD_TESTS "Build unit tests" ${FX2D_IS_TOP_LEVEL})
 
-# Headless builds the physics core and tests without raylib/ImGui, which are not
-# vendored in the repo. Renderer.cpp, the viewer executable, and the visual
-# examples are excluded. This is what CI builds.
-option(FX2D_HEADLESS "Build without the renderer (no raylib/ImGui)" OFF)
+# Headless builds the physics library and tests without the viewer: no raylib, no Dear ImGui.
+# Renderer.cpp, the viewer executable and the visual examples are left out.
+option(FX2D_HEADLESS "Build without the viewer (no raylib/ImGui)" ${FX2D_HEADLESS_DEFAULT})
 
-# Helpful on MSYS2/MinGW users (optional): prefer common prefixes
-list(APPEND CMAKE_PREFIX_PATH
-  "C:/msys64/mingw64"
-  "${CMAKE_CURRENT_SOURCE_DIR}/lib"
-)
+# The YAML scene loader (FxYAML) is the only part of the library that uses a third-party
+# package. With it off, the library builds from the C++ standard library alone.
+option(FX2D_YAML "Build the YAML scene loader (needs yaml-cpp)" ON)
+
+# Anything needed but not installed is downloaded and built with the project, so a fresh clone
+# configures without installing packages first. Turn this off to require installed packages
+# instead, for distribution packaging or offline builds.
+option(FX2D_FETCH_DEPS "Download yaml-cpp, raylib, Dear ImGui and rlImGui when not installed" ON)
+
+# The Python module in python/, which scikit-build-core builds from pyproject.toml. Everything it
+# links is static, so all of it has to be position-independent.
+option(FX2D_PYTHON "Build the Python module" OFF)
+if (FX2D_PYTHON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # ============================================================
-# Dependencies (prefer imported targets; fall back to pkg-config)
+# Dependencies: use what is installed, otherwise download it
 # ============================================================
+include(FetchContent)
+if (POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW) # extracted files get the extraction time as their timestamp
+endif()
+
+# What is downloaded when a package is not installed. Pinned with checksums, so every fresh
+# build compiles the same sources.
+set(FX2D_YAMLCPP_URL "https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.9.0.tar.gz")
+set(FX2D_YAMLCPP_SHA256 "25cb043240f828a8c51beb830569634bc7ac603978e0f69d6b63558dadefd49a")
+set(FX2D_RAYLIB_URL "https://github.com/raysan5/raylib/archive/refs/tags/5.5.tar.gz")
+set(FX2D_RAYLIB_SHA256 "aea98ecf5bc5c5e0b789a76de0083a21a70457050ea4cc2aec7566935f5e258e")
+set(FX2D_IMGUI_URL "https://github.com/ocornut/imgui/archive/refs/tags/v1.92.9b.tar.gz")
+set(FX2D_IMGUI_SHA256 "21d8a0a565e85dce943e375db00812c2f3f0ab21f3f0f7964e364a63422d7f99")
+set(FX2D_RLIMGUI_URL "https://github.com/raylib-extras/rlImGui/archive/1550009359ad975927f7f0e4a3f47e3f27123ea9.tar.gz")
+set(FX2D_RLIMGUI_SHA256 "7d04ff0c996a89190e1050d3c4448ad784479723c76893efea2d731bd5eb839f")
+
+function(fx2d_require_fetch what)
+  if (NOT FX2D_FETCH_DEPS)
+    message(FATAL_ERROR "Fx2D: ${what} was not found and FX2D_FETCH_DEPS is OFF. Install it, "
+                        "or configure with -DFX2D_FETCH_DEPS=ON to download it.")
+  endif()
+  message(STATUS "Fx2D: ${what} not found; downloading it")
+endfunction()
+
+# A downloaded dependency's headers are third-party code: include them as system headers, so the
+# project's warning flags, and -Werror, stop at its own code.
+function(fx2d_system_includes tgt)
+  get_target_property(dirs ${tgt} INTERFACE_INCLUDE_DIRECTORIES)
+  if (dirs)
+    set_target_properties(${tgt} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${dirs}")
+  endif()
+endfunction()
+
+# --- yaml-cpp ---
+if (FX2D_YAML)
+  find_package(yaml-cpp CONFIG QUIET)
+  if (TARGET yaml-cpp::yaml-cpp)
+    set(YAMLCPP_TARGET yaml-cpp::yaml-cpp)
+  elseif (TARGET yaml-cpp) # MSYS2 exports the target without a namespace
+    set(YAMLCPP_TARGET yaml-cpp)
+  else()
+    fx2d_require_fetch("yaml-cpp")
+    set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_INSTALL OFF CACHE BOOL "" FORCE)
+    set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(fx2d_yamlcpp URL ${FX2D_YAMLCPP_URL} URL_HASH SHA256=${FX2D_YAMLCPP_SHA256})
+    FetchContent_MakeAvailable(fx2d_yamlcpp)
+    fx2d_system_includes(yaml-cpp)
+    set(YAMLCPP_TARGET yaml-cpp::yaml-cpp)
+  endif()
+endif()
+
 # --- raylib ---
 if (NOT FX2D_HEADLESS)
-find_package(raylib CONFIG QUIET)
-if (raylib_FOUND)
+  find_package(raylib CONFIG QUIET)
   if (TARGET raylib)
     set(RAYLIB_TARGET raylib)
   elseif (TARGET raylib::raylib)
     set(RAYLIB_TARGET raylib::raylib)
   else()
-    message(FATAL_ERROR "raylib was found but exposes no usable target.")
-  endif()
-else()
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(RAYLIB REQUIRED raylib)
-  add_library(raylib_pkg INTERFACE)
-  target_include_directories(raylib_pkg INTERFACE ${RAYLIB_INCLUDE_DIRS})
-  target_link_libraries(raylib_pkg INTERFACE ${RAYLIB_LINK_LIBRARIES})
-  set(RAYLIB_TARGET raylib_pkg)
-endif()
-endif()
-
-# --- yaml-cpp ---
-# MSYS2 exports yaml-cpp CONFIG target named 'yaml-cpp'
-find_package(yaml-cpp CONFIG QUIET)
-if (TARGET yaml-cpp)
-  set(YAMLCPP_TARGET yaml-cpp)
-else()
-  # Fallback to module mode or pkg-config
-  find_package(yaml-cpp QUIET)
-  if (TARGET yaml-cpp::yaml-cpp)
-    set(YAMLCPP_TARGET yaml-cpp::yaml-cpp)
-  else()
-    pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
-    add_library(yamlcpp_pkg INTERFACE)
-    target_include_directories(yamlcpp_pkg INTERFACE ${YAMLCPP_INCLUDE_DIRS})
-    target_link_libraries(yamlcpp_pkg INTERFACE ${YAMLCPP_LINK_LIBRARIES})
-    set(YAMLCPP_TARGET yamlcpp_pkg)
+    find_package(PkgConfig QUIET)
+    if (PkgConfig_FOUND)
+      pkg_check_modules(RAYLIB QUIET raylib)
+    endif()
+    if (RAYLIB_FOUND)
+      add_library(raylib_pkg INTERFACE)
+      target_include_directories(raylib_pkg INTERFACE ${RAYLIB_INCLUDE_DIRS})
+      target_link_libraries(raylib_pkg INTERFACE ${RAYLIB_LINK_LIBRARIES})
+      set(RAYLIB_TARGET raylib_pkg)
+    else()
+      # raylib is written in C. On Linux it still needs the system's X11 and OpenGL development
+      # packages; the installation guide lists them.
+      fx2d_require_fetch("raylib")
+      enable_language(C)
+      set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+      FetchContent_Declare(fx2d_raylib URL ${FX2D_RAYLIB_URL} URL_HASH SHA256=${FX2D_RAYLIB_SHA256})
+      FetchContent_MakeAvailable(fx2d_raylib)
+      fx2d_system_includes(raylib)
+      set(RAYLIB_TARGET raylib)
+    endif()
   endif()
 endif()
-
-# --- Eigen3 (header-only) ---
-find_package(Eigen3 3.3 REQUIRED)
 
 # ============================================================
 # ImGui + rlImGui
-# These folders are kept as placeholders in Git and should be populated locally.
+# Sources placed in lib/imgui and lib/rlImGui are used when present; otherwise they are
+# downloaded.
 # ============================================================
 if (NOT FX2D_HEADLESS)
 set(FX2D_IMGUI_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui"   CACHE PATH "Path to Dear ImGui sources")
 set(FX2D_RLIMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/rlImGui" CACHE PATH "Path to rlImGui sources")
 
-if (NOT EXISTS "${FX2D_IMGUI_DIR}/imgui.cpp")
-  message(FATAL_ERROR "Dear ImGui sources were not found. Populate lib/imgui/ locally before building.")
+if (EXISTS "${FX2D_IMGUI_DIR}/imgui.cpp")
+  set(FX2D_IMGUI_SOURCE_DIR "${FX2D_IMGUI_DIR}")
+else()
+  fx2d_require_fetch("Dear ImGui")
+  FetchContent_Declare(fx2d_imgui URL ${FX2D_IMGUI_URL} URL_HASH SHA256=${FX2D_IMGUI_SHA256})
+  FetchContent_MakeAvailable(fx2d_imgui)
+  set(FX2D_IMGUI_SOURCE_DIR "${fx2d_imgui_SOURCE_DIR}")
 endif()
-if (NOT EXISTS "${FX2D_RLIMGUI_DIR}/rlImGui.cpp")
-  message(FATAL_ERROR "rlImGui sources were not found. Populate lib/rlImGui/ locally before building.")
+if (EXISTS "${FX2D_RLIMGUI_DIR}/rlImGui.cpp")
+  set(FX2D_RLIMGUI_SOURCE_DIR "${FX2D_RLIMGUI_DIR}")
+else()
+  fx2d_require_fetch("rlImGui")
+  FetchContent_Declare(fx2d_rlimgui URL ${FX2D_RLIMGUI_URL} URL_HASH SHA256=${FX2D_RLIMGUI_SHA256})
+  FetchContent_MakeAvailable(fx2d_rlimgui)
+  set(FX2D_RLIMGUI_SOURCE_DIR "${fx2d_rlimgui_SOURCE_DIR}")
 endif()
-
-set(FX2D_IMGUI_SOURCE_DIR "${FX2D_IMGUI_DIR}")
-set(FX2D_RLIMGUI_SOURCE_DIR "${FX2D_RLIMGUI_DIR}")
 
 add_library(rlimgui_library STATIC
   "${FX2D_IMGUI_SOURCE_DIR}/imgui.cpp"
@@ -97,7 +167,7 @@ add_library(rlimgui_library STATIC
   "${FX2D_RLIMGUI_SOURCE_DIR}/rlImGui.cpp"
 )
 
-target_include_directories(rlimgui_library PUBLIC
+target_include_directories(rlimgui_library SYSTEM PUBLIC
   "${FX2D_IMGUI_SOURCE_DIR}"
   "${FX2D_RLIMGUI_SOURCE_DIR}"
 )
@@ -118,33 +188,38 @@ set(FX2D_CORE_SOURCES
   src/Constraints.cpp
   src/Joints.cpp
   src/Query.cpp
-  src/YamlUtils.cpp
 )
 
+if (FX2D_YAML)
+  list(APPEND FX2D_CORE_SOURCES src/YamlUtils.cpp)
+endif()
 if (NOT FX2D_HEADLESS)
   list(APPEND FX2D_CORE_SOURCES src/Renderer.cpp)
 endif()
 
 add_library(Fx2Dlib STATIC ${FX2D_CORE_SOURCES})
+add_library(Fx2D::Fx2D ALIAS Fx2Dlib)
 
 target_include_directories(Fx2Dlib PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 
-# Link dependencies to the library
-target_link_libraries(Fx2Dlib PUBLIC
-  Eigen3::Eigen
-  ${YAMLCPP_TARGET}
-)
+# The physics depends on nothing outside the C++ standard library.
+if (FX2D_YAML)
+  target_link_libraries(Fx2Dlib PUBLIC ${YAMLCPP_TARGET})
+  target_compile_definitions(Fx2Dlib PUBLIC YAML_CPP_STATIC_DEFINE)
+else()
+  target_compile_definitions(Fx2Dlib PUBLIC FX2D_NO_YAML)
+endif()
 
 if (NOT FX2D_HEADLESS)
   target_link_libraries(Fx2Dlib PUBLIC rlimgui_library ${RAYLIB_TARGET})
 endif()
 
-# libstdc++ implements the parallel std::execution policies on top of TBB. The engine itself
-# runs sequentially (see the note above FxScene::step), but for_each_entity/transform_entities
-# take a policy from the caller, so TBB stays linked to keep std::execution::par usable.
+# When TBB's headers are installed, libstdc++ builds std::execution on TBB, and unoptimised builds
+# reference it even for the sequential policy the engine uses. Link it whenever it is found; it is
+# also what std::execution::par passed to for_each_entity()/transform_entities() runs on.
 find_package(TBB QUIET)
 if (TARGET TBB::tbb)
   target_link_libraries(Fx2Dlib PUBLIC TBB::tbb)
@@ -153,14 +228,20 @@ endif()
 # Compile definitions for the library
 target_compile_definitions(Fx2Dlib PUBLIC
   NO_FONT_AWESOME
-  YAML_CPP_STATIC_DEFINE
   $<$<CONFIG:Debug>:DEBUG>
 )
 
 # ============================================================
 # Main executable
 # ============================================================
-if (NOT FX2D_HEADLESS)
+# The viewer and the visual examples load YAML scenes, so they need FX2D_YAML.
+if (NOT FX2D_HEADLESS AND FX2D_YAML)
+  set(FX2D_BUILD_VIEWER ON)
+else()
+  set(FX2D_BUILD_VIEWER OFF)
+endif()
+
+if (FX2D_BUILD_VIEWER)
   add_executable(${TARGET_NAME} src/main.cpp)
   target_link_libraries(${TARGET_NAME} PRIVATE Fx2Dlib)
 endif()
@@ -170,7 +251,7 @@ endif()
 # ============================================================
 option(FX2D_WARNINGS   "Enable high warning levels" ON)
 option(FX2D_WERROR     "Treat warnings as errors"    OFF)
-option(FX2D_NATIVE     "Enable native CPU tuning (SIMD etc.)" ON)
+option(FX2D_NATIVE     "Enable native CPU tuning (SIMD etc.)" OFF)
 option(FX2D_IPO        "Enable interprocedural optimization (LTO/IPO) in Release" ON)
 
 # Floating-point contraction (a*b+c fused into one FMA) is a compiler's choice by default:
@@ -186,8 +267,8 @@ option(FX2D_PIN_FP_CONTRACT "Pin off FP contraction (FMA) so results are build-i
 option(FX2D_PROFILE "Build with the per-phase step profiler (FxProfile)" OFF)
 
 # FX2D_NATIVE tunes for the machine doing the build, which is right for development and wrong
-# for anything you ship. Set FX2D_ARCH_BASELINE instead to pin a fixed instruction set that the
-# binary can assume everywhere it runs; it takes precedence over FX2D_NATIVE when non-empty.
+# for anything you ship, so it is off by default; results are the same bits either way. Set
+# FX2D_ARCH_BASELINE to pin a fixed instruction set instead; it takes precedence when non-empty.
 # Accepted: sse2, avx2, avx512 (x86) and armv8-a, armv8.2-a (arm64). Empty means "follow
 # FX2D_NATIVE".
 set(FX2D_ARCH_BASELINE "" CACHE STRING "Fixed ISA baseline for distributable builds")
@@ -329,7 +410,7 @@ endfunction()
 # Apply tuning to targets
 # ============================================================
 fx2d_tune_target(Fx2Dlib)
-if (NOT FX2D_HEADLESS)
+if (FX2D_BUILD_VIEWER)
   fx2d_tune_target(${TARGET_NAME})
 endif()
 
@@ -352,13 +433,23 @@ endif()
 # ============================================================
 # Each example resolves its Scene.yml relative to the working directory, so run
 # the resulting binaries from the repo root.
+# Headless builds get the two renderer-free examples; full builds get all of them.
 option(FX2D_BUILD_EXAMPLES "Build the example programs" OFF)
 
-if (FX2D_BUILD_EXAMPLES AND FX2D_HEADLESS)
-  message(FATAL_ERROR "The example programs need the renderer; FX2D_BUILD_EXAMPLES and FX2D_HEADLESS are mutually exclusive.")
+if (FX2D_BUILD_EXAMPLES AND NOT FX2D_YAML)
+  message(STATUS "Fx2D: the examples load YAML scenes; skipping them because FX2D_YAML is OFF")
 endif()
 
-if (FX2D_BUILD_EXAMPLES)
+if (FX2D_BUILD_EXAMPLES AND FX2D_YAML)
+  add_executable(truck_headless         examples/truck/main_headless.cpp)
+  add_executable(joint_control_headless examples/joint_control_demo/main.cpp)
+  foreach(example_target truck_headless joint_control_headless)
+    target_link_libraries(${example_target} PRIVATE Fx2Dlib)
+    fx2d_tune_target(${example_target})
+  endforeach()
+endif()
+
+if (FX2D_BUILD_EXAMPLES AND FX2D_BUILD_VIEWER)
   add_executable(example_truck         examples/truck/main.cpp)
   add_executable(example_joint_control examples/joint_control_demo/main_visual.cpp)
   add_executable(example_stacked_boxes examples/stacked_boxes/main.cpp)
@@ -391,14 +482,14 @@ if (FX2D_BUILD_WEB)
   # The scene file is read at the same relative path the desktop build uses.
   target_link_options(playground_web PRIVATE
     -sUSE_GLFW=3 -sALLOW_MEMORY_GROWTH=1 -sASSERTIONS=0 -sSTACK_SIZE=1MB
-    "--preload-file=${CMAKE_SOURCE_DIR}/examples/playground/Scene.yml@examples/playground/Scene.yml")
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/examples/playground/Scene.yml@examples/playground/Scene.yml")
 endif()
 
 # ============================================================
 # Benchmark
 # ============================================================
-# Renderer-free, so it builds headless. Roadmap item 7 requires an A/B measurement before any
-# threading change lands; this is what produces it.
+# Renderer-free, so it builds headless. Threading changes need an A/B measurement before they
+# land (see docs/engineering-notes.md); this is what produces it.
 option(FX2D_BUILD_BENCH "Build the step-time benchmark" OFF)
 
 if (FX2D_BUILD_BENCH)
@@ -407,36 +498,57 @@ if (FX2D_BUILD_BENCH)
   fx2d_tune_target(Fx2DBench)
 endif()
 
+# ============================================================
+# Python module
+# ============================================================
+if (FX2D_PYTHON)
+  find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+  execute_process(COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+                  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+  find_package(nanobind CONFIG REQUIRED)
+  nanobind_add_module(_fx2d NB_STATIC python/src/module.cpp)
+  target_link_libraries(_fx2d PRIVATE Fx2Dlib)
+  install(TARGETS _fx2d LIBRARY DESTINATION fx2d)
+endif()
+
 if (FX2D_BUILD_TESTS)
   enable_testing()
 
-  add_executable(Fx2DTests
+  set(FX2D_TEST_SOURCES
     tests/main.cpp
     tests/test_aabb_tree.cpp
-    tests/test_joints.cpp
     tests/test_ccd.cpp
-    tests/test_capsule_collision.cpp
-    tests/test_collisions_edge.cpp
     tests/test_angle_precision.cpp
     tests/test_resting_stability.cpp
     tests/test_contact_events.cpp
-    tests/test_yaml_inertia.cpp
     tests/test_adversarial.cpp
     tests/test_input.cpp
     tests/test_queries.cpp
-    tests/test_chain.cpp
     tests/test_groups.cpp
     tests/test_slingshot.cpp
-    tests/test_mouse_joint.cpp
     tests/test_contact_graph.cpp
     tests/test_solver_regression.cpp
     tests/test_distance_joint.cpp
   )
+  # These suites load YAML scenes. Without FX2D_YAML they are left out, and tests/main.cpp
+  # skips them, so the dependency-free build still runs the rest.
+  if (FX2D_YAML)
+    list(APPEND FX2D_TEST_SOURCES
+      tests/test_joints.cpp
+      tests/test_capsule_collision.cpp
+      tests/test_collisions_edge.cpp
+      tests/test_yaml_inertia.cpp
+      tests/test_chain.cpp
+      tests/test_mouse_joint.cpp
+    )
+  endif()
+
+  add_executable(Fx2DTests ${FX2D_TEST_SOURCES})
 
   target_link_libraries(Fx2DTests PRIVATE Fx2Dlib)
   # test_slingshot.cpp drives the example's FxSlingshot directly, so the mechanic that ships
   # in examples/angry_boxes is the one under test.
-  target_include_directories(Fx2DTests PRIVATE ${CMAKE_SOURCE_DIR}/examples)
+  target_include_directories(Fx2DTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
   fx2d_tune_target(Fx2DTests)
   add_test(NAME Fx2DTests COMMAND Fx2DTests)
 endif()
@@ -450,7 +562,9 @@ if (FX2D_IPO)
   check_ipo_supported(RESULT ipo_ok OUTPUT ipo_msg)
   if (ipo_ok)
     set_property(TARGET Fx2Dlib       PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-    set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    if (TARGET ${TARGET_NAME})
+      set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    endif()
   else()
     message(STATUS "IPO not supported: ${ipo_msg}")
   endif()
@@ -463,4 +577,6 @@ message(STATUS "Raylib target: ${RAYLIB_TARGET}")
 message(STATUS "yaml-cpp target: ${YAMLCPP_TARGET}")
 message(STATUS "ImGui source dir: ${FX2D_IMGUI_SOURCE_DIR}")
 message(STATUS "rlImGui source dir: ${FX2D_RLIMGUI_SOURCE_DIR}")
-message(STATUS "Executable will be: ${CMAKE_BINARY_DIR}/${TARGET_NAME}")
+if (FX2D_BUILD_VIEWER)
+  message(STATUS "Executable will be: ${CMAKE_BINARY_DIR}/${TARGET_NAME}")
+endif()

@@ -74,6 +74,9 @@ class FxEntity {
     // total resultant force and moment on the body
     float m_eff_moment = 0.0f;
     FxVec2f m_eff_force{0, 0};
+    // What was applied between steps, held for every substep of the next (hold_step_forces).
+    float m_step_moment = 0.0f;
+    FxVec2f m_step_force{0, 0};
 
     // accumulated impulses for the current step
     float m_eff_impulse_moment = 0.0f;
@@ -107,7 +110,7 @@ class FxEntity {
     // physics config
     float elasticity = 0.1f; // restitution mixes by max, so 1.0 made every
                              // unconfigured body a perfect trampoline
-    float vel_damping = 0.0f;
+    float vel_damping = 0.0f; // drag: each substep divides velocity by (1 + h * vel_damping)
     float gravity_scale = 1.0f;
     float static_friction = 0.0f;
     float dynamic_friction = 0.0f;
@@ -150,6 +153,9 @@ class FxEntity {
 
     // resets current state to inital state
     void reset();
+    // Place the body at a pose and velocity as if it started there: no carried rounding or
+    // pending forces, awake, shapes at the new pose. reset() is this with the initial state.
+    void set_state(const FxVec3f& o_pose, const FxVec3f& o_velocity);
 
     // methods to set mass and inertia
     void set_mass(const float& mass);
@@ -220,7 +226,15 @@ class FxEntity {
     // be shifted to match. Sub-ulp corrections are banked in double rather than rounded away.
     FxVec3f apply_pose_correction(const FxVec3f& delta);
 
-    void step(const FxVec2f& gravity, const double& step_dt);
+    // place_shapes = false leaves the shapes where they were: FxScene places them only on a
+    // step's first substep, and later for the pairs it tests (refresh_collision_shape).
+    void step(const FxVec2f& gravity, const double& step_dt, bool place_shapes = true);
+    // FxScene calls this before a step's substeps: forces applied since the last step act on
+    // every substep of this one, while those applied during it, as joint motors do, last one.
+    void hold_step_forces();
+    // Bring the collision shape and bounding box, or every shape, to the current pose.
+    void refresh_collision_shape();
+    void refresh_world_shapes();
 
     ~FxEntity() {}
 };

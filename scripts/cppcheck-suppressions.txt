@@ -13,3 +13,5 @@ throwInEntryPoint:examples/playground/main.cpp
 constVariablePointer:include/Fx2D/Registry.h
 # Intentional override that also clears side caches (AABB tree, pair filters).
 duplInheritedMember:include/Fx2D/Registry.h
+# FxVec/FxMat leave components uninitialised by default, like a plain float (as Eigen did).
+uninitMemberVar:include/Fx2D/Math.h

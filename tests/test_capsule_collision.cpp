@@ -1,5 +1,6 @@
 #include "Fx2D/Entity.h"
 #include "Fx2D/Math.h"
+#include "Fx2D/Scene.h"
 #include "Fx2D/Solver.h"
 #include "Fx2D/YamlUtils.h"
 
@@ -116,6 +117,57 @@ void test_capsule_vs_rectangle() {
     require(c.normal.y() < -0.9f, "normal must point from capsule (A) toward rect (B), i.e. -y");
 }
 
+// A capsule lying along a face, or along another capsule, rests on both ends. On the closest
+// point alone it rocked from end to end and never slept. Well off parallel, one point is right.
+void test_capsule_rests_on_two_points() {
+    auto rect = make_rect("floor2", 0.0f, 0.0f, 10.0f, 2.0f); // top at y = 1
+    FxContact c = FxSolver::collision_check(make_capsule("flat", 0.0f, 1.4f, 4.0f, 0.5f), rect);
+    require(c.is_valid() && c.count == 2, "a capsule lying on a face must touch at two points");
+    require(approx(c.point_depth[0], 0.1f) && approx(c.point_depth[1], 0.1f),
+            "both ends of a level capsule sink 0.1 into the face");
+    require(std::fabs(c.position[0].x() - c.position[1].x()) > 3.9f,
+            "the two points must sit under the capsule's two ends");
+
+    c = FxSolver::collision_check(make_capsule("tilted", 0.0f, 1.8f, 4.0f, 0.5f, 0.3f), rect);
+    require(c.is_valid() && c.count == 1, "a capsule tilted 17 degrees touches at one end");
+
+    c = FxSolver::collision_check(make_capsule("lower", 0.0f, 0.0f, 2.0f, 0.5f),
+                                  make_capsule("upper", 0.5f, 0.8f, 2.0f, 0.5f));
+    require(c.is_valid() && c.count == 2, "parallel capsules must touch along their overlap");
+    require(approx(std::fabs(c.position[0].x() - c.position[1].x()), 1.5f),
+            "the overlap of two 2 m cores offset by 0.5 m is 1.5 m long");
+}
+
+// The same in motion: a capsule dropped tilted onto the ground must settle flat and sleep.
+void test_dropped_capsule_falls_asleep() {
+    FxScene scene({12, 8});
+    scene.set_gravity({0.0f, -10.0f});
+    auto add = [&](const std::string& name, const FxShape& shape, FxVec3f pose, float mass) {
+        auto e = std::make_shared<FxEntity>(name);
+        e->set_visual_geometry(FxVisualShape(shape));
+        e->set_collision_geometry(shape);
+        e->set_init_pose(pose);
+        e->set_mass(mass);
+        e->set_inertia();
+        e->static_friction = 0.5f;
+        e->dynamic_friction = 0.4f;
+        if (mass == 0.0f) {
+            e->gravity_scale = 0.0f;
+            e->enable_external_forces(false);
+        }
+        scene.add_entity(e);
+        e->reset();
+        return e;
+    };
+    add("ground", FxShape(FxVec2f{12.0f, 1.0f}), {6.0f, 0.5f, 0.0f}, 0.0f);
+    auto pill = add("pill", FxShape(1.0f, 0.25f), {6.0f, 3.0f, 0.4f}, 1.0f);
+    for (int i = 0; i < 240; ++i)
+        scene.step(1.0 / 60.0);
+    require(pill->is_sleeping(), "a capsule resting on the ground must fall asleep");
+    require(std::fabs(pill->pose.theta()) < 2e-3f, "it must come to rest lying flat");
+    require(std::fabs(pill->pose.y() - 1.25f) < 3e-3f, "on the ground's surface");
+}
+
 // Rounded box: rectangle + skin. Rounded box vs rounded box at 45 degrees.
 void test_rounded_box_construction() {
     FxShape s(FxVec2f{2.0f, 2.0f}, 0.25f);
@@ -195,6 +247,8 @@ void run_capsule_tests() {
     test_capsule_vs_circle_separated();
     test_capsule_vs_circle_side();
     test_capsule_vs_rectangle();
+    test_capsule_rests_on_two_points();
+    test_dropped_capsule_falls_asleep();
     test_rounded_box_construction();
     test_rounded_box_vs_rounded_box();
     test_zero_length_capsule_behaves_like_circle();

@@ -8,11 +8,11 @@ const description =
 export default defineConfig({
   lang: "en-US",
   title: "Fx2D",
-  titleTemplate: ":title · Fx2D 2D Physics Engine",
+  titleTemplate: false,
   description,
   base: "/fx2d-physics-engine/",
   cleanUrls: true,
-  srcExclude: ["README.md"],
+  srcExclude: ["README.md", "roadmap.md", "roadmap/**", "engineering-notes.md"],
   lastUpdated: true,
   sitemap: { hostname: site },
   ignoreDeadLinks: [
@@ -32,9 +32,9 @@ export default defineConfig({
     ],
     ["meta", { name: "author", content: "Bharath Chandra Irigireddy" }],
     ["meta", { name: "robots", content: "index, follow" }],
-    ["link", { rel: "icon", href: "/fx2d-physics-engine/mark.svg", type: "image/svg+xml" }],
-    ["link", { rel: "icon", href: "/fx2d-physics-engine/favicon-32.png", type: "image/png", sizes: "32x32" }],
-    ["link", { rel: "apple-touch-icon", href: "/fx2d-physics-engine/apple-touch-icon.png" }],
+    ["link", { rel: "icon", href: "/fx2d-physics-engine/favicon-32.png?v=brand-2", type: "image/png", sizes: "32x32" }],
+    ["link", { rel: "icon", href: "/fx2d-physics-engine/brand/fx2d-icon.svg?v=brand-2", type: "image/svg+xml", sizes: "any" }],
+    ["link", { rel: "apple-touch-icon", href: "/fx2d-physics-engine/apple-touch-icon.png?v=brand-2" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Fx2D Physics Engine" }],
     ["meta", { property: "og:title", content: "Fx2D — 2D rigid-body physics engine in C++20" }],
@@ -68,6 +68,8 @@ export default defineConfig({
     ],
   ],
   transformPageData(pageData) {
+    pageData.title = "Fx2D";
+    pageData.titleTemplate = false;
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")
       .replace(/\.md$/, "");
@@ -82,8 +84,12 @@ export default defineConfig({
     }
   },
   themeConfig: {
-    logo: "/mark.svg",
-    siteTitle: "Fx2D",
+    logo: {
+      light: "/brand/fx2d-logo-light.svg",
+      dark: "/brand/fx2d-logo-dark.svg",
+      alt: "Fx2D",
+    },
+    siteTitle: false,
     nav: [
       { text: "Playground", link: "/playground" },
       { text: "Guides", link: "/guides/" },
@@ -110,6 +116,7 @@ export default defineConfig({
             { text: "Collision setup", link: "/guides/collisions" },
             { text: "Constraints", link: "/guides/constraints" },
             { text: "Headless simulation", link: "/guides/headless" },
+            { text: "Python", link: "/guides/python" },
             { text: "Renderer", link: "/guides/renderer" },
             { text: "Input", link: "/guides/input" },
             { text: "Joints and motors", link: "/guides/joints" },
@@ -156,17 +163,6 @@ export default defineConfig({
             { text: "All public symbols ↗", link: "/cpp-api/index.html" },
             { text: "FxScene ↗", link: "/cpp-api/classFxScene.html" },
             { text: "FxEntity ↗", link: "/cpp-api/classFxEntity.html" },
-          ],
-        },
-      ],
-      "/roadmap": [
-        {
-          text: "Project",
-          items: [
-            { text: "Roadmap", link: "/roadmap" },
-            { text: "SIMD plan", link: "/roadmap/simd" },
-            { text: "Fx3D plan", link: "/roadmap/fx3d" },
-            { text: "Contributing", link: "/contributing" },
           ],
         },
       ],

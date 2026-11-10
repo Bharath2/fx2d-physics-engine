@@ -1,0 +1,91 @@
+name: wheels
+
+# Builds the Python wheels and the source distribution, tests every wheel against
+# python/tests, and keeps them as workflow artifacts. Publishing a GitHub release also uploads
+# them to PyPI.
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - "python/**"
+      - "pyproject.toml"
+      - "CMakeLists.txt"
+      - "include/**"
+      - "src/**"
+      - ".github/workflows/wheels.yml"
+  workflow_dispatch:
+
+jobs:
+  wheels:
+    name: wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-24.04-arm builds the aarch64 manylinux wheels natively; macos-15 is Apple
+        # silicon and builds both macOS architectures.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build and test wheels
+        uses: pypa/cibuildwheel@v4.2.1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  sdist:
+    name: source distribution
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build the sdist
+        run: pipx run build --sdist
+
+      - name: install and test it
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install "$(ls dist/*.tar.gz)[test]"
+          cd /tmp && /tmp/venv/bin/python -m pytest "$GITHUB_WORKSPACE/python/tests"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish:
+    name: publish to PyPI
+    # PyPI trusts this job through Trusted Publishing (the pypi environment of this workflow), so
+    # no token is stored in the repository. See "Releasing" in docs/contributing.md.
+    if: github.event_name == 'release'
+    needs: [wheels, sdist]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fx2d/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the release tag matches the package version
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "release tag $GITHUB_REF_NAME does not match version $version in pyproject.toml"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: upload to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.2

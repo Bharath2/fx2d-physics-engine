@@ -13,9 +13,7 @@ Include `"Fx2D/Scene.h"` for programmatic scenes, and add `"Fx2D/YamlUtils.h"` w
 Headless builds therefore need only:
 
 - a C++20 compiler
-- Eigen 3 (header-only) — math types
-- yaml-cpp — `Scene.yml` loading
-- TBB — backs `std::execution::par` in libstdc++
+- yaml-cpp — `Scene.yml` loading; CMake downloads it when it is not installed, and `-DFX2D_YAML=OFF` leaves it out
 
 No GL, X11, Wayland or window system is involved, so this works over SSH, in a container, or in CI.
 
@@ -26,7 +24,7 @@ No GL, X11, Wayland or window system is involved, so this works over SSH, in a c
 `scripts/build_headless.sh` compiles the two headless examples with plain `g++` and no reference to any graphics library — if a core header ever regains a renderer dependency, the script fails:
 
 ```bash
-sudo apt install g++ libeigen3-dev libyaml-cpp-dev libtbb-dev   # Debian/Ubuntu
+sudo apt install g++ libyaml-cpp-dev   # Debian/Ubuntu
 ./scripts/build_headless.sh
 ./build-headless/truck_headless        # constraint rig: chassis, wheels, ground
 ./build-headless/joint_control_demo    # revolute + prismatic motor control modes
