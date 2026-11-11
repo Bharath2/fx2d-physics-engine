@@ -94,6 +94,54 @@ int main() {
 
 The [installation guide](https://bharath2.github.io/fx2d-physics-engine/getting-started/install) covers the visual build (raylib, Dear ImGui, rlImGui) on Linux, macOS, Windows and MSYS2.
 
+## Reinforcement learning and Python
+
+`pip install fx2d` gives the same engine from Python: the physics runs in C++, and Python builds scenes and reads them back.
+
+```bash
+pip install "fx2d[gym]"
+```
+
+```python
+import gymnasium as gym
+import fx2d.envs  # registers the environments
+
+envs = gym.make_vec("fx2d/Push-v0", num_envs=64)
+obs, info = envs.reset(seed=0)
+for _ in range(1000):
+    obs, reward, terminated, truncated, info = envs.step(envs.action_space.sample())
+```
+
+| id | task | actions |
+|---|---|---|
+| `fx2d/Push-v0` | push a box onto a goal with a disc, seen from above, on a floor with drag; contacts with friction turn the box | force on the disc, 2-D in [-1, 1] |
+| `fx2d/CartPole-v0` | keep a pole hinged on a sliding cart upright | push left or right |
+| `fx2d/Pendulum-v0` | swing a rod up with a motor too weak to lift it, and hold it upright | torque in [-2, 2] N m |
+
+`gym.make_vec` steps every copy's scene in one call, in parallel with the GIL released, and each copy gives exactly the bits it gives run alone, so a training run is reproducible to the bit on any platform. Throughput in environment steps per second, on an 8-core Intel i7-11800H laptop under Linux ([benchmarks/python](./benchmarks/python/throughput.py)):
+
+| `fx2d/Push-v0` | 16 copies | 64 copies | 256 copies |
+|---|---|---|---|
+| Gymnasium `SyncVectorEnv` | 17,900 | 18,300 | 18,600 |
+| fx2d vector environment | 25,200 | 32,700 | 49,800 |
+
+CartPole and Pendulum are so cheap to simulate that Python's share of each step dominates, and they gain only from batches of hundreds.
+
+Each environment is an ordinary `fx2d.Scene`, and your own take a few lines. Every shape, joint, group and query the C++ engine has is there, bodies and joints are held by name, and the scene hands out shared handles to the C++ objects:
+
+```python
+import fx2d
+
+scene = fx2d.Scene(size=(20, 10), gravity=(0, -10))
+scene.add_box("ground", position=(10, 0.5), size=(20, 1), static=True)
+crate = scene.add_box("crate", position=(10, 5), size=(1, 1), angle=0.3)
+scene.step(1 / 60, steps=120)
+assert scene["crate"] is crate  # one name, one object
+print(scene.poses())            # every body's (x, y, angle) as a NumPy array
+```
+
+The [Python guide](https://bharath2.github.io/fx2d-physics-engine/guides/python) covers bodies, joints and motors, contacts, YAML scenes, `step_many`, vector environments and writing your own.
+
 ## Features
 
 | Area | What you get |
@@ -186,54 +234,6 @@ scene.reset();  // back to the authored scene, groups included
 ```
 
 Each scene steps on one thread, so independent scenes run in parallel across threads or processes; from Python, `fx2d.step_many` does this for you. See the [headless guide](https://bharath2.github.io/fx2d-physics-engine/guides/headless), [input](https://bharath2.github.io/fx2d-physics-engine/guides/input), [queries](https://bharath2.github.io/fx2d-physics-engine/guides/queries) and [contacts and sensors](https://bharath2.github.io/fx2d-physics-engine/guides/events).
-
-## Reinforcement learning and Python
-
-`pip install fx2d` gives the same engine from Python: the physics runs in C++, and Python builds scenes and reads them back.
-
-```bash
-pip install "fx2d[gym]"
-```
-
-```python
-import gymnasium as gym
-import fx2d.envs  # registers the environments
-
-envs = gym.make_vec("fx2d/Push-v0", num_envs=64)
-obs, info = envs.reset(seed=0)
-for _ in range(1000):
-    obs, reward, terminated, truncated, info = envs.step(envs.action_space.sample())
-```
-
-| id | task | actions |
-|---|---|---|
-| `fx2d/Push-v0` | push a box onto a goal with a disc, seen from above, on a floor with drag; contacts with friction turn the box | force on the disc, 2-D in [-1, 1] |
-| `fx2d/CartPole-v0` | keep a pole hinged on a sliding cart upright | push left or right |
-| `fx2d/Pendulum-v0` | swing a rod up with a motor too weak to lift it, and hold it upright | torque in [-2, 2] N m |
-
-`gym.make_vec` steps every copy's scene in one call, in parallel with the GIL released, and each copy gives exactly the bits it gives run alone, so a training run is reproducible to the bit on any platform. Throughput in environment steps per second, on an 8-core Intel i7-11800H laptop under Linux ([benchmarks/python](./benchmarks/python/throughput.py)):
-
-| `fx2d/Push-v0` | 16 copies | 64 copies | 256 copies |
-|---|---|---|---|
-| Gymnasium `SyncVectorEnv` | 17,900 | 18,300 | 18,600 |
-| fx2d vector environment | 25,200 | 32,700 | 49,800 |
-
-CartPole and Pendulum are so cheap to simulate that Python's share of each step dominates, and they gain only from batches of hundreds.
-
-Each environment is an ordinary `fx2d.Scene`, and your own take a few lines. Every shape, joint, group and query the C++ engine has is there, bodies and joints are held by name, and the scene hands out shared handles to the C++ objects:
-
-```python
-import fx2d
-
-scene = fx2d.Scene(size=(20, 10), gravity=(0, -10))
-scene.add_box("ground", position=(10, 0.5), size=(20, 1), static=True)
-crate = scene.add_box("crate", position=(10, 5), size=(1, 1), angle=0.3)
-scene.step(1 / 60, steps=120)
-assert scene["crate"] is crate  # one name, one object
-print(scene.poses())            # every body's (x, y, angle) as a NumPy array
-```
-
-The [Python guide](https://bharath2.github.io/fx2d-physics-engine/guides/python) covers bodies, joints and motors, contacts, YAML scenes, `step_many`, vector environments and writing your own.
 
 ## Dependencies
 
