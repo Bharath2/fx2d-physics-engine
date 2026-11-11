@@ -11,8 +11,6 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
   Fx2D takes 18-35x as long per step as Box2D 3.2 ([benchmarks/box2d](../benchmarks/box2d/)).
   Holding contacts through the substeps closed part of the gap; the rest is a solver that needs
   14 substeps with 4 velocity passes to keep tall stacks standing.
-- **The first release on PyPI.** The wheels for Linux, macOS and Windows are built and tested
-  in CI; publishing them makes `pip install fx2d` work without a compiler.
 - **Rendering for environments.** `render_mode="rgb_array"` frames from Python, so a training
   run can record videos of its agent.
 - **More environments.** A walker driven through its joint motors, and tasks that sense their
@@ -71,7 +69,8 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
   chain of them is a rope rather than a jointed arm, and the motor drives the separation in all
   three control modes. YAML `type: distance` and `type: rope`; the playground builds a wrecking
   ball and a plank bridge from them.
-- **A Python package with Gymnasium environments.** Scenes, bodies, joints, contacts and ray
+- **A Python package with Gymnasium environments, on PyPI.** `pip install fx2d` (0.1.0) installs
+  prebuilt wheels for Linux, macOS and Windows. Scenes, bodies, joints, contacts and ray
   casts from Python, NumPy views of state, `step_many` for stepping scenes in parallel with the
   GIL released, and `fx2d/Push-v0`, `fx2d/CartPole-v0` and `fx2d/Pendulum-v0` with vector
   versions for `gym.make_vec`. 256 copies of Push step 2.7x as fast as through Gymnasium's
