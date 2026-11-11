@@ -23,11 +23,12 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## Next
 
-- **More joint types.** Distance and rope first, then weld (including breakable welds), a wheel
-  joint with suspension, and pulley and gear joints. Today Fx2D has revolute and prismatic
-  joints with motors, plus the mouse joint.
-- **A rope and bridge builder.** Turn a polyline into capsule links joined by revolute joints,
-  pinned to the world or attached to bodies, from C++ or YAML.
+- **More joint types.** Weld (including breakable welds), a wheel joint with suspension, and
+  pulley and gear joints. Today Fx2D has revolute, prismatic, distance and rope joints with
+  motors, plus the mouse joint.
+- **A rope and bridge builder.** Turn a polyline into links joined by distance joints, pinned
+  to the world or attached to bodies, from C++ or YAML. `examples/playground` builds its bridge
+  this way by hand: a group for the links, a distance joint per pair and an anchor at each end.
 - **Time-of-impact collision.** Speculative contacts already catch most fast bodies. Sweeps
   will close the rest, including fast bodies against chains and edges.
 - **Better queries.** Category masks for ray casts and overlaps, shape sweeps for character
@@ -45,18 +46,31 @@ is missing, [open an issue](https://github.com/Bharath2/fx2d-physics-engine/issu
 
 ## Known limitations
 
-- Two joint types plus the mouse joint. More are listed under Next.
+- Four joint types plus the mouse joint. More are listed under Next.
+- A large one-shot `set_limits()` change on a distance joint is solved inside one substep and
+  can carry the load past the anchor, so reel a rope in gradually. A rigid bridge deck laid
+  along an arc can only deepen that arc by the slack it was drawn with, so a bridge that should
+  dip under load needs compliance.
 - In the bucket-fill stress scene, 1-2 balls in 200 end up below a 0.8-thick floor. The cause
   is not yet known; a test keeps it at 3 or fewer while it is investigated.
 - At extreme mass ratios (1000:1), a light box under a heavy one sinks into the ground at the
   default substep count. More substeps fix it: 44 is enough.
 - Stack height depends on substeps. Columns of up to 15 boxes stand at the default of 14
   substeps; 20 boxes need 22.
+- In `examples/playground`, the crate stack, with a hexagon and a ball resting against it from
+  the ramp, creeps sideways at 0.2-0.35 cm/s and never sleeps. The resting-stability suite
+  measures sinking, not lateral drift, so nothing catches it yet.
 - Chains and edges do not collide with each other, and speculative contacts skip chains, so a
   fast enough body can pass through a chain.
 
 ## Recently delivered
 
+- **Distance and rope joints.** `FxDistanceJoint` holds two anchors within
+  `[min_length, max_length]`: equal limits give a rigid link, a zero minimum a rope that hangs
+  slack, and `compliance` a stretch of exactly `m g c` under a load. Rotation stays free, so a
+  chain of them is a rope rather than a jointed arm, and the motor drives the separation in all
+  three control modes. YAML `type: distance` and `type: rope`; the playground builds a wrecking
+  ball and a plank bridge from them.
 - **A Python package with Gymnasium environments.** Scenes, bodies, joints, contacts and ray
   casts from Python, NumPy views of state, `step_many` for stepping scenes in parallel with the
   GIL released, and `fx2d/Push-v0`, `fx2d/CartPole-v0` and `fx2d/Pendulum-v0` with vector

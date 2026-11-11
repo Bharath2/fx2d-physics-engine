@@ -539,6 +539,7 @@ if (FX2D_BUILD_TESTS)
       tests/test_yaml_inertia.cpp
       tests/test_chain.cpp
       tests/test_mouse_joint.cpp
+      tests/test_distance_joint.cpp
     )
   endif()
 

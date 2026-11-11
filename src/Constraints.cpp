@@ -181,6 +181,60 @@ void FxAnchorConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2, float& gth
     active = true;
 }
 
+// FxDistanceConstraint constructor
+FxDistanceConstraint::FxDistanceConstraint(const std::shared_ptr<FxEntity>& e1,
+                                           const std::shared_ptr<FxEntity>& e2,
+                                           const FxVec2f& anchor1, const FxVec2f& anchor2) :
+    m_anchor1(anchor1), m_anchor2(anchor2) {
+    entity1 = e1;
+    entity2 = e2;
+    m_name = e1->get_name() + "_" + e2->get_name() + "_Distance";
+}
+
+FxVec2f FxDistanceConstraint::anchor1_world() const {
+    return entity1->to_world_frame(m_anchor1);
+}
+
+FxVec2f FxDistanceConstraint::anchor2_world() const {
+    return entity2->to_world_frame(m_anchor2);
+}
+
+float FxDistanceConstraint::length() const {
+    return (anchor1_world() - anchor2_world()).norm();
+}
+
+// FxDistanceConstraint implementation
+void FxDistanceConstraint::evaluate(float& C, FxVec2f& g1, FxVec2f& g2, float& gth1, float& gth2,
+                                    bool& active) const {
+    if (!enabled) {
+        return;
+    }
+    const FxVec2f d = anchor1_world() - anchor2_world();
+    const float len = d.norm();
+    // Coincident anchors leave no direction to separate along. The next substep, once anything
+    // has moved them apart, has one; a zero-length rigid link is satisfied here anyway.
+    if (len < 1e-6f) {
+        return;
+    }
+    const float lower = std::max(min_length - slop, 0.0f);
+    const float upper = std::max(max_length + slop, lower);
+    // Between the limits the pair is free: this is the slack a rope hangs in.
+    if (len >= lower && len <= upper) {
+        return;
+    }
+    // Violation measured against whichever bound was crossed.
+    C = len - ((len < lower) ? lower : upper);
+    // Same gradient structure as the anchor constraint, which is this constraint at C = 0.
+    const FxVec2f dir = d / len;
+    g1 = dir;
+    g2 = -dir;
+    const FxVec2f da1 = m_anchor1.rotate_rad(entity1->pose.theta()).perp();
+    const FxVec2f da2 = m_anchor2.rotate_rad(entity2->pose.theta()).perp();
+    gth1 = dir.dot(da1);
+    gth2 = -dir.dot(da2);
+    active = true;
+}
+
 // FxSeparationConstraint constructors
 FxSeparationConstraint::FxSeparationConstraint(const std::shared_ptr<FxEntity>& e1,
                                                const std::shared_ptr<FxEntity>& e2,

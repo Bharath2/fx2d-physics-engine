@@ -49,7 +49,7 @@ entities:
 
 joints:
     my_joint:
-        type: revolute
+        type: revolute | prismatic | distance | rope
         parent: body
         child: wheel
         ...
@@ -374,7 +374,7 @@ Each key under `joints` becomes the joint's unique name.
 
 | Key | Type | Required | Description |
 |---|---|---|---|
-| `type` | string | **Yes** | Joint type: `revolute` or `prismatic` |
+| `type` | string | **Yes** | Joint type: `revolute`, `prismatic`, `distance`, or `rope` |
 | `parent` | string | **Yes** | Name of the parent entity |
 | `child` | string | **Yes** | Name of the child entity |
 | `pid` | `[p, i, d]` | No | PID gains, defaults to `[1, 0, 0]` |
@@ -445,6 +445,50 @@ joints:
         target: 1.5
         max_force: 8.0
         pid: [4.0, 0.0, 0.2]
+```
+
+### Distance and Rope Joints
+
+`distance` and `rope` are the same joint with different defaults: a `distance` joint is rigid at
+the length you give it, a `rope` has no minimum and so hangs slack until it is taut. Both leave
+rotation free, which is what makes a chain of them behave like a rope. See the
+[joints guide](/guides/joints#distance-joint).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `length` | float | authored separation | Pins both limits to one value |
+| `min_length` | float | authored separation (`0` for `rope`) | Anchors are pushed apart below this |
+| `max_length` | float | authored separation | Anchors are pulled together above this |
+| `anchor1` | `[x, y]` | `[0, 0]` | Attachment point in the parent's local frame |
+| `anchor2` | `[x, y]` | `[0, 0]` | Attachment point in the child's local frame |
+| `compliance` | float | near-rigid | Metres of stretch per newton of tension |
+| `stiffness` | float | - | Newtons per metre; the reciprocal of `compliance` |
+| `max_force` | float | - | Backward-compatible alias for `max_effort` |
+
+Any limit left out takes the separation the scene was authored with, so a link drawn in place
+needs no measuring.
+
+`target` is interpreted as:
+
+- separation between the anchors when `control_mode: position`
+- rate of separation when `control_mode: velocity`
+- force effort, positive pushing the anchors apart, when `control_mode: effort`
+
+```yaml
+joints:
+    tether:
+        type: distance
+        parent: hook
+        child: load
+        length: 2.0
+        anchor1: [0.0, -0.2]
+        compliance: 0.0005
+
+    leash:
+        type: rope
+        parent: hook
+        child: dog
+        max_length: 3.5
 ```
 
 For a runnable scene that uses a `joints:` block, see [`examples/joint_control_demo/Scene.yml`](https://github.com/Bharath2/fx2d-physics-engine/blob/main/examples/joint_control_demo/Scene.yml). It declares both joint types against static parents: `arm_motor` (revolute, with `anchor`, `angle_min`/`angle_max`, `pid`, `control_mode`, `target`, and `max_effort`) and `slider_motor` (prismatic, with `axis`, `position_min`/`position_max`, and the same control fields). The companion [`main.cpp`](https://github.com/Bharath2/fx2d-physics-engine/blob/main/examples/joint_control_demo/main.cpp) drives both through all three control modes; see [joint control](/guides/joints) for the motor API and gain-tuning notes.

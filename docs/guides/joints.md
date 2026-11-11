@@ -238,6 +238,80 @@ construction, and they survive entity renames because the entity pair is not par
 The YAML `joints:` section is name-keyed, so authored joint names flow straight through.
 Standalone constraints added directly with `add_constraint` keep their `e1_e2_Type` names.
 
+## Distance joint
+
+`FxDistanceJoint` holds two anchors a set distance apart, or anywhere within a range. It constrains one number, the separation, and nothing else: the bodies stay free to rotate, which is what makes a chain of them behave like a rope rather than a jointed arm.
+
+```cpp
+// A rigid link at whatever distance the scene was authored with.
+auto link = std::make_shared<FxDistanceJoint>("link", anchor, load);
+scene.add_joint(link);
+
+// A rope: no minimum, so it hangs slack and only resists stretching past 3 m.
+auto rope = std::make_shared<FxDistanceJoint>("rope", anchor, load,
+                                              FxVec2f{0.0f, 0.0f}, FxVec2f{0.0f, 0.0f},
+                                              0.0f, 3.0f);
+```
+
+The two anchors are local points on each body, so a link can attach to a corner rather than a centre. A negative limit means "whatever the anchors are apart right now", so a link drawn in place needs no measuring.
+
+| Limits | Behaviour |
+|---|---|
+| `min == max` | A rigid link, the default |
+| `min == 0` | A rope: slack below the maximum, taut at it |
+| `min < max` | Free travel between the two, felt at either end |
+
+In YAML, `distance` and `rope` are the same joint with different defaults:
+
+```yaml
+joints:
+    tether:
+        type: distance
+        parent: hook
+        child: load
+        length: 2.0           # pins both limits; or min_length / max_length
+        anchor1: [0.0, -0.2]  # local point on the parent
+        anchor2: [0.0, 0.0]
+        compliance: 0.0005    # metres of stretch per newton; 0 is rigid
+    leash:
+        type: rope
+        parent: hook
+        child: dog
+        max_length: 3.5       # a rope has no minimum unless you give one
+```
+
+### Stretch
+
+`set_compliance()` is metres of stretch per newton of tension, and its reciprocal `set_link_stiffness()` is newtons per metre. A load of mass *m* on a link of compliance *c* settles stretched by *m g c*, so a 1 kg load on a link of compliance `1e-2` hangs 10 cm low. The default is near-rigid.
+
+Compliance is what makes a rope bridge behave like one. A deck of rigid links laid along an arc can only deepen that arc by the slack it was drawn with, which is a few centimetres; give each link a little give and the span dips under a load and springs back when it comes off.
+
+### Reeling in
+
+There are two ways to shorten a link, and they are not interchangeable:
+
+- **`set_limits(min, max)`** moves the limits themselves. This is the winch a rigid link wants. Change them gradually, a little per step: a jump far larger than the load can travel in one substep is solved inside that substep, and the shortest way out can carry the load clean past the anchor. The length ends up right; the position does not.
+- **`set_length(target)`** drives the motor instead, applying force along the line between the anchors. It needs slack to work in, so it suits a link whose limits are wider than its rest length. In `POSITION` mode the load settles where the motor's force balances the weight, at `target + m g / P`, not exactly on the target.
+
+The motor otherwise works like every other joint's: `VELOCITY` mode tracks a rate of separation, `EFFORT` mode applies a force directly, positive pushes the anchors apart, and `set_max_force()` caps it. A joint with no target set does nothing, because the target starts at the rest length.
+
+### Ropes and bridges
+
+A rope is a chain of links. Keep the links from colliding with one another with an [entity group](/guides/entity-groups) rather than pairwise exclusions, and give them a little `vel_damping` so a knocked bridge settles instead of ringing forever:
+
+```cpp
+auto group = scene.create_group("rope");   // members never collide with each other
+auto previous = anchor;
+for (int i = 0; i < links; ++i) {
+    auto link = /* a small body at the next position down */;
+    scene.add_to_group(group, link);
+    scene.add_joint(std::make_shared<FxDistanceJoint>("j" + std::to_string(i), previous, link));
+    previous = link;
+}
+```
+
+The [playground](/playground) is built this way: a wrecking ball on a thirteen-link rope, and a plank bridge slung between two towers on compliant links. Both are in [`examples/playground/main.cpp`](https://github.com/Bharath2/fx2d-physics-engine/tree/main/examples/playground), and `tests/test_distance_joint.cpp` pins the behaviour a builder depends on: a hanging chain keeps every link's length, does not drift sideways, and survives being swung.
+
 ## Mouse joint
 
 `FxMouseJoint` is a damped spring from a world point to a point on one body, for click-dragging. It is not an `FxJoint`: it pairs a body with a point rather than two bodies, so it lives outside the joint registry, and every scene owns exactly one through `scene.mouse_joint()`.

@@ -142,3 +142,19 @@ def test_capture_initial_state_keeps_late_bodies_through_reset():
     scene.step(1 / 60, steps=60)
     scene.reset()
     assert "late" in scene and scene["late"].position == pytest.approx((10.0, 4.0))
+
+
+def test_distance_and_rope_joints():
+    scene = fx2d.Scene(size=(10, 10), gravity=(0, -10))
+    scene.add_box("ceiling", position=(5, 9), size=(4, 0.2), static=True)
+    rod_bob = scene.add_circle("rod_bob", position=(4, 7), radius=0.1)
+    rope_bob = scene.add_circle("rope_bob", position=(6.2, 8.5), radius=0.1)
+    rod = scene.add_distance_joint("rod", "ceiling", rod_bob, anchor1=(-1, 0))
+    rope = scene.add_rope_joint("rope", "ceiling", rope_bob, anchor1=(1, 0), length=2.0)
+    assert isinstance(scene.joint("rope"), fx2d.DistanceJoint)
+    assert rod.min_length == pytest.approx(2.0, abs=1e-4) == rod.max_length  # as authored
+    assert rope.min_length == 0.0 and rope.max_length == pytest.approx(2.0)
+    scene.step(1 / 60, steps=180)
+    assert rod.length == pytest.approx(2.0, abs=2e-3)  # a rigid link holds its length
+    assert rope.length == pytest.approx(2.0, abs=2e-3)  # the rope went taut
+    assert rope_bob.position[1] < 9.0 - 1.9  # swinging low on its full length, not resting slack

@@ -58,7 +58,7 @@
     retryButton.addEventListener("click", function () { location.reload(); });
     var Module = {
       canvas: canvas,
-      locateFile: function (path, prefix) { return prefix + path + "?v=20260928-2"; },
+      locateFile: function (path, prefix) { return prefix + path + "?v=20261109"; },
       setStatus: function (t) { if (!ready && !failed && t) statusMessage.textContent = t; },
       onAbort: function () { showFailure("The interactive playground could not start. Retry, or check that graphics acceleration is enabled in Chrome."); },
       postRun: [function () {
@@ -105,6 +105,6 @@
     canvas.addEventListener("wheel", function (e) { e.preventDefault(); }, { passive: false });
     window.addEventListener("keydown", function (e) { if (e.code === "Space" && document.activeElement === canvas) e.preventDefault(); });
   </script>
-  <script async src="playground.js?v=20260928-2" onerror="showFailure('The playground download failed. Check your connection and retry.')"></script>
+  <script async src="playground.js?v=20261109" onerror="showFailure('The playground download failed. Check your connection and retry.')"></script>
 </body>
 </html>

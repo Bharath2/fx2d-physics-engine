@@ -264,7 +264,7 @@ std::shared_ptr<FxJoint> buildJoint(const std::string& joint_name, const YAML::N
                                     FxScene& scene) {
     if (!config.IsMap()) throw std::runtime_error("Expected a map for joint '" + joint_name + "'.");
 
-    // type: revolute | prismatic
+    // type: revolute | prismatic | distance | rope
     auto type_node = config["type"];
     if (!type_node) throw std::runtime_error("Joint '" + joint_name + "' missing 'type' field.");
     std::string type = type_node.as<std::string>();
@@ -352,9 +352,49 @@ std::shared_ptr<FxJoint> buildJoint(const std::string& joint_name, const YAML::N
         }
         joint = pj;
 
+    } else if (type == "distance" || type == "rope") {
+        // anchor1 / anchor2: local attachment point on each body (defaults to its origin)
+        FxVec2f anchor1{0.0f, 0.0f};
+        FxVec2f anchor2{0.0f, 0.0f};
+        for (const auto& [key, anchor] :
+             {std::pair{"anchor1", &anchor1}, std::pair{"anchor2", &anchor2}}) {
+            if (auto an = config[key]) {
+                if (!an.IsSequence() || an.size() != 2)
+                    throw std::runtime_error("Joint '" + joint_name + "': " + key +
+                                             " must be [x, y].");
+                *anchor = FxVec2f{an[0].as<float>(), an[1].as<float>()};
+            }
+        }
+        // length pins both limits; min_length / max_length override either side. A negative
+        // limit means the separation the scene was authored with.
+        float min_len = -1.0f, max_len = -1.0f;
+        if (auto len = config["length"]) {
+            min_len = max_len = len.as<float>();
+        }
+        // A rope resists stretching only, so its minimum is zero unless one is asked for.
+        if (type == "rope") min_len = 0.0f;
+        if (config["min_length"]) min_len = config["min_length"].as<float>();
+        if (config["max_length"]) max_len = config["max_length"].as<float>();
+
+        auto dj = std::make_shared<FxDistanceJoint>(joint_name, e1, e2, anchor1, anchor2, min_len,
+                                                    max_len);
+        // compliance in metres per newton, or its reciprocal as stiffness
+        if (config["compliance"]) dj->set_compliance(config["compliance"].as<double>());
+        else if (config["stiffness"]) dj->set_link_stiffness(config["stiffness"].as<double>());
+        dj->set_control_mode(ctrl_mode);
+        if (config["max_effort"]) dj->set_max_effort(config["max_effort"].as<float>());
+        else if (config["max_force"]) dj->set_max_force(config["max_force"].as<float>());
+        // target: separation (m), separation rate (m/s), or force effort
+        if (auto tgt = config["target"]) {
+            if (ctrl_mode == ControlMode::VELOCITY) dj->set_rate(tgt.as<float>(), false);
+            else if (ctrl_mode == ControlMode::EFFORT) dj->set_effort(tgt.as<float>());
+            else dj->set_length(tgt.as<float>(), false);
+        }
+        joint = dj;
+
     } else {
         throw std::runtime_error("Joint '" + joint_name + "': unknown type '" + type +
-                                 "'. Expected 'revolute' or 'prismatic'.");
+                                 "'. Expected 'revolute', 'prismatic', 'distance' or 'rope'.");
     }
 
     joint->set_pid(FxVec3f{p, i_gain, d});
