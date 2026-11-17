@@ -245,7 +245,7 @@ The [documentation site](https://bharath2.github.io/fx2d-physics-engine/) has th
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING](./docs/contributing.md) for the workflow, the lint gate (`./scripts/lint.sh`) and how to run the test suite.
+Contributions are welcome. See [CONTRIBUTING](./docs/contributing.md) for the workflow, the lint gate (`./scripts/lint.sh`) and how to run the test suite. For questions and bug reports, see [SUPPORT](./SUPPORT.md); the [CHANGELOG](./CHANGELOG.md) lists what changed in each release.
 
 If Fx2D is useful to you, a ⭐ on the repository helps others find it.
 

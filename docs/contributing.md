@@ -405,7 +405,8 @@ Python on pushes to `main` and on pull requests that touch the engine or the pac
 
 A published GitHub release uploads that commit's wheels and sdist to PyPI.
 
-1. Set `version` in `pyproject.toml` to the new version, and merge that to `main`.
+1. Set `version` in `pyproject.toml` to the new version, move the `Unreleased` entries in
+   `CHANGELOG.md` under it, and merge that to `main`.
 2. Create a release on GitHub with a new tag `v<version>`, for example `v0.2.0`, and publish it.
    The `wheels` workflow builds everything again from the tag and, once every wheel passes its
    tests, the `publish` job uploads them. It stops if the tag and the version differ.
